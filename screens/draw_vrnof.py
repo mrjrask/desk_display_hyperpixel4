@@ -42,7 +42,8 @@ _cache = {
     "ts":          0.0
 }
 
-LOGO_HEIGHT = 65
+# Increase the logo height so the Verano logo appears twice as large on screen
+LOGO_HEIGHT = 130
 LOGO_GAP = 4
 LOGO_PATH = os.path.join(IMAGES_DIR, "verano.jpg")
 _LOGO = None
