@@ -88,6 +88,34 @@ def test_start_monitor_defaults_to_ok_when_no_interface(monkeypatch):
     assert recorded == [("ok", None)]
 
 
+def test_start_monitor_disabled_when_ethernet_connected(monkeypatch):
+    monkeypatch.setattr(wifi_utils, "_detect_interface", lambda: "wlan0")
+    monkeypatch.setattr(wifi_utils, "_has_active_ethernet", lambda: True)
+
+    recorded = []
+
+    def fake_update(state, ssid):
+        recorded.append((state, ssid))
+        wifi_utils.wifi_status = state
+        wifi_utils.current_ssid = ssid
+
+    monkeypatch.setattr(wifi_utils, "_update_state", fake_update)
+    monkeypatch.setattr(wifi_utils, "_MONITOR_THREAD", None, raising=False)
+
+    def _fail_thread(*args, **kwargs):
+        raise AssertionError("Wi-Fi monitor thread should not start when ethernet is active")
+
+    monkeypatch.setattr(wifi_utils.threading, "Thread", _fail_thread)
+
+    wifi_utils.wifi_status = "no_wifi"
+    wifi_utils.current_ssid = None
+
+    wifi_utils.start_monitor()
+
+    assert wifi_utils.wifi_status == "ok"
+    assert recorded == [("ok", None)]
+
+
 def test_monitor_uses_fallback_ssid_when_link_info_missing(monkeypatch):
     class _Stopper:
         def __init__(self):
