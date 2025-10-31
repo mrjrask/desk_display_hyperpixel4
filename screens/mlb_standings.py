@@ -34,9 +34,10 @@ FONT_GB_VALUE   = config.FONT_GB_VALUE
 FONT_GB_LABEL   = config.FONT_GB_LABEL
 
 # ─── Tunables ────────────────────────────────────────────────────────────────
-LOGO_SIZE   = 130     # max width/height of a division logo
-MARGIN      = 6       # left/right gutter
-ROW_SPACING = 6       # vertical gap between rows
+LOGO_SIZE   = 150     # max width/height of a division logo
+MARGIN      = 12      # left/right gutter
+ROW_SPACING = 12      # vertical gap between rows
+HEADER_PADDING = 12
 
 OV_COLS = 3           # East, Central, West columns on Overview
 OV_ROWS = 5           # max teams to show per division on Overview
@@ -142,8 +143,10 @@ def _header_frame(title: str) -> Tuple[Image.Image, int]:
     img = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     d = ImageDraw.Draw(img)
     tw, th = d.textsize(title, font=FONT_DIV_HEADER)
-    d.text(((WIDTH - tw)//2, 0), title, font=FONT_DIV_HEADER, fill=(255,255,255))
-    return img, th + 6
+    text_x = (WIDTH - tw) // 2
+    text_y = HEADER_PADDING
+    d.text((text_x, text_y), title, font=FONT_DIV_HEADER, fill=(255, 255, 255))
+    return img, text_y + th + HEADER_PADDING
 
 
 def _ease_out_cubic(t: float) -> float:
@@ -167,6 +170,17 @@ def draw_overview(display, title: str, league_id: int, transition=False):
     """
     divisions = ["East", "Central", "West"]
 
+    # Header-only base and dynamic geometry
+    header, top_y = _header_frame(title)
+    available_h = max(1, HEIGHT - top_y)
+    spacing_total = ROW_SPACING * max(0, OV_ROWS - 1)
+    per_row_available = max(1, (available_h - spacing_total) // max(1, OV_ROWS))
+    logo_size = min(LOGO_SIZE, max(80, per_row_available))
+    cell_h = logo_size + ROW_SPACING
+    col_w = logo_size + ROW_SPACING * 2
+    margin_x = max(MARGIN, (WIDTH - OV_COLS * col_w) // (OV_COLS + 1))
+    x_cols = [margin_x * (i + 1) + col_w * i for i in range(OV_COLS)]
+
     # Load logos per division in standings order (1..N), trimmed to OV_ROWS
     logos_per_div: Dict[str, List[Optional[Image.Image]]] = {}
     for div in divisions:
@@ -175,18 +189,10 @@ def draw_overview(display, title: str, league_id: int, transition=False):
         logos: List[Optional[Image.Image]] = []
         for rec in recs:
             abbr = get_mlb_abbreviation(rec["team"]["name"])
-            logos.append(_load_logo(abbr, LOGO_SIZE))
-        # ensure length OV_ROWS (pad with None if short)
+            logos.append(_load_logo(abbr, logo_size))
         while len(logos) < OV_ROWS:
             logos.append(None)
         logos_per_div[div] = logos
-
-    # Header-only base
-    header, top_y = _header_frame(title)
-    cell_h = (HEIGHT - top_y) // OV_ROWS
-    col_w  = LOGO_SIZE
-    margin_x = (WIDTH - OV_COLS * col_w) // (OV_COLS + 1)
-    x_cols = [margin_x*(i+1) + col_w*i for i in range(OV_COLS)]
 
     row_positions: List[List[Tuple[Image.Image, int, int]]] = []
     for rank in range(OV_ROWS):
@@ -235,7 +241,7 @@ def draw_overview(display, title: str, league_id: int, transition=False):
                 frac = progress / (steps - 1) if steps > 1 else 1.0
                 eased = _ease_out_cubic(frac)
                 for ic, x0, y_target in drops:
-                    start_y = -LOGO_SIZE
+                    start_y = -logo_size
                     y_pos = int(start_y + (y_target - start_y) * eased)
                     if y_pos > y_target:
                         y_pos = y_target

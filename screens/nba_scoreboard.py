@@ -51,34 +51,34 @@ from services.http_client import get_session
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE               = "NBA Scoreboard"
-TITLE_GAP           = 8
-BLOCK_SPACING       = 10
-SCORE_ROW_H         = 56
-STATUS_ROW_H        = 18
+TITLE_GAP           = 12
+BLOCK_SPACING       = 20
+SCORE_ROW_H         = 150
+STATUS_ROW_H        = 48
 REQUEST_TIMEOUT     = 10
 
-COL_WIDTHS = [70, 60, 60, 60, 70]  # total = 320 (WIDTH)
+COL_WIDTHS = [120, 170, 100, 170, 120]  # total = 680 (WIDTH)
 _TOTAL_COL_WIDTH = sum(COL_WIDTHS)
 _COL_LEFT = max(0, (WIDTH - _TOTAL_COL_WIDTH) // 2)
 COL_X = [_COL_LEFT]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 39)
-STATUS_FONT             = clone_font(FONT_STATUS, 28)
-CENTER_FONT             = clone_font(FONT_STATUS, 28)
+SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 66)
+STATUS_FONT             = clone_font(FONT_STATUS, 42)
+CENTER_FONT             = clone_font(FONT_STATUS, 54)
 TITLE_FONT              = FONT_TITLE_SPORTS
-LOGO_HEIGHT             = 130
+LOGO_HEIGHT             = 150
 LOGO_DIR                = os.path.join(IMAGES_DIR, "nba")
 LEAGUE_LOGO_KEYS        = ("NBA", "nba")
-LEAGUE_LOGO_GAP         = 4
-LEAGUE_LOGO_HEIGHT      = max(1, int(round(LOGO_HEIGHT * 1.25)))
+LEAGUE_LOGO_GAP         = 10
+LEAGUE_LOGO_HEIGHT      = max(1, int(round(LOGO_HEIGHT * 1.35)))
 IN_PROGRESS_SCORE_COLOR = SCOREBOARD_IN_PROGRESS_SCORE_COLOR
 IN_PROGRESS_STATUS_COLOR = IN_PROGRESS_SCORE_COLOR
 FINAL_WINNING_SCORE_COLOR = SCOREBOARD_FINAL_WINNING_SCORE_COLOR
 FINAL_LOSING_SCORE_COLOR = SCOREBOARD_FINAL_LOSING_SCORE_COLOR
 INTRO_LOGO        = "NBA.png"
-INTRO_MAX_HEIGHT  = 100
+INTRO_MAX_HEIGHT  = 160
 INTRO_ANIM_SCALES = (0.45, 0.6, 0.75, 0.9, 1.04, 0.98, 1.0)
 INTRO_ANIM_DELAY  = 0.06
 INTRO_ANIM_HOLD   = 0.4
@@ -504,7 +504,7 @@ def _compose_canvas(games: list[dict]) -> Image.Image:
         y += SCORE_ROW_H + STATUS_ROW_H
         if idx < len(games) - 1:
             sep_y = y + BLOCK_SPACING // 2
-            draw.line((10, sep_y, WIDTH - 10, sep_y), fill=(45, 45, 45))
+            draw.line((30, sep_y, WIDTH - 30, sep_y), fill=(45, 45, 45))
             y += BLOCK_SPACING
     return canvas
 
