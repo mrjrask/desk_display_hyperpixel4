@@ -534,6 +534,7 @@ signal.signal(signal.SIGTERM, _handle_sigterm)
 # ─── Logos ───────────────────────────────────────────────────────────────────
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 LOGO_SCREEN_HEIGHT = 148  # 80px base increased by ~85%
+DOUBLE_LOGO_SCREEN_HEIGHT = LOGO_SCREEN_HEIGHT * 2
 
 
 def load_logo(fn, height=LOGO_SCREEN_HEIGHT):
@@ -553,17 +554,17 @@ def load_logo(fn, height=LOGO_SCREEN_HEIGHT):
         logging.warning(f"Logo load failed '{fn}': {e}")
         return None
 
-cubs_logo   = load_logo("cubs.jpg")
-hawks_logo  = load_logo("hawks.jpg")
+cubs_logo   = load_logo("cubs.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+hawks_logo  = load_logo("hawks.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 bulls_logo  = load_logo("nba/CHI.png")
-sox_logo    = load_logo("sox.jpg")
-weather_img = load_logo("weather.jpg")
+sox_logo    = load_logo("sox.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+weather_img = load_logo("weather.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 mlb_logo    = load_logo("mlb.jpg")
 nba_logo    = load_logo("nba/NBA.png")
 nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
 nfl_logo    = load_logo("nfl/nfl.png")
 verano_img  = load_logo("verano.jpg")
-bears_logo  = load_logo("bears.png")
+bears_logo  = load_logo("bears.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 
 LOGOS = {
     "weather logo": weather_img,
