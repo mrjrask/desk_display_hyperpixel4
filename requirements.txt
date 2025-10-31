@@ -19,3 +19,4 @@ colorama
 adafruit-circuitpython-bme280
 pimoroni-bme280
 -e ./vendor/bme68x
+pygame

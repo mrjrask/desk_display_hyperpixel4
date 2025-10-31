@@ -10,6 +10,7 @@ Core utilities for the desk display project:
 - Team/MLB helpers
 - GitHub update checker
 """
+import atexit
 import datetime
 import html
 import os
@@ -51,12 +52,27 @@ except (ImportError, RuntimeError) as _displayhat_exc:  # pragma: no cover - har
 else:  # pragma: no cover - hardware import
     _DISPLAY_HAT_ERROR = None
 
+try:  # pragma: no cover - optional dependency
+    import pygame
+except ImportError:  # pragma: no cover - optional dependency
+    pygame = None
+
 _ACTIVE_DISPLAY: Optional["Display"] = None
 _GITHUB_LED_ANIMATOR: Optional["_GithubLedAnimator"] = None
 _GITHUB_LED_STATE: bool = False
 
 _DISPLAY_UPDATE_GATE = threading.Event()
 _DISPLAY_UPDATE_GATE.set()
+_PYGAME_SHUTDOWN_REGISTERED = False
+
+
+def _shutdown_pygame() -> None:
+    if pygame is None:  # pragma: no cover - optional dependency
+        return
+    try:  # pragma: no cover - optional dependency cleanup
+        pygame.quit()
+    except Exception:
+        pass
 
 
 def suspend_display_updates() -> None:
@@ -79,7 +95,15 @@ def display_updates_enabled() -> bool:
 LED_INDICATOR_LEVEL = 1 / 255.0
 
 # Project config
-from config import WIDTH, HEIGHT, CENTRAL_TIME, DISPLAY_ROTATION
+from config import (
+    WIDTH,
+    HEIGHT,
+    CENTRAL_TIME,
+    DISPLAY_ROTATION,
+    DISPLAY_BACKEND,
+    DISPLAY_FULLSCREEN,
+    DISPLAY_PROFILE,
+)
 # Color utilities
 from screens.color_palettes import random_color
 # Colored logging
@@ -101,7 +125,7 @@ def log_call(func):
 
 # ─── Display wrapper ────────────────────────────────────────────────────────
 class Display:
-    """Wrapper around the Pimoroni Display HAT Mini (320×240 LCD)."""
+    """Display abstraction supporting kernel-driven and SPI-attached panels."""
 
     _BUTTON_NAMES = ("A", "B", "X", "Y")
 
@@ -119,44 +143,185 @@ class Display:
             self.rotation = 0
         self._buffer = Image.new("RGB", (self.width, self.height), "black")
         self._display = None
+        self._pygame_surface = None
+        self._backend: Optional[str] = None
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
 
-        if DisplayHATMini is None:  # pragma: no cover - hardware import
-            if _DISPLAY_HAT_ERROR:
+        preferred_backend = DISPLAY_BACKEND
+        if preferred_backend not in {"auto", "pygame", "displayhatmini", "hatmini"}:
+            logging.warning(
+                "Unknown DISPLAY_BACKEND '%s'; falling back to automatic detection.",
+                preferred_backend,
+            )
+            preferred_backend = "auto"
+
+        pygame_error: Optional[str] = None
+        hat_error: Optional[str] = None
+
+        if preferred_backend in ("auto", "pygame"):
+            success, pygame_error = self._init_pygame_backend()
+        else:
+            success = False
+
+        if not success and preferred_backend in ("auto", "displayhatmini", "hatmini"):
+            success, hat_error = self._init_displayhat_backend()
+
+        if not success:
+            reasons = [reason for reason in (pygame_error, hat_error) if reason]
+            if reasons:
                 logging.warning(
-                    "Display HAT Mini driver unavailable; running headless (%s)",
-                    _DISPLAY_HAT_ERROR,
+                    "Display backend unavailable; running headless (%s).",
+                    "; ".join(reasons),
                 )
             else:
-                logging.warning(
-                    "Display HAT Mini driver unavailable; running headless."
-                )
-        else:
-            try:  # pragma: no cover - hardware import
-                self._display = DisplayHATMini(self._buffer)
-                self._display.set_backlight(1.0)
-                for name in self._BUTTON_NAMES:
-                    pin_name = f"BUTTON_{name}"
-                    self._button_pins[name] = getattr(self._display, pin_name, None)
-            except Exception as exc:  # pragma: no cover - hardware import
-                logging.warning(
-                    "Failed to initialize Display HAT Mini hardware; running headless (%s)",
-                    exc,
-                )
-                self._display = None
-            else:  # pragma: no cover - hardware import
-                logging.info(
-                    "🖼️  Display HAT Mini initialized (%dx%d, rotation %d°).",
-                    self.width,
-                    self.height,
-                    self.rotation,
-                )
+                logging.warning("Display backend unavailable; running headless.")
 
         _ACTIVE_DISPLAY = self
+
+    def _init_pygame_backend(self) -> Tuple[bool, Optional[str]]:
+        if pygame is None:  # pragma: no cover - optional dependency
+            return False, "pygame module not installed"
+
+        flags = pygame.FULLSCREEN if DISPLAY_FULLSCREEN else 0
+        original_driver = os.environ.get("SDL_VIDEODRIVER")
+        driver_candidates: List[Optional[str]] = []
+        for candidate in [
+            original_driver,
+            None,
+            "kmsdrm",
+            "fbcon",
+            "directfb",
+            "svgalib",
+            "dummy",
+        ]:
+            if candidate in driver_candidates:
+                continue
+            driver_candidates.append(candidate)
+
+        attempted_errors: List[str] = []
+        surface = None
+        try:
+            for driver in driver_candidates:
+                if driver is None:
+                    if original_driver is None:
+                        os.environ.pop("SDL_VIDEODRIVER", None)
+                    else:
+                        os.environ["SDL_VIDEODRIVER"] = original_driver
+                else:
+                    os.environ["SDL_VIDEODRIVER"] = driver
+
+                try:
+                    pygame.display.quit()
+                except Exception:  # pragma: no cover - optional dependency cleanup
+                    pass
+
+                try:
+                    pygame.display.init()
+                    surface = pygame.display.set_mode((self.width, self.height), flags)
+                except Exception as exc:
+                    attempted_errors.append(f"{driver or 'default'}: {exc}")
+                    try:
+                        pygame.display.quit()
+                    except Exception:  # pragma: no cover - optional dependency cleanup
+                        pass
+                    surface = None
+                    continue
+
+                if surface:
+                    break
+
+            if surface is None:
+                if attempted_errors:
+                    return False, ", ".join(attempted_errors)
+                return False, "pygame display initialisation failed"
+
+            try:
+                pygame.display.set_caption("Desk Display")
+            except Exception:  # pragma: no cover - optional dependency
+                pass
+            try:
+                pygame.mouse.set_visible(False)
+            except Exception:  # pragma: no cover - optional dependency
+                pass
+            try:
+                surface.fill((0, 0, 0))
+                pygame.display.flip()
+            except Exception:  # pragma: no cover - optional dependency
+                pass
+
+            global _PYGAME_SHUTDOWN_REGISTERED
+            if not _PYGAME_SHUTDOWN_REGISTERED:
+                _PYGAME_SHUTDOWN_REGISTERED = True
+                atexit.register(_shutdown_pygame)
+
+            self._pygame_surface = surface
+            self._backend = "pygame"
+            logging.info(
+                "🖼️  Pygame display initialized for %s (%dx%d, rotation %d°).",
+                DISPLAY_PROFILE,
+                self.width,
+                self.height,
+                self.rotation,
+            )
+            return True, None
+        finally:
+            if original_driver is None:
+                os.environ.pop("SDL_VIDEODRIVER", None)
+            else:
+                os.environ["SDL_VIDEODRIVER"] = original_driver
+
+    def _init_displayhat_backend(self) -> Tuple[bool, Optional[str]]:
+        if DisplayHATMini is None:  # pragma: no cover - hardware import
+            if _DISPLAY_HAT_ERROR:
+                return False, f"Display HAT Mini driver unavailable ({_DISPLAY_HAT_ERROR})"
+            return False, "Display HAT Mini driver unavailable"
+
+        try:  # pragma: no cover - hardware import
+            self._display = DisplayHATMini(self._buffer)
+            self._display.set_backlight(1.0)
+            for name in self._BUTTON_NAMES:
+                pin_name = f"BUTTON_{name}"
+                self._button_pins[name] = getattr(self._display, pin_name, None)
+        except Exception as exc:  # pragma: no cover - hardware import
+            self._display = None
+            return False, f"Failed to initialize Display HAT Mini hardware ({exc})"
+
+        self._backend = "displayhatmini"
+        logging.info(
+            "🖼️  Display HAT Mini initialized for %s (%dx%d, rotation %d°).",
+            DISPLAY_PROFILE,
+            self.width,
+            self.height,
+            self.rotation,
+        )
+        return True, None
 
     def _update_display(self):
         if not display_updates_enabled():
             return
+        if self._backend == "pygame" and pygame is not None and self._pygame_surface is not None:
+            try:
+                frame_surface = pygame.image.frombuffer(
+                    self._buffer.tobytes(),
+                    self._buffer.size,
+                    self._buffer.mode,
+                )
+                if self.rotation:
+                    frame_surface = pygame.transform.rotate(frame_surface, self.rotation)
+                frame_surface = frame_surface.convert()
+                target_size = self._pygame_surface.get_size()
+                if frame_surface.get_size() != target_size:
+                    frame_surface = pygame.transform.smoothscale(frame_surface, target_size)
+                self._pygame_surface.blit(frame_surface, (0, 0))
+                pygame.display.flip()
+                try:
+                    pygame.event.pump()
+                except Exception:  # pragma: no cover - optional dependency
+                    pass
+            except Exception as exc:
+                logging.warning("Pygame display refresh failed: %s", exc)
+            return
+
         if self._display is None:  # pragma: no cover - hardware import
             return
         try:
@@ -203,6 +368,8 @@ class Display:
     def is_button_pressed(self, name: str) -> bool:
         """Return True if the named button is currently pressed."""
 
+        if self._backend == "pygame":
+            return False
         if self._display is None:  # pragma: no cover - hardware import
             return False
 

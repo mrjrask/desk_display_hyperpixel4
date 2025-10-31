@@ -154,9 +154,98 @@ if not OWM_API_KEY:
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
 # ─── Display configuration ─────────────────────────────────────────────────────
-WIDTH                    = 320
-HEIGHT                   = 240
-SCREEN_DELAY             = 4
+
+def _int_from_env(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        logging.warning("Invalid %s value %r; using default %d", name, raw_value, default)
+        return default
+    if value <= 0:
+        logging.warning("%s must be greater than zero; using default %d", name, default)
+        return default
+    return value
+
+# Supported HyperPixel panels.  The keys roughly match the product names so an
+# environment variable such as ``DISPLAY_PROFILE=hyperpixel4`` can be used to
+# switch between layouts without having to remember the exact pixel
+# dimensions.
+_DISPLAY_PROFILES = {
+    "hyperpixel4": (800, 480),
+    "hyperpixel4_landscape": (800, 480),
+    "hyperpixel4_portrait": (480, 800),
+    "hyperpixel4_square": (720, 720),
+    "hyperpixel4_square_portrait": (720, 720),
+}
+
+_DISPLAY_PROFILE_ALIASES = {
+    "hp4": "hyperpixel4",
+    "hp4_square": "hyperpixel4_square",
+    "square": "hyperpixel4_square",
+    "rect": "hyperpixel4",
+    "rectangle": "hyperpixel4",
+}
+
+
+def _normalise_display_profile(name: str) -> str:
+    key = name.strip().lower()
+    if not key:
+        return "hyperpixel4_square"
+    canonical = _DISPLAY_PROFILE_ALIASES.get(key, key)
+    if canonical not in _DISPLAY_PROFILES:
+        logging.warning(
+            "Unknown DISPLAY_PROFILE '%s'; defaulting to HyperPixel 4.0 Square (720x720).",
+            name,
+        )
+        return "hyperpixel4_square"
+    return canonical
+
+
+DISPLAY_PROFILE = _normalise_display_profile(
+    os.environ.get("DISPLAY_PROFILE", "hyperpixel4_square")
+)
+
+DEFAULT_WIDTH, DEFAULT_HEIGHT = _DISPLAY_PROFILES[DISPLAY_PROFILE]
+
+WIDTH = _int_from_env("DISPLAY_WIDTH", DEFAULT_WIDTH)
+HEIGHT = _int_from_env("DISPLAY_HEIGHT", DEFAULT_HEIGHT)
+IS_SQUARE_DISPLAY = WIDTH == HEIGHT
+SCREEN_DELAY = 4
+
+BASE_WIDTH = 320
+BASE_HEIGHT = 240
+
+SCALE_X = WIDTH / BASE_WIDTH
+SCALE_Y = HEIGHT / BASE_HEIGHT
+SCALE = min(SCALE_X, SCALE_Y)
+
+
+def scale(value: float) -> int:
+    return max(1, int(round(value * SCALE)))
+
+
+def scale_x(value: float) -> int:
+    return max(1, int(round(value * SCALE_X)))
+
+
+def scale_y(value: float) -> int:
+    return max(1, int(round(value * SCALE_Y)))
+
+
+def scale_font(size: float) -> int:
+    return max(1, int(round(size * SCALE)))
+
+
+DISPLAY_BACKEND = os.environ.get("DISPLAY_BACKEND", "auto").strip().lower() or "auto"
+DISPLAY_FULLSCREEN = os.environ.get("DISPLAY_FULLSCREEN", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 try:
     TEAM_STANDINGS_DISPLAY_SECONDS = int(
         os.environ.get("TEAM_STANDINGS_DISPLAY_SECONDS", "5")
@@ -347,57 +436,57 @@ class _BitmapEmojiFont(ImageFont.ImageFont):
             return rgba.im
         return scaled.im
 
-FONT_DAY_DATE           = _load_font("DejaVuSans-Bold.ttf", 39)
-FONT_DATE               = _load_font("DejaVuSans.ttf",      22)
-FONT_TIME               = _load_font("DejaVuSans-Bold.ttf", 59)
-FONT_AM_PM              = _load_font("DejaVuSans.ttf",      20)
+FONT_DAY_DATE           = _load_font("DejaVuSans-Bold.ttf", scale_font(39))
+FONT_DATE               = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_TIME               = _load_font("DejaVuSans-Bold.ttf", scale_font(59))
+FONT_AM_PM              = _load_font("DejaVuSans.ttf",      scale_font(20))
 
-FONT_TEMP               = _load_font("DejaVuSans-Bold.ttf", 44)
-FONT_CONDITION          = _load_font("DejaVuSans-Bold.ttf", 20)
-FONT_WEATHER_DETAILS    = _load_font("DejaVuSans.ttf",      22)
-FONT_WEATHER_DETAILS_BOLD = _load_font("DejaVuSans-Bold.ttf", 18)
-FONT_WEATHER_LABEL      = _load_font("DejaVuSans.ttf",      18)
+FONT_TEMP               = _load_font("DejaVuSans-Bold.ttf", scale_font(44))
+FONT_CONDITION          = _load_font("DejaVuSans-Bold.ttf", scale_font(20))
+FONT_WEATHER_DETAILS    = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_WEATHER_DETAILS_BOLD = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
+FONT_WEATHER_LABEL      = _load_font("DejaVuSans.ttf",      scale_font(18))
 
-FONT_TITLE_SPORTS       = _load_font("TimesSquare-m105.ttf", 30)
-FONT_TEAM_SPORTS        = _load_font("TimesSquare-m105.ttf", 37)
-FONT_DATE_SPORTS        = _load_font("TimesSquare-m105.ttf", 30)
-FONT_TEAM_SPORTS_SMALL  = _load_font("TimesSquare-m105.ttf", 33)
-FONT_SCORE              = _load_font("TimesSquare-m105.ttf", 41)
-FONT_STATUS             = _load_font("TimesSquare-m105.ttf", 30)
+FONT_TITLE_SPORTS       = _load_font("TimesSquare-m105.ttf", scale_font(30))
+FONT_TEAM_SPORTS        = _load_font("TimesSquare-m105.ttf", scale_font(37))
+FONT_DATE_SPORTS        = _load_font("TimesSquare-m105.ttf", scale_font(30))
+FONT_TEAM_SPORTS_SMALL  = _load_font("TimesSquare-m105.ttf", scale_font(33))
+FONT_SCORE              = _load_font("TimesSquare-m105.ttf", scale_font(41))
+FONT_STATUS             = _load_font("TimesSquare-m105.ttf", scale_font(30))
 
-FONT_INSIDE_LABEL       = _load_font("DejaVuSans-Bold.ttf", 18)
-FONT_INSIDE_VALUE       = _load_font("DejaVuSans.ttf", 17)
-FONT_TITLE_INSIDE       = _load_font("DejaVuSans-Bold.ttf", 17)
+FONT_INSIDE_LABEL       = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
+FONT_INSIDE_VALUE       = _load_font("DejaVuSans.ttf",      scale_font(17))
+FONT_TITLE_INSIDE       = _load_font("DejaVuSans-Bold.ttf", scale_font(17))
 
-FONT_TRAVEL_TITLE       = _load_font("TimesSquare-m105.ttf", 17)
-FONT_TRAVEL_HEADER      = _load_font("TimesSquare-m105.ttf", 17)
-FONT_TRAVEL_VALUE       = _load_font("HWYGNRRW.TTF", 26)
+FONT_TRAVEL_TITLE       = _load_font("TimesSquare-m105.ttf", scale_font(17))
+FONT_TRAVEL_HEADER      = _load_font("TimesSquare-m105.ttf", scale_font(17))
+FONT_TRAVEL_VALUE       = _load_font("HWYGNRRW.TTF",        scale_font(26))
 
 FONT_IP_LABEL           = FONT_INSIDE_LABEL
 FONT_IP_VALUE           = FONT_INSIDE_VALUE
 
-FONT_STOCK_TITLE        = _load_font("DejaVuSans-Bold.ttf", 18)
-FONT_STOCK_PRICE        = _load_font("DejaVuSans-Bold.ttf", 44)
-FONT_STOCK_CHANGE       = _load_font("DejaVuSans.ttf",      22)
-FONT_STOCK_TEXT         = _load_font("DejaVuSans.ttf",      17)
+FONT_STOCK_TITLE        = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
+FONT_STOCK_PRICE        = _load_font("DejaVuSans-Bold.ttf", scale_font(44))
+FONT_STOCK_CHANGE       = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_STOCK_TEXT         = _load_font("DejaVuSans.ttf",      scale_font(17))
 
 # Standings fonts...
-FONT_STAND1_WL          = _load_font("DejaVuSans-Bold.ttf", 26)
-FONT_STAND1_RANK        = _load_font("DejaVuSans.ttf",      22)
-FONT_STAND1_GB_LABEL    = _load_font("DejaVuSans.ttf",      17)
-FONT_STAND1_WCGB_LABEL  = _load_font("DejaVuSans.ttf",      17)
-FONT_STAND1_GB_VALUE    = _load_font("DejaVuSans.ttf",      17)
-FONT_STAND1_WCGB_VALUE  = _load_font("DejaVuSans.ttf",      17)
+FONT_STAND1_WL          = _load_font("DejaVuSans-Bold.ttf", scale_font(26))
+FONT_STAND1_RANK        = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_STAND1_GB_LABEL    = _load_font("DejaVuSans.ttf",      scale_font(17))
+FONT_STAND1_WCGB_LABEL  = _load_font("DejaVuSans.ttf",      scale_font(17))
+FONT_STAND1_GB_VALUE    = _load_font("DejaVuSans.ttf",      scale_font(17))
+FONT_STAND1_WCGB_VALUE  = _load_font("DejaVuSans.ttf",      scale_font(17))
 
-FONT_STAND2_RECORD      = _load_font("DejaVuSans.ttf",      26)
-FONT_STAND2_LABEL       = _load_font("DejaVuSans.ttf",      22)
-FONT_STAND2_VALUE       = _load_font("DejaVuSans.ttf",      22)
+FONT_STAND2_RECORD      = _load_font("DejaVuSans.ttf",      scale_font(26))
+FONT_STAND2_LABEL       = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_STAND2_VALUE       = _load_font("DejaVuSans.ttf",      scale_font(22))
 
-FONT_DIV_HEADER         = _load_font("DejaVuSans-Bold.ttf", 20)
-FONT_DIV_RECORD         = _load_font("DejaVuSans.ttf",      22)
-FONT_DIV_GB             = _load_font("DejaVuSans.ttf",      18)
-FONT_GB_VALUE           = _load_font("DejaVuSans.ttf",      18)
-FONT_GB_LABEL           = _load_font("DejaVuSans.ttf",      15)
+FONT_DIV_HEADER         = _load_font("DejaVuSans-Bold.ttf", scale_font(20))
+FONT_DIV_RECORD         = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_DIV_GB             = _load_font("DejaVuSans.ttf",      scale_font(18))
+FONT_GB_VALUE           = _load_font("DejaVuSans.ttf",      scale_font(18))
+FONT_GB_LABEL           = _load_font("DejaVuSans.ttf",      scale_font(15))
 
 def _load_emoji_font(size: int) -> ImageFont.ImageFont:
     noto = _try_load_font("NotoColorEmoji.ttf", size)
@@ -430,17 +519,17 @@ def _load_emoji_font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-FONT_EMOJI = _load_emoji_font(30)
+FONT_EMOJI = _load_emoji_font(scale_font(30))
 
 # ─── Screen-specific configuration ─────────────────────────────────────────────
 
 # Weather screen
-WEATHER_ICON_SIZE = 218
-WEATHER_DESC_GAP  = 8
+WEATHER_ICON_SIZE = scale(218)
+WEATHER_DESC_GAP  = scale_y(8)
 
 # Date/time screen
 DATE_TIME_GH_ICON_INVERT = True
-DATE_TIME_GH_ICON_SIZE   = 33
+DATE_TIME_GH_ICON_SIZE   = scale(33)
 DATE_TIME_GH_ICON_PATHS  = [
     os.path.join(IMAGES_DIR, "gh.png"),
     os.path.join(SCRIPT_DIR, "image", "gh.png"),

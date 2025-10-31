@@ -6,7 +6,7 @@ APT_PACKAGES=(
   build-essential libjpeg-dev libopenblas0 libopenblas-dev
   libopenjp2-7-dev libtiff5-dev libcairo2-dev libpango1.0-dev
   libgdk-pixbuf2.0-xlib-dev libffi-dev network-manager wireless-tools
-  i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git
+  i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git python3-pygame
 )
 
 DEFAULT_REPO_URL="https://github.com/mrjrask/desk_display.git"
