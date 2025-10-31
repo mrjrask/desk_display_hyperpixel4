@@ -8,6 +8,44 @@ class DummyResult:
         self.stderr = stderr
 
 
+def test_detect_interface_prefers_connected_nmcli(monkeypatch):
+    def fake_run(args, capture_output=True, text=True, check=False):
+        if args[:2] == ["nmcli", "-t"]:
+            return DummyResult(
+                stdout="\n".join(
+                    [
+                        "wlan1:wifi:disconnected",
+                        "wlan0:wifi:connected",
+                        "eth0:ethernet:connected",
+                    ]
+                )
+            )
+        if args[:2] == ["iw", "dev"]:
+            return DummyResult(
+                stdout="""Interface p2p-dev-wlan0\n    type managed\nInterface wlan0\n    type managed\n"""
+            )
+        raise AssertionError(f"unexpected call: {args}")
+
+    monkeypatch.setattr(wifi_utils, "_run_command", fake_run)
+
+    assert wifi_utils._detect_interface() == "wlan0"
+
+
+def test_detect_interface_skips_p2p_interfaces(monkeypatch):
+    def fake_run(args, capture_output=True, text=True, check=False):
+        if args[:2] == ["nmcli", "-t"]:
+            return DummyResult(stdout="")
+        if args[:2] == ["iw", "dev"]:
+            return DummyResult(
+                stdout="""Interface p2p-dev-wlan0\n    type managed\nInterface wlan0\n    type managed\n"""
+            )
+        raise AssertionError(f"unexpected call: {args}")
+
+    monkeypatch.setattr(wifi_utils, "_run_command", fake_run)
+
+    assert wifi_utils._detect_interface() == "wlan0"
+
+
 def test_check_internet_falls_back_without_interface_binding(monkeypatch):
     calls = []
 

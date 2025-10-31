@@ -115,12 +115,46 @@ def _get_wireless_interfaces() -> Sequence[str]:
         return []
 
 
+def _get_nmcli_wifi_interfaces() -> Sequence[str]:
+    """Return Wi-Fi interfaces reported by NetworkManager."""
+
+    try:
+        proc = _run_command(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "dev", "status"])
+    except Exception as exc:
+        _LOGGER.debug("nmcli dev status failed: %s", exc)
+        return []
+
+    connected: List[str] = []
+    others: List[str] = []
+
+    for line in proc.stdout.splitlines():
+        if not line:
+            continue
+        parts = line.split(":")
+        if len(parts) < 3:
+            continue
+        device, dev_type, state = parts[0], parts[1], parts[2]
+        if dev_type != "wifi":
+            continue
+        normalized_state = state.strip().lower()
+        if normalized_state.startswith("connected"):
+            connected.append(device)
+        else:
+            others.append(device)
+
+    return [*connected, *others]
+
+
 def _detect_interface() -> Optional[str]:
     env_iface = os.environ.get("WIFI_INTERFACE")
     if env_iface:
         return env_iface
 
-    interfaces = _get_wireless_interfaces()
+    interfaces = _get_nmcli_wifi_interfaces()
+    if interfaces:
+        return interfaces[0]
+
+    interfaces = [iface for iface in _get_wireless_interfaces() if not iface.startswith("p2p-")]
     if interfaces:
         return interfaces[0]
 
