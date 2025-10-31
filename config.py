@@ -257,13 +257,24 @@ except (TypeError, ValueError):
     TEAM_STANDINGS_DISPLAY_SECONDS = 5
 SCHEDULE_UPDATE_INTERVAL = 600
 
+DEFAULT_DISPLAY_ROTATION = 180
 try:
-    DISPLAY_ROTATION = int(os.environ.get("DISPLAY_ROTATION", "180"))
+    DISPLAY_ROTATION = int(
+        os.environ.get("DISPLAY_ROTATION", str(DEFAULT_DISPLAY_ROTATION))
+    )
 except (TypeError, ValueError):
     logging.warning(
-        "Invalid DISPLAY_ROTATION value; defaulting to 180 degrees."
+        "Invalid DISPLAY_ROTATION value; defaulting to %d degrees.",
+        DEFAULT_DISPLAY_ROTATION,
     )
-    DISPLAY_ROTATION = 180
+    DISPLAY_ROTATION = DEFAULT_DISPLAY_ROTATION
+if DISPLAY_ROTATION not in {0, 90, 180, 270}:
+    logging.warning(
+        "Unsupported DISPLAY_ROTATION %d°; defaulting to %d°.",
+        DISPLAY_ROTATION,
+        DEFAULT_DISPLAY_ROTATION,
+    )
+    DISPLAY_ROTATION = DEFAULT_DISPLAY_ROTATION
 
 # ─── Scoreboard appearance ────────────────────────────────────────────────────
 
