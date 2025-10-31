@@ -388,7 +388,11 @@ def _monitor_loop() -> None:
     while not _STOP_EVENT.is_set():
         link_info = _get_link_info(iface)
         associated = "Connected to" in link_info
-        ssid = _get_ssid_from_link(link_info) or _get_ssid_fallback()
+        ssid_from_link = _get_ssid_from_link(link_info)
+        fallback_ssid = None if ssid_from_link else _get_ssid_fallback()
+        ssid = ssid_from_link or fallback_ssid
+        if not associated and ssid:
+            associated = True
 
         if not associated:
             fails += 1
@@ -451,6 +455,7 @@ def start_monitor() -> None:
     _IFACE = _detect_interface()
     if not _IFACE:
         _LOGGER.warning("No wireless interface detected; Wi-Fi monitor disabled")
+        _update_state("ok", None)
         return
 
     _USER_LOG_PATH = _resolve_user_log()

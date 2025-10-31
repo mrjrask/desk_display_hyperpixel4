@@ -145,6 +145,8 @@ class Display:
         self._display = None
         self._pygame_surface = None
         self._backend: Optional[str] = None
+        self._pygame_recovery_lock = threading.Lock()
+        self._last_pygame_recovery = 0.0
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
 
         preferred_backend = DISPLAY_BACKEND
@@ -320,6 +322,7 @@ class Display:
                     pass
             except Exception as exc:
                 logging.warning("Pygame display refresh failed: %s", exc)
+                self._attempt_pygame_recovery(str(exc))
             return
 
         if self._display is None:  # pragma: no cover - hardware import
@@ -332,6 +335,48 @@ class Display:
             self._display.display()
         except Exception as exc:  # pragma: no cover - hardware import
             logging.warning("Display refresh failed: %s", exc)
+
+    def _attempt_pygame_recovery(self, error_message: str) -> None:
+        """Try to recover the pygame display after driver-level failures."""
+
+        if pygame is None or self._backend != "pygame":
+            return
+
+        lower_msg = error_message.lower()
+        if "egl" not in lower_msg and "context" not in lower_msg:
+            return
+
+        now = time.monotonic()
+        if now - self._last_pygame_recovery < 5:
+            return
+
+        with self._pygame_recovery_lock:
+            if now - self._last_pygame_recovery < 5:
+                return
+
+            self._last_pygame_recovery = now
+            logging.info("🔄 Attempting to reset pygame display after EGL failure…")
+            try:
+                pygame.display.quit()
+            except Exception:
+                pass
+
+            success, reason = self._init_pygame_backend()
+            if success:
+                logging.info("✅ Pygame display reset succeeded.")
+                return
+
+            if reason:
+                logging.error("Pygame display reset failed: %s", reason)
+            else:
+                logging.error("Pygame display reset failed for an unknown reason.")
+
+            # As a last resort try to fall back to the Display HAT Mini backend.
+            success, hat_reason = self._init_displayhat_backend()
+            if success:
+                logging.info("🛟 Fell back to Display HAT Mini backend after pygame failure.")
+            elif hat_reason:
+                logging.error("Display HAT Mini recovery failed: %s", hat_reason)
 
     def clear(self):
         self._buffer = Image.new("RGB", (self.width, self.height), "black")
