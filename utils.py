@@ -413,8 +413,6 @@ class Display:
     def is_button_pressed(self, name: str) -> bool:
         """Return True if the named button is currently pressed."""
 
-        if self._backend == "pygame":
-            return False
         if self._display is None:  # pragma: no cover - hardware import
             return False
 
