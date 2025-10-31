@@ -146,6 +146,7 @@ class Display:
         self._pygame_surface = None
         self._backend: Optional[str] = None
         self._pygame_recovery_lock = threading.Lock()
+        self._pygame_display_lock = threading.RLock()
         self._last_pygame_recovery = 0.0
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
 
@@ -256,8 +257,9 @@ class Display:
                 _PYGAME_SHUTDOWN_REGISTERED = True
                 atexit.register(_shutdown_pygame)
 
-            self._pygame_surface = surface
-            self._backend = "pygame"
+            with self._pygame_display_lock:
+                self._pygame_surface = surface
+                self._backend = "pygame"
             logging.info(
                 "🖼️  Pygame display initialized for %s (%dx%d, rotation %d°).",
                 DISPLAY_PROFILE,
@@ -301,28 +303,31 @@ class Display:
     def _update_display(self):
         if not display_updates_enabled():
             return
-        if self._backend == "pygame" and pygame is not None and self._pygame_surface is not None:
-            try:
-                frame_surface = pygame.image.frombuffer(
-                    self._buffer.tobytes(),
-                    self._buffer.size,
-                    self._buffer.mode,
-                )
-                if self.rotation:
-                    frame_surface = pygame.transform.rotate(frame_surface, self.rotation)
-                frame_surface = frame_surface.convert()
-                target_size = self._pygame_surface.get_size()
-                if frame_surface.get_size() != target_size:
-                    frame_surface = pygame.transform.smoothscale(frame_surface, target_size)
-                self._pygame_surface.blit(frame_surface, (0, 0))
-                pygame.display.flip()
+        if self._backend == "pygame" and pygame is not None:
+            with self._pygame_display_lock:
+                if self._pygame_surface is None:
+                    return
                 try:
-                    pygame.event.pump()
-                except Exception:  # pragma: no cover - optional dependency
-                    pass
-            except Exception as exc:
-                logging.warning("Pygame display refresh failed: %s", exc)
-                self._attempt_pygame_recovery(str(exc))
+                    frame_surface = pygame.image.frombuffer(
+                        self._buffer.tobytes(),
+                        self._buffer.size,
+                        self._buffer.mode,
+                    )
+                    if self.rotation:
+                        frame_surface = pygame.transform.rotate(frame_surface, self.rotation)
+                    frame_surface = frame_surface.convert()
+                    target_size = self._pygame_surface.get_size()
+                    if frame_surface.get_size() != target_size:
+                        frame_surface = pygame.transform.smoothscale(frame_surface, target_size)
+                    self._pygame_surface.blit(frame_surface, (0, 0))
+                    pygame.display.flip()
+                    try:
+                        pygame.event.pump()
+                    except Exception:  # pragma: no cover - optional dependency
+                        pass
+                except Exception as exc:
+                    logging.warning("Pygame display refresh failed: %s", exc)
+                    self._attempt_pygame_recovery(str(exc))
             return
 
         if self._display is None:  # pragma: no cover - hardware import
@@ -356,12 +361,14 @@ class Display:
 
             self._last_pygame_recovery = now
             logging.info("🔄 Attempting to reset pygame display after EGL failure…")
-            try:
-                pygame.display.quit()
-            except Exception:
-                pass
+            with self._pygame_display_lock:
+                self._pygame_surface = None
+                try:
+                    pygame.display.quit()
+                except Exception:
+                    pass
 
-            success, reason = self._init_pygame_backend()
+                success, reason = self._init_pygame_backend()
             if success:
                 logging.info("✅ Pygame display reset succeeded.")
                 return
