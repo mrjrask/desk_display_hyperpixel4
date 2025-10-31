@@ -223,6 +223,21 @@ SCALE_Y = HEIGHT / BASE_HEIGHT
 SCALE = min(SCALE_X, SCALE_Y)
 
 
+_FONT_SCALE_DEFAULT = 1.15
+try:
+    FONT_SCALE_FACTOR = float(
+        os.environ.get("FONT_SCALE_FACTOR", str(_FONT_SCALE_DEFAULT))
+    )
+    if FONT_SCALE_FACTOR <= 0:
+        raise ValueError
+except (TypeError, ValueError):
+    logging.warning(
+        "Invalid FONT_SCALE_FACTOR value; using default %.2f",
+        _FONT_SCALE_DEFAULT,
+    )
+    FONT_SCALE_FACTOR = _FONT_SCALE_DEFAULT
+
+
 def scale(value: float) -> int:
     return max(1, int(round(value * SCALE)))
 
@@ -236,7 +251,7 @@ def scale_y(value: float) -> int:
 
 
 def scale_font(size: float) -> int:
-    return max(1, int(round(size * SCALE)))
+    return max(1, int(round(size * SCALE * FONT_SCALE_FACTOR)))
 
 
 DISPLAY_BACKEND = os.environ.get("DISPLAY_BACKEND", "auto").strip().lower() or "auto"
