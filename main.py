@@ -150,6 +150,10 @@ def refresh_schedule_if_needed(force: bool = False) -> None:
 
 # ─── Display & Wi-Fi monitor ─────────────────────────────────────────────────
 display = Display()
+
+# Ensure the physical panel is cleared immediately so the Raspberry Pi desktop
+# never peeks through while the application performs its initial data fetches.
+clear_display(display)
 if ENABLE_WIFI_MONITOR:
     logging.info("🔌 Starting Wi-Fi monitor…")
     wifi_utils.start_monitor()
