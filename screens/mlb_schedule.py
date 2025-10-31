@@ -35,7 +35,9 @@ IMAGES_DIR    = os.path.join(SCRIPT_DIR, "images")
 MLB_LOGOS_DIR = os.path.join(IMAGES_DIR, "mlb")
 
 # ── Layout constants ─────────────────────────────────────────────────────────
-BOTTOM_MARGIN           = 4          # keep bottom text safely on-screen
+# Leave more breathing room so the footer text stays comfortably above the
+# display edge on real hardware.
+BOTTOM_MARGIN           = 10         # keep bottom text safely on-screen
 TITLE_TO_HEADER_GAP     = 6          # space between title baseline and header labels
 HEADER_GAP              = 3          # space between R/H/E labels and grid
 TABLE_SIDE_MARGIN       = 4          # left/right inset of table
