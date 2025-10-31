@@ -82,6 +82,9 @@ _MLB_FORMAT_GAME_LABEL = getattr(_MLB, "_format_game_label", None) if _MLB else 
 # Title and footer fonts mirror the MLB screens via config definitions.
 FONT_TITLE  = FONT_TITLE_SPORTS
 FONT_BOTTOM = FONT_DATE_SPORTS
+# Margin applied to all footer/date labels to prevent them from hugging the
+# bottom edge (or falling off) on the physical displays.
+BOTTOM_LABEL_MARGIN = 8
 
 # Opponent line on "Next" screens should mirror MLB's 20 pt team font.
 FONT_NEXT_OPP = FONT_TEAM_SPORTS
@@ -1028,7 +1031,7 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     start_time_central = game.get("startTimeCentral")
     bottom_text   = _format_next_bottom(official_date, game_date_iso, start_time_central)
     bottom_h      = _text_h(d, FONT_BOTTOM) if bottom_text else 0
-    bottom_y      = HEIGHT - (bottom_h + 2) if bottom_text else HEIGHT
+    bottom_y      = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
     # Desired logo height (bigger on 128px; adapt if smaller/other displays)
     desired_logo_h = standard_next_game_logo_height(HEIGHT)
@@ -1122,7 +1125,7 @@ def draw_last_hawks_game(display, game, transition: bool=False):
 
     # Reserve bottom for date (in MLB bottom font)
     bottom_str = _format_last_bottom_line(last_final, feed)
-    reserve = (_text_h(d, FONT_BOTTOM) + 2) if bottom_str else 0
+    reserve = (_text_h(d, FONT_BOTTOM) + BOTTOM_LABEL_MARGIN) if bottom_str else 0
 
     raw_away = last_final.get("awayTeam") or (last_final.get("teams") or {}).get("away") or {}
     raw_home = last_final.get("homeTeam") or (last_final.get("teams") or {}).get("home") or {}
@@ -1142,7 +1145,7 @@ def draw_last_hawks_game(display, game, transition: bool=False):
 
     # Bottom date (MLB bottom font)
     if bottom_str:
-        by = HEIGHT - _text_h(d, FONT_BOTTOM) - 1
+        by = HEIGHT - _text_h(d, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
         _center_text(d, by, bottom_str, FONT_BOTTOM)
 
     return _push(display, img, transition=transition)
@@ -1185,7 +1188,7 @@ def draw_live_hawks_game(display, game, transition: bool=False):
             _center_text(d, y, inline, FONT_SMALL)
             y += _text_h(d, FONT_SMALL)
 
-    reserve = (_text_h(d, FONT_BOTTOM) + 2) if dateline else 0
+    reserve = (_text_h(d, FONT_BOTTOM) + BOTTOM_LABEL_MARGIN) if dateline else 0
 
     raw_away = live.get("awayTeam") or (live.get("teams") or {}).get("away") or {}
     raw_home = live.get("homeTeam") or (live.get("teams") or {}).get("home") or {}
@@ -1203,7 +1206,7 @@ def draw_live_hawks_game(display, game, transition: bool=False):
     )
 
     if dateline:
-        by = HEIGHT - _text_h(d, FONT_BOTTOM) - 1
+        by = HEIGHT - _text_h(d, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
         _center_text(d, by, dateline, FONT_BOTTOM)
 
     return _push(display, img, transition=transition)

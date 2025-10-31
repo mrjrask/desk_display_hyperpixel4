@@ -53,7 +53,8 @@ TITLE_GAP = 6
 ROW_HEIGHT = 185 if HEIGHT >= 96 else 148
 ROW_GAP = 4
 STATUS_GAP = 6
-FOOTER_MARGIN = 4
+# Leave extra padding so the footer/date label doesn't sit on the bottom edge.
+FOOTER_MARGIN = 10
 LOGO_HEIGHT = 158 if HEIGHT >= 96 else 120
 NEXT_LOGO_HEIGHT = 240 if HEIGHT >= 128 else 185
 MATCHUP_GAP = 6
