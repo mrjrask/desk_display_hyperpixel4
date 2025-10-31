@@ -1035,7 +1035,9 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
 
     # Compute max logo height to fit between the top content and bottom line
     available_h = max(10, bottom_y - (y_top + 2))  # space for logos row
-    logo_h = min(desired_logo_h, available_h)
+    max_logo_h_ratio = 0.34 if HEIGHT <= 240 else 0.25
+    max_logo_h = max(24, int(round(HEIGHT * max_logo_h_ratio)))
+    logo_h = min(desired_logo_h, available_h, max_logo_h)
     # Compute a row top such that the logos row is **centered vertically**.
     # But never allow overlap with top content nor with bottom label.
     centered_top = (HEIGHT - logo_h) // 2
