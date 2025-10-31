@@ -29,7 +29,7 @@ from config import (
 from utils import clear_display, log_call
 
 # Constants
-LOGO_SZ = 59
+LOGO_SZ = 148
 MARGIN  = 6
 
 # Helpers

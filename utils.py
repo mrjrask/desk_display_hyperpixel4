@@ -793,13 +793,13 @@ def _adjust_logo_brightness(logo: Image.Image, base_dir: str, abbr: str) -> Imag
 def standard_next_game_logo_height(panel_height: int) -> int:
     """Return the shared next-game logo height used across team screens."""
     if panel_height >= 128:
-        return 150
+        return 375
     if panel_height >= 96:
-        return 109
-    return 89
+        return 273
+    return 223
 
 
-def load_team_logo(base_dir: str, abbr: str, height: int = 36) -> Image.Image | None:
+def load_team_logo(base_dir: str, abbr: str, height: int = 90) -> Image.Image | None:
     filename = f"{abbr}.png"
     path = os.path.join(base_dir, filename)
     try:
