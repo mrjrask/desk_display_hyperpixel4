@@ -145,6 +145,30 @@ def _get_nmcli_wifi_interfaces() -> Sequence[str]:
     return [*connected, *others]
 
 
+def _has_active_ethernet() -> bool:
+    """Return ``True`` when NetworkManager reports an active ethernet link."""
+
+    try:
+        proc = _run_command(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "dev", "status"])
+    except Exception as exc:
+        _LOGGER.debug("nmcli dev status ethernet check failed: %s", exc)
+        return False
+
+    for line in proc.stdout.splitlines():
+        if not line:
+            continue
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        _, dev_type, state = parts
+        if dev_type != "ethernet":
+            continue
+        if state.strip().lower().startswith("connected"):
+            return True
+
+    return False
+
+
 def _detect_interface() -> Optional[str]:
     env_iface = os.environ.get("WIFI_INTERFACE")
     if env_iface:
@@ -489,6 +513,11 @@ def start_monitor() -> None:
     _IFACE = _detect_interface()
     if not _IFACE:
         _LOGGER.warning("No wireless interface detected; Wi-Fi monitor disabled")
+        _update_state("ok", None)
+        return
+
+    if _has_active_ethernet():
+        _LOGGER.info("Active ethernet connection detected; Wi-Fi monitor disabled")
         _update_state("ok", None)
         return
 
