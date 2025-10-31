@@ -70,7 +70,7 @@ def _sanitize_filename_prefix(name: str) -> str:
     return safe or "screen"
 
 
-LOGO_SCREEN_HEIGHT = 148  # 80px base increased by ~85%
+LOGO_SCREEN_HEIGHT = 370  # 80px base increased by 2.5x for team showcases
 
 
 def load_logo(filename: str, height: int = LOGO_SCREEN_HEIGHT) -> Optional[Image.Image]:
