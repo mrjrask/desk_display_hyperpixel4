@@ -18,6 +18,7 @@ import random
 import subprocess
 import threading
 import time
+import queue
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -148,6 +149,9 @@ class Display:
         self._pygame_recovery_lock = threading.Lock()
         self._pygame_display_lock = threading.RLock()
         self._last_pygame_recovery = 0.0
+        self._pygame_present_queue: Optional["queue.Queue[Optional[Image.Image]]"] = None
+        self._pygame_present_thread: Optional[threading.Thread] = None
+        self._pygame_present_stop = threading.Event()
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
 
         preferred_backend = DISPLAY_BACKEND
@@ -260,6 +264,7 @@ class Display:
             with self._pygame_display_lock:
                 self._pygame_surface = surface
                 self._backend = "pygame"
+            self._start_pygame_presenter()
             logging.info(
                 "🖼️  Pygame display initialized for %s (%dx%d, rotation %d°).",
                 DISPLAY_PROFILE,
@@ -275,6 +280,7 @@ class Display:
                 os.environ["SDL_VIDEODRIVER"] = original_driver
 
     def _init_displayhat_backend(self) -> Tuple[bool, Optional[str]]:
+        self._stop_pygame_presenter()
         if DisplayHATMini is None:  # pragma: no cover - hardware import
             if _DISPLAY_HAT_ERROR:
                 return False, f"Display HAT Mini driver unavailable ({_DISPLAY_HAT_ERROR})"
@@ -300,34 +306,115 @@ class Display:
         )
         return True, None
 
+    def _pygame_present_loop(self) -> None:
+        if pygame is None:
+            return
+        queue_obj = self._pygame_present_queue
+        if queue_obj is None:
+            return
+        while not self._pygame_present_stop.is_set():
+            try:
+                frame = queue_obj.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if frame is None:
+                break
+            try:
+                self._present_pygame_frame(frame)
+            except Exception as exc:
+                logging.warning("Pygame presenter loop failed: %s", exc)
+
+    def _present_pygame_frame(self, frame: Image.Image) -> None:
+        if pygame is None:
+            return
+        with self._pygame_display_lock:
+            if self._pygame_surface is None:
+                return
+            try:
+                frame_bytes = frame.tobytes()
+                frame_surface = pygame.image.frombuffer(
+                    frame_bytes,
+                    frame.size,
+                    frame.mode,
+                )
+                if self.rotation:
+                    frame_surface = pygame.transform.rotate(frame_surface, self.rotation)
+                frame_surface = frame_surface.convert()
+                target_size = self._pygame_surface.get_size()
+                if frame_surface.get_size() != target_size:
+                    frame_surface = pygame.transform.smoothscale(frame_surface, target_size)
+                self._pygame_surface.blit(frame_surface, (0, 0))
+                pygame.display.flip()
+                try:
+                    pygame.event.pump()
+                except Exception:  # pragma: no cover - optional dependency
+                    pass
+            except Exception as exc:
+                logging.warning("Pygame display refresh failed: %s", exc)
+                self._attempt_pygame_recovery(str(exc))
+
+    def _start_pygame_presenter(self) -> None:
+        if pygame is None:
+            return
+        if self._backend != "pygame":
+            return
+        if self._pygame_present_queue is None:
+            self._pygame_present_queue = queue.Queue(maxsize=1)
+        if self._pygame_present_thread and self._pygame_present_thread.is_alive():
+            return
+        self._pygame_present_stop.clear()
+        thread = threading.Thread(
+            target=self._pygame_present_loop,
+            name="pygame-presenter",
+            daemon=True,
+        )
+        self._pygame_present_thread = thread
+        try:
+            thread.start()
+        except Exception as exc:
+            logging.debug("Failed to start pygame presenter thread: %s", exc)
+            self._pygame_present_thread = None
+
+    def _stop_pygame_presenter(self) -> None:
+        queue_obj = self._pygame_present_queue
+        thread = self._pygame_present_thread
+        self._pygame_present_stop.set()
+        if queue_obj is not None:
+            try:
+                queue_obj.put_nowait(None)
+            except queue.Full:
+                pass
+            except Exception:
+                pass
+        if thread and thread.is_alive():
+            try:
+                thread.join(timeout=1.0)
+            except Exception:
+                pass
+        self._pygame_present_thread = None
+        self._pygame_present_queue = None
+
     def _update_display(self):
         if not display_updates_enabled():
             return
         if self._backend == "pygame" and pygame is not None:
-            with self._pygame_display_lock:
-                if self._pygame_surface is None:
-                    return
-                try:
-                    frame_surface = pygame.image.frombuffer(
-                        self._buffer.tobytes(),
-                        self._buffer.size,
-                        self._buffer.mode,
-                    )
-                    if self.rotation:
-                        frame_surface = pygame.transform.rotate(frame_surface, self.rotation)
-                    frame_surface = frame_surface.convert()
-                    target_size = self._pygame_surface.get_size()
-                    if frame_surface.get_size() != target_size:
-                        frame_surface = pygame.transform.smoothscale(frame_surface, target_size)
-                    self._pygame_surface.blit(frame_surface, (0, 0))
-                    pygame.display.flip()
-                    try:
-                        pygame.event.pump()
-                    except Exception:  # pragma: no cover - optional dependency
-                        pass
-                except Exception as exc:
-                    logging.warning("Pygame display refresh failed: %s", exc)
-                    self._attempt_pygame_recovery(str(exc))
+            if self._pygame_present_queue is None:
+                self._start_pygame_presenter()
+            queue_obj = self._pygame_present_queue
+            if queue_obj is None:
+                return
+            frame = self._buffer.copy()
+            if frame.mode != "RGB":
+                frame = frame.convert("RGB")
+            try:
+                while True:
+                    queue_obj.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                queue_obj.put_nowait(frame)
+            except queue.Full:
+                pass
             return
 
         if self._display is None:  # pragma: no cover - hardware import
@@ -371,6 +458,7 @@ class Display:
                 success, reason = self._init_pygame_backend()
             if success:
                 logging.info("✅ Pygame display reset succeeded.")
+                self._start_pygame_presenter()
                 return
 
             if reason:
@@ -379,6 +467,7 @@ class Display:
                 logging.error("Pygame display reset failed for an unknown reason.")
 
             # As a last resort try to fall back to the Display HAT Mini backend.
+            self._stop_pygame_presenter()
             success, hat_reason = self._init_displayhat_backend()
             if success:
                 logging.info("🛟 Fell back to Display HAT Mini backend after pygame failure.")
