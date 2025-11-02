@@ -45,6 +45,7 @@ LEFT_MARGIN = 10
 RIGHT_MARGIN = 12
 TEAM_COLUMN_GAP = 10
 STATS_FIRST_COLUMN_GAP = 28
+TEAM_TO_STATS_EXTRA_GAP = 12
 STATS_COLUMN_MIN_STEP = 42
 ROW_PADDING = 6
 ROW_SPACING = 6
@@ -61,8 +62,11 @@ DIVISION_FONT = clone_font(FONT_TITLE_SPORTS, 42)
 COLUMN_FONT = clone_font(FONT_STATUS, 36)
 _COLUMN_POINTS_SIZE = max(8, getattr(COLUMN_FONT, "size", 36) - 4)
 COLUMN_FONT_POINTS = clone_font(COLUMN_FONT, _COLUMN_POINTS_SIZE)
-ROW_FONT = clone_font(FONT_STATUS, 44)
-_TEAM_NAME_FONT_SIZE = max(8, getattr(ROW_FONT, "size", 44) - 4)
+_ROW_FONT_BASE_SIZE = 44
+ROW_FONT = clone_font(FONT_STATUS, _ROW_FONT_BASE_SIZE)
+_ROW_FONT_SIZE = getattr(ROW_FONT, "size", _ROW_FONT_BASE_SIZE)
+STATS_VALUE_FONT = clone_font(ROW_FONT, _ROW_FONT_SIZE + 6)
+_TEAM_NAME_FONT_SIZE = max(8, _ROW_FONT_SIZE - 4)
 TEAM_NAME_FONT = clone_font(ROW_FONT, _TEAM_NAME_FONT_SIZE)
 
 OVERVIEW_TITLE = "NHL Overview"
@@ -153,24 +157,32 @@ def _build_column_layout(max_team_name_width: int) -> tuple[dict[str, int], int]
 
     column_count = len(STATS_COLUMNS)
     min_spacing = STATS_COLUMN_MIN_STEP * max(0, column_count - 1)
-    max_team_space = max(0, stats_right - team_x - STATS_FIRST_COLUMN_GAP - min_spacing)
+    team_to_stats_gap = STATS_FIRST_COLUMN_GAP + TEAM_TO_STATS_EXTRA_GAP
+    max_team_space = max(0, stats_right - team_x - team_to_stats_gap - min_spacing)
     allowed_team_space = max(0, min(max_team_name_width, max_team_space))
 
-    first_column = min(stats_right, team_x + allowed_team_space + STATS_FIRST_COLUMN_GAP)
+    first_column = min(stats_right, team_x + allowed_team_space + team_to_stats_gap)
 
     if column_count == 1:
         layout[STATS_COLUMNS[0]] = stats_right
     else:
         available_space = max(0.0, stats_right - first_column)
-        step = available_space / (column_count - 1) if column_count > 1 else 0.0
+        raw_positions = [
+            first_column + available_space * (idx / (column_count - 1))
+            for idx in range(column_count)
+        ]
+        raw_positions[-1] = float(stats_right)
 
         positions: list[int] = []
-        for idx in range(column_count):
+        for idx, pos in enumerate(raw_positions):
             if idx == column_count - 1:
-                pos = stats_right
+                rounded = stats_right
             else:
-                pos = first_column + step * idx
-            positions.append(int(round(pos)))
+                rounded = int(round(pos))
+                rounded = min(rounded, stats_right - (column_count - 1 - idx))
+            if positions and rounded <= positions[-1]:
+                rounded = min(stats_right - (column_count - 1 - idx), positions[-1] + 1)
+            positions.append(rounded)
 
         for key, pos in zip(STATS_COLUMNS, positions):
             layout[key] = pos
@@ -849,7 +861,7 @@ def _draw_division(
             _draw_text(
                 draw,
                 str(team.get(key, "")),
-                ROW_FONT,
+                STATS_VALUE_FONT,
                 column_layout[key],
                 row_top,
                 ROW_HEIGHT,
