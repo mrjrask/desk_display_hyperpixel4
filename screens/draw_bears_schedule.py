@@ -76,7 +76,9 @@ def show_bears_next_game(display, transition=False):
         available_h = max(10, bottom_y - (y_txt + 2))
         max_logo_h_ratio = 0.34 if config.HEIGHT <= 240 else 0.25
         max_logo_h = max(24, int(round(config.HEIGHT * max_logo_h_ratio)))
-        logo_h = min(desired_logo_h, available_h, max_logo_h)
+        base_logo_h = min(desired_logo_h, available_h, max_logo_h)
+        scaled_logo_h = int(round(base_logo_h * 1.15))
+        logo_h = max(1, min(scaled_logo_h, available_h, max_logo_h))
 
         logo_away = load_team_logo(NFL_LOGO_DIR, away_ab, height=logo_h)
         logo_home = load_team_logo(NFL_LOGO_DIR, home_ab, height=logo_h)
@@ -92,8 +94,11 @@ def show_bears_next_game(display, transition=False):
         x0      = (config.WIDTH - total_w)//2
 
         # Vertical center of logos/text block between opponent text and bottom label
-        block_h = logo_h
-        y_logo = y_txt + ((bottom_y - y_txt) - block_h)//2
+        block_h = max(logo_away.height, logo_home.height)
+        space_top = y_txt
+        space_bottom = bottom_y
+        available_space = max(0, space_bottom - space_top)
+        y_logo = space_top + max(0, (available_space - block_h)//2)
 
         # Draw logos and '@'
         x = x0

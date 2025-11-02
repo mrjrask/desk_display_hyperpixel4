@@ -616,7 +616,7 @@ TRAVEL_DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
 # Bears schedule screen
 # Space between the bottom date label and the display edge on the Bears screen.
 # A slightly larger margin keeps the text safely on-screen across devices.
-BEARS_BOTTOM_MARGIN = 10
+BEARS_BOTTOM_MARGIN = 14
 BEARS_SCHEDULE = [
     {"week":"0.1","date":"Sat, Aug 9",  "opponent":"Miami Dolphins",       "home_away":"Home","time":"Noon"},
     {"week":"0.2","date":"Sun, Aug 17", "opponent":"Buffalo Bills",        "home_away":"Home","time":"7PM"},
