@@ -1034,7 +1034,7 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     bottom_y      = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
     # Desired logo height (bigger on 128px; adapt if smaller/other displays)
-    desired_logo_h = standard_next_game_logo_height(HEIGHT)
+    desired_logo_h = max(1, int(round(standard_next_game_logo_height(HEIGHT) * 1.15)))
 
     # Compute max logo height to fit between the top content and bottom line
     available_h = max(10, bottom_y - (y_top + 2))  # space for logos row
@@ -1043,8 +1043,9 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     logo_h = min(desired_logo_h, available_h, max_logo_h)
     # Compute a row top such that the logos row is **centered vertically**.
     # But never allow overlap with top content nor with bottom label.
-    centered_top = (HEIGHT - logo_h) // 2
-    row_y = max(y_top + 1, min(centered_top, bottom_y - logo_h - 1))
+    available_space = max(0, bottom_y - y_top)
+    centered_top = y_top + max(0, (available_space - logo_h) // 2)
+    row_y = min(max(y_top + 1, centered_top), max(y_top + 1, bottom_y - logo_h - 1))
 
     # Render logos at computed height (from local PNGs)
     away_logo = _load_logo_png(away_tri, height=logo_h)
