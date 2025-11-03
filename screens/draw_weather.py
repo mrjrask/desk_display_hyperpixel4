@@ -245,13 +245,30 @@ def draw_weather_screen_2(display, weather, transition=False):
     s_r = timestamp_to_datetime(daily.get("sunrise"), CENTRAL_TIME)
     s_s = timestamp_to_datetime(daily.get("sunset"), CENTRAL_TIME)
 
-    # Sunrise or Sunset first
-    if s_r and now < s_r:
-        items = [("Sunrise:", s_r.strftime("%-I:%M %p"))]
+    next_sunrise = None
+    daily_list = weather.get("daily") if isinstance(weather.get("daily"), list) else []
+    if len(daily_list) > 1:
+        next_sunrise = timestamp_to_datetime(daily_list[1].get("sunrise"), CENTRAL_TIME)
+
+    sunrise_label = "Sunrise:"
+    sunset_label = "Sunset:"
+
+    items = []
+    if s_r and s_s:
+        sunrise_cutoff = s_r + datetime.timedelta(minutes=15)
+        sunset_cutoff = s_s + datetime.timedelta(minutes=15)
+
+        if sunrise_cutoff <= now < sunset_cutoff:
+            items.append((sunset_label, s_s.strftime("%-I:%M %p")))
+        else:
+            sunrise_dt = s_r
+            if now >= sunset_cutoff and next_sunrise:
+                sunrise_dt = next_sunrise
+            items.append((sunrise_label, sunrise_dt.strftime("%-I:%M %p")))
     elif s_s:
-        items = [("Sunset:",  s_s.strftime("%-I:%M %p"))]
-    else:
-        items = []
+        items.append((sunset_label, s_s.strftime("%-I:%M %p")))
+    elif s_r:
+        items.append((sunrise_label, s_r.strftime("%-I:%M %p")))
 
     # Other details
     wind_speed = round(current.get('wind_speed', 0))
