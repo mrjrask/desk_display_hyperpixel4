@@ -77,7 +77,7 @@ def show_bears_next_game(display, transition=False):
         max_logo_h_ratio = 0.34 if config.HEIGHT <= 240 else 0.25
         max_logo_h = max(24, int(round(config.HEIGHT * max_logo_h_ratio)))
         base_logo_h = min(desired_logo_h, available_h, max_logo_h)
-        scaled_logo_h = int(round(base_logo_h * 1.15))
+        scaled_logo_h = int(round(base_logo_h * 1.15 * 1.20))  # 20% larger than previous Bears baseline
         logo_h = max(1, min(scaled_logo_h, available_h, max_logo_h))
 
         logo_away = load_team_logo(NFL_LOGO_DIR, away_ab, height=logo_h)

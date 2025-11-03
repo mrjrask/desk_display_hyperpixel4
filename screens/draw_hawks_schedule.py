@@ -1034,7 +1034,11 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     bottom_y      = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
     # Desired logo height (bigger on 128px; adapt if smaller/other displays)
-    desired_logo_h = max(1, int(round(standard_next_game_logo_height(HEIGHT) * 1.15)))
+    base_logo_h = standard_next_game_logo_height(HEIGHT)
+    desired_logo_h = max(
+        1,
+        int(round(base_logo_h * 1.15 * 1.20)),  # 20% bump on top of Hawks baseline size
+    )
 
     # Compute max logo height to fit between the top content and bottom line
     available_h = max(10, bottom_y - (y_top + 2))  # space for logos row
