@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """
-draw_inside.py (RGB, 320x240)
+draw_inside.py (RGB)
+Optimized for:
+  • HyperPixel 4.0 Square: 720 x 720
+  • HyperPixel 4.0/4.3 (landscape): 800 x 480
 
 Universal environmental sensor screen with a calmer, data-forward layout:
   • Title area with automatic sensor attribution
   • Soft temperature card with contextual descriptor
   • Responsive grid of metric cards driven entirely by the available readings
-Everything is dynamically sized to stay legible on the configured canvas.
+Everything is dynamically sized from config.WIDTH/HEIGHT, so it adapts to square
+(720x720) and wide (800x480) canvases without code changes.
 """
 
 from __future__ import annotations
@@ -30,24 +34,15 @@ from utils import (
     temperature_color,
 )
 
-# Optional HW libs (import lazily in _probe_sensor)
-try:
-    import board, busio  # type: ignore
-except Exception:  # allows non-Pi dev boxes
-    board = None
-    busio = None
-
-try:
-    from adafruit_extended_bus import ExtendedI2C  # type: ignore
-except Exception:
-    ExtendedI2C = None
+# Use the HyperPixel-friendly sensor mux (bus-number based; honors INSIDE_SENSOR_I2C_BUS)
+from inside_sensor import read_all as read_all_sensors
 
 W, H = config.WIDTH, config.HEIGHT
 
 SensorReadings = Dict[str, Optional[float]]
 SensorProbeResult = Tuple[str, Callable[[], SensorReadings]]
-SensorProbeFn = Callable[[Any, Set[int]], Optional[SensorProbeResult]]
 
+# ── Shared helpers ───────────────────────────────────────────────────────────
 
 def _extract_field(data: Any, key: str) -> Optional[float]:
     if hasattr(data, key):
@@ -63,444 +58,53 @@ def _extract_field(data: Any, key: str) -> Optional[float]:
     except Exception:
         return None
 
-
-
-def _suppress_i2c_error_output():
-    """Context manager that silences noisy stderr output from native drivers."""
-
-    class _Suppressor:
-        def __enter__(self):
-            try:
-                self._fd = sys.stderr.fileno()
-            except (AttributeError, ValueError, OSError):
-                self._fd = None
-                return self
-
-            try:
-                sys.stderr.flush()
-            except Exception:
-                pass
-
-            self._saved = os.dup(self._fd)
-            self._devnull = open(os.devnull, "wb")  # pylint: disable=consider-using-with
-            os.dup2(self._devnull.fileno(), self._fd)
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            if getattr(self, "_fd", None) is None:
-                return False
-
-            try:
-                sys.stderr.flush()
-            except Exception:
-                pass
-
-            os.dup2(self._saved, self._fd)
-            os.close(self._saved)
-            self._devnull.close()
-            return False
-
-    return _Suppressor()
-
-
-def _probe_adafruit_bme680(i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
-    if addresses and not addresses.intersection({0x76, 0x77}):
-        return None
-
-    import adafruit_bme680  # type: ignore
-
-    dev = adafruit_bme680.Adafruit_BME680_I2C(i2c)
-
-    def read() -> SensorReadings:
-        temp_f = float(dev.temperature) * 9 / 5 + 32
-        hum = float(dev.humidity)
-        pres = float(dev.pressure) * 0.02953
-        gas = getattr(dev, "gas", None)
-        voc = float(gas) if gas not in (None, 0) else None
-        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=voc)
-
-    return "Adafruit BME680", read
-
-
-def _probe_pimoroni_bme68x(_i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
-    if addresses and not addresses.intersection({0x76, 0x77}):
-        return None
-
-    from importlib import import_module
-
-    import bme68x  # type: ignore
-
-    try:
-        I2C_ADDR_LOW = getattr(bme68x, "BME68X_I2C_ADDR_LOW")
-        I2C_ADDR_HIGH = getattr(bme68x, "BME68X_I2C_ADDR_HIGH")
-    except AttributeError:
-        const = import_module("bme68xConstants")  # type: ignore
-        I2C_ADDR_LOW = getattr(const, "BME68X_I2C_ADDR_LOW", 0x76)
-        I2C_ADDR_HIGH = getattr(const, "BME68X_I2C_ADDR_HIGH", 0x77)
-
-    sensor = None
-    last_error: Optional[Exception] = None
-    for addr in (I2C_ADDR_LOW, I2C_ADDR_HIGH):
-        try:
-            with _suppress_i2c_error_output():
-                sensor = bme68x.BME68X(addr)  # type: ignore
-            break
-        except Exception as exc:  # pragma: no cover - relies on hardware
-            last_error = exc
-    if sensor is None:
-        if last_error is not None:
-            raise last_error
-        raise RuntimeError("BME68X sensor not found")
-
-    variant_id = getattr(sensor, "variant_id", None)
-    const_module = import_module("bme68xConstants")  # type: ignore
-    gas_low = getattr(const_module, "BME68X_VARIANT_GAS_LOW", None)
-    gas_high = getattr(const_module, "BME68X_VARIANT_GAS_HIGH", None)
-    if variant_id == gas_high:
-        provider = "Pimoroni BME688"
-    else:
-        provider = "Pimoroni BME68X"
-
-    def read() -> SensorReadings:
-        data = sensor.get_data()
-        if isinstance(data, (list, tuple)):
-            data = data[0] if data else None
-        if data is None:
-            raise RuntimeError("BME68X returned no data")
-
-        temp_c = _extract_field(data, "temperature")
-        hum = _extract_field(data, "humidity")
-        pres_raw = _extract_field(data, "pressure")
-        voc_raw = _extract_field(data, "gas_resistance")
-
-        temp_f = temp_c * 9 / 5 + 32 if temp_c is not None else None
-        pres = None
-        if pres_raw is not None:
-            pres_hpa = pres_raw / 100.0 if pres_raw > 2000 else pres_raw
-            pres = pres_hpa * 0.02953
-
-        voc = voc_raw if voc_raw not in (None, 0) else None
-
-        if temp_f is None:
-            raise RuntimeError("BME68X temperature reading missing")
-
-        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=voc)
-
-    return provider, read
-
-
-def _probe_pimoroni_bme680(_i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
-    if addresses and not addresses.intersection({0x76, 0x77}):
-        return None
-
-    from importlib import import_module
-
-    try:
-        bme680 = import_module("pimoroni_bme680")  # type: ignore
-    except ModuleNotFoundError:
-        bme680 = import_module("bme680")  # type: ignore
-
-    try:
-        sensor = bme680.BME680(getattr(bme680, "I2C_ADDR_PRIMARY", 0x76))  # type: ignore
-    except Exception:
-        sensor = bme680.BME680()  # type: ignore
-
-    for method, value in (
-        ("set_humidity_oversample", getattr(bme680, "OS_2X", None)),
-        ("set_pressure_oversample", getattr(bme680, "OS_4X", None)),
-        ("set_temperature_oversample", getattr(bme680, "OS_8X", None)),
-        ("set_filter", getattr(bme680, "FILTER_SIZE_3", None)),
-        ("set_gas_status", getattr(bme680, "ENABLE_GAS_MEAS", None)),
-    ):
-        fn = getattr(sensor, method, None)
-        if callable(fn) and value is not None:
-            try:
-                fn(value)
-            except Exception:
-                pass
-
-    gas_temp = getattr(bme680, "DEFAULT_GAS_HEATER_TEMPERATURE", getattr(bme680, "GAS_HEATER_TEMP", None))
-    gas_dur = getattr(bme680, "DEFAULT_GAS_HEATER_DURATION", getattr(bme680, "GAS_HEATER_DURATION", None))
-    fn_temp = getattr(sensor, "set_gas_heater_temperature", None)
-    fn_dur = getattr(sensor, "set_gas_heater_duration", None)
-    if callable(fn_temp) and gas_temp is not None:
-        try:
-            fn_temp(gas_temp)
-        except Exception:
-            pass
-    if callable(fn_dur) and gas_dur is not None:
-        try:
-            fn_dur(gas_dur)
-        except Exception:
-            pass
-
-    def read() -> SensorReadings:
-        if not getattr(sensor, "get_sensor_data", lambda: False)():
-            raise RuntimeError("BME680 has no fresh data")
-        data = getattr(sensor, "data", None)
-        if data is None:
-            raise RuntimeError("BME680 returned no data")
-
-        temp_c = getattr(data, "temperature", None)
-        hum = getattr(data, "humidity", None)
-        pres_raw = getattr(data, "pressure", None)
-        gas = getattr(data, "gas_resistance", None)
-        heat_stable = getattr(data, "heat_stable", True)
-
-        temp_f = float(temp_c) * 9 / 5 + 32 if temp_c is not None else None
-        pres = float(pres_raw) * 0.02953 if pres_raw is not None else None
-        voc = float(gas) if gas not in (None, 0) and heat_stable else None
-        hum_val = float(hum) if hum is not None else None
-
-        if temp_f is None:
-            raise RuntimeError("BME680 temperature reading missing")
-
-        return dict(temp_f=temp_f, humidity=hum_val, pressure_inhg=pres, voc_ohms=voc)
-
-    return "Pimoroni BME68X", read
-
-
-def _probe_pimoroni_bme280(_i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
-    if addresses and not addresses.intersection({0x76, 0x77}):
-        return None
-
-    import bme280  # type: ignore
-
-    dev = bme280.BME280()
-
-    def read() -> SensorReadings:
-        temp_f = float(dev.get_temperature()) * 9 / 5 + 32
-        hum = float(dev.get_humidity())
-        pres = float(dev.get_pressure()) * 0.02953
-        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
-
-    return "Pimoroni BME280", read
-
-
-def _probe_adafruit_bme280(i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
-    if addresses and not addresses.intersection({0x76, 0x77}):
-        return None
-
-    import adafruit_bme280  # type: ignore
-
-    dev = adafruit_bme280.Adafruit_BME280_I2C(i2c)
-
-    def read() -> SensorReadings:
-        temp_f = float(dev.temperature) * 9 / 5 + 32
-        hum = float(dev.humidity)
-        pres = float(dev.pressure) * 0.02953
-        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
-
-    return "Adafruit BME280", read
-
-
-def _probe_adafruit_sht4x(i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
-    if addresses and not addresses.intersection({0x44, 0x45}):
-        return None
-
-    import adafruit_sht4x  # type: ignore
-
-    dev = adafruit_sht4x.SHT4x(i2c)
-    try:
-        mode = getattr(adafruit_sht4x, "Mode", None)
-        if mode is not None and hasattr(mode, "NOHEAT_HIGHPRECISION"):
-            dev.mode = mode.NOHEAT_HIGHPRECISION
-    except Exception:
-        pass
-
-    def read() -> SensorReadings:
-        temp_c, hum = dev.measurements
-        temp_f = float(temp_c) * 9 / 5 + 32
-        hum_val = float(hum)
-        return dict(temp_f=temp_f, humidity=hum_val, pressure_inhg=None, voc_ohms=None)
-
-    return "Adafruit SHT41", read
-
-
-def _scan_i2c_addresses(i2c: Any) -> Set[int]:
-    addresses: Set[int] = set()
-
-    if not hasattr(i2c, "scan"):
-        return addresses
-
-    locked = False
-    try:
-        if hasattr(i2c, "try_lock"):
-            for _ in range(5):
-                try:
-                    locked = i2c.try_lock()
-                except Exception:
-                    locked = False
-                if locked:
-                    break
-                time.sleep(0.01)
-        if locked or not hasattr(i2c, "try_lock"):
-            try:
-                addresses = set(i2c.scan())  # type: ignore[arg-type]
-            except Exception as exc:
-                logging.debug("draw_inside: I2C scan failed: %s", exc, exc_info=True)
-        else:
-            logging.debug("draw_inside: could not lock I2C bus for scanning")
-    finally:
-        if locked and hasattr(i2c, "unlock"):
-            try:
-                i2c.unlock()
-            except Exception:
-                pass
-
-    return addresses
-
-
-def _parse_i2c_bus_candidates(message: str) -> List[int]:
-    buses: List[int] = []
-    if not message:
-        return buses
-
-    for raw_bus in re.findall(r"\((\d+),\s*\d+,\s*\d+\)", message):
-        try:
-            buses.append(int(raw_bus))
-        except ValueError:
-            continue
-
-    return buses
-
-
-def _enumerate_system_i2c_buses() -> List[int]:
-    buses: Set[int] = set()
-
-    for path in glob.glob("/dev/i2c-*"):
-        _, _, suffix = path.rpartition("-")
-        try:
-            buses.add(int(suffix))
-        except ValueError:
-            continue
-
-    return sorted(buses)
-
-
-def _initialise_i2c_bus() -> Optional[Any]:
-    if board is None or busio is None:
-        return None
-
-    candidate_buses: List[int] = []
-    env_bus = getattr(config, "INSIDE_SENSOR_I2C_BUS", None)
-    if isinstance(env_bus, int):
-        candidate_buses.append(env_bus)
-
-    default_exc: Optional[Exception] = None
-
-    scl = getattr(board, "SCL", None)
-    sda = getattr(board, "SDA", None)
-    if scl is not None and sda is not None:
-        try:
-            return busio.I2C(scl, sda)
-        except Exception as exc:
-            logging.warning("draw_inside: failed to initialise I2C bus: %s", exc)
-            default_exc = exc
-            candidate_buses.extend(_parse_i2c_bus_candidates(str(exc)))
-    else:
-        logging.debug("draw_inside: board module missing SCL/SDA attributes")
-
-    if candidate_buses and ExtendedI2C is None:
-        if env_bus is not None:
-            logging.warning(
-                "draw_inside: INSIDE_SENSOR_I2C_BUS=%s set but adafruit-extended-bus is not installed",
-                env_bus,
-            )
-        else:
-            logging.debug(
-                "draw_inside: adafruit-extended-bus not available; cannot try alternate I2C buses"
-            )
-        return None
-
-    if ExtendedI2C is None:
-        return None
-
-    candidate_buses.extend(_enumerate_system_i2c_buses())
-
-    tried: Set[int] = set()
-    for bus_num in candidate_buses:
-        if not isinstance(bus_num, int):
-            continue
-        if bus_num < 0 or bus_num in tried:
-            continue
-        tried.add(bus_num)
-        try:
-            return ExtendedI2C(bus_num)
-        except Exception as exc:
-            if env_bus == bus_num:
-                logging.warning(
-                    "draw_inside: failed to initialise ExtendedI2C bus %s from INSIDE_SENSOR_I2C_BUS: %s",
-                    bus_num,
-                    exc,
-                )
-            else:
-                logging.debug(
-                    "draw_inside: ExtendedI2C bus %s not available: %s",
-                    bus_num,
-                    exc,
-                )
-
-    if env_bus is not None and env_bus not in tried:
-        logging.warning(
-            "draw_inside: no usable I2C bus found for INSIDE_SENSOR_I2C_BUS=%s",
-            env_bus,
-        )
-
-    if default_exc is not None:
-        logging.debug("draw_inside: exhausted alternate I2C buses after error: %s", default_exc)
-
-    return None
-
-
-def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings]]]:
-    """Try the available sensor drivers and return the first match."""
-
-    if board is None or busio is None:
-        logging.warning("BME* libs not available on this host; skipping sensor probe")
-        return None, None
-
-    i2c = _initialise_i2c_bus()
-    if i2c is None:
-        return None, None
-
-    addresses = _scan_i2c_addresses(i2c)
-    if addresses:
-        formatted = ", ".join(f"0x{addr:02X}" for addr in sorted(addresses))
-        logging.debug("draw_inside: detected I2C addresses: %s", formatted)
-    else:
-        logging.debug("draw_inside: no I2C addresses detected during scan")
-
-    probers: Tuple[SensorProbeFn, ...] = (
-        _probe_adafruit_bme680,
-        _probe_pimoroni_bme68x,
-        _probe_pimoroni_bme680,
-        _probe_adafruit_sht4x,
-        _probe_pimoroni_bme280,
-        _probe_adafruit_bme280,
-    )
-
-    for probe in probers:
-        try:
-            result = probe(i2c, addresses)
-        except ModuleNotFoundError as exc:
-            logging.debug("draw_inside: probe %s skipped (module missing): %s", probe.__name__, exc)
-            continue
-        except Exception as exc:  # pragma: no cover - relies on hardware
-            logging.debug("draw_inside: probe %s failed: %s", probe.__name__, exc, exc_info=True)
-            continue
-        if result:
-            provider, reader = result
-            logging.info("draw_inside: detected %s", provider)
-            return provider, reader
-
-    logging.warning("No supported indoor environmental sensor detected.")
-    return None, None
-
-# ── Layout helpers ───────────────────────────────────────────────────────────
 def _mix_color(color: Tuple[int, int, int], target: Tuple[int, int, int], factor: float) -> Tuple[int, int, int]:
     factor = max(0.0, min(1.0, factor))
     return tuple(int(round(color[idx] * (1 - factor) + target[idx] * factor)) for idx in range(3))
+
+# ── Sensor probe (replaced with inside_sensor) ───────────────────────────────
+def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings]]]:
+    """
+    Use inside_sensor.read_all() to access sensors on the correct Linux I2C bus
+    (e.g., /dev/i2c-15 for HyperPixel Square breakout). Map into our
+    existing SensorReadings shape:
+      temp_f, humidity, pressure_inhg, voc_ohms
+    Returns (provider_label, reader_callable) or (None, None) if unavailable.
+    """
+    blob = read_all_sensors()
+    if blob.get("error"):
+        logging.warning("No supported indoor environmental sensor detected.")
+        return None, None
+
+    sensors = blob.get("sensors", {})
+    env = sensors.get("env_primary") or {}  # BME68x/680/280 if available
+    sht = sensors.get("sht4x") or {}        # for humidity fallback
+
+    provider = env.get("sensor_model") or sht.get("sensor_model") or "Unknown"
+    logging.info("draw_inside: detected %s on I2C bus %s", provider, blob.get("bus"))
+
+    def _reader() -> SensorReadings:
+        t_c = _extract_field(env, "temperature_c")
+        h   = _extract_field(env, "humidity_percent")
+        p_h = _extract_field(env, "pressure_hpa")
+        g   = _extract_field(env, "gas_ohms")
+
+        if h is None and sht:
+            h = _extract_field(sht, "humidity_percent")
+
+        temp_f = t_c * 9.0 / 5.0 + 32.0 if t_c is not None else None
+        pressure_inhg = p_h * 0.02953 if p_h is not None else None
+
+        return dict(
+            temp_f=temp_f,
+            humidity=h,
+            pressure_inhg=pressure_inhg,
+            voc_ohms=g,
+        )
+
+    return provider, _reader
+
+# ── Layout + drawing helpers ─────────────────────────────────────────────────
 
 def _draw_temperature_panel(
     img: Image.Image,
@@ -572,7 +176,6 @@ def _draw_temperature_panel(
     inner_left = x0 + padding_x
     inner_right = x1 - padding_x - safe_margin
     if inner_right <= inner_left:
-        # Fall back to the widest area available without letting the value escape
         safe_margin = max(0, (width - 2 * padding_x - 1) // 2)
         inner_left = x0 + padding_x + safe_margin
         inner_right = max(inner_left + 1, x1 - padding_x - safe_margin)
@@ -589,13 +192,12 @@ def _draw_temperature_panel(
         max_pt=temp_base_size,
     )
 
-    # Re-check the rendered bounds to ensure the glyphs stay within the tile
     temp_bbox = draw.textbbox((0, 0), temp_text, font=temp_font)
     temp_w = temp_bbox[2] - temp_bbox[0]
     temp_h = temp_bbox[3] - temp_bbox[1]
     while temp_w > value_region_width and getattr(temp_font, "size", 0) > 12:
         next_size = getattr(temp_font, "size", 0) - 1
-        temp_font = clone_font(temp_font, next_size)
+        temp_font = clone_font(temp_base, next_size)
         temp_bbox = draw.textbbox((0, 0), temp_text, font=temp_font)
         temp_w = temp_bbox[2] - temp_bbox[0]
         temp_h = temp_bbox[3] - temp_bbox[1]
@@ -625,7 +227,6 @@ def _draw_temperature_panel(
             font=desc_font,
             fill=_mix_color(color, config.INSIDE_COL_TEXT, 0.35),
         )
-
 
 def _draw_metric_row(
     draw: ImageDraw.ImageDraw,
@@ -684,8 +285,6 @@ def _draw_metric_row(
         current_size: int,
         min_size: int,
     ) -> Tuple[Any, Tuple[int, int], int]:
-        """Reduce *current* font size until the text fits or *min_size* reached."""
-
         width_limit = available_width
         height_limit = available_height
         width, height = measure_text(draw, text, current)
@@ -764,20 +363,28 @@ def _draw_metric_row(
     draw.text((label_x, label_y), label, font=label_font, fill=label_color)
     draw.text((value_x, value_y), value, font=value_font, fill=value_color)
 
-
-def _metric_grid_dimensions(count: int) -> Tuple[int, int]:
+def _metric_grid_dimensions(count: int, is_square: bool) -> Tuple[int, int]:
     if count <= 0:
         return 0, 0
-    if count <= 2:
-        columns = count
-    elif count <= 6:
-        columns = 2
+    if is_square:
+        # Square canvas: favor up to 3 columns when many metrics
+        if count <= 2:
+            columns = count
+        elif count <= 6:
+            columns = 2
+        else:
+            columns = 3
     else:
-        columns = 3
+        # Wide canvas (800x480): favor 3 columns sooner
+        if count <= 3:
+            columns = count
+        elif count <= 8:
+            columns = 3
+        else:
+            columns = 4
     columns = max(1, columns)
     rows = int(math.ceil(count / columns))
     return columns, rows
-
 
 def _draw_metric_rows(
     draw: ImageDraw.ImageDraw,
@@ -785,6 +392,7 @@ def _draw_metric_rows(
     metrics: Sequence[Dict[str, Any]],
     label_base,
     value_base,
+    is_square: bool,
 ) -> None:
     x0, y0, x1, y1 = rect
     count = len(metrics)
@@ -793,18 +401,19 @@ def _draw_metric_rows(
     if count <= 0 or width <= 0 or height <= 0:
         return
 
-    columns, rows = _metric_grid_dimensions(count)
+    columns, rows = _metric_grid_dimensions(count, is_square)
     if columns <= 0 or rows <= 0:
         return
 
+    # Aspect-aware gaps
     if columns > 1:
-        desired_h_gap = max(8, width // 30)
+        desired_h_gap = max(8, width // (30 if is_square else 40))
         max_h_gap = max(0, (width - columns) // (columns - 1))
         h_gap = min(desired_h_gap, max_h_gap)
     else:
         h_gap = 0
     if rows > 1:
-        desired_v_gap = max(8, height // 30)
+        desired_v_gap = max(8, height // (30 if is_square else 28))
         max_v_gap = max(0, (height - rows) // (rows - 1))
         v_gap = min(desired_v_gap, max_v_gap)
     else:
@@ -847,7 +456,6 @@ def _draw_metric_rows(
             value_base,
         )
 
-
 def _prettify_metric_label(key: str) -> str:
     key = key.replace("_", " ").strip()
     if not key:
@@ -870,7 +478,6 @@ def _prettify_metric_label(key: str) -> str:
         else:
             parts.append(token.capitalize())
     return " ".join(parts)
-
 
 def _format_generic_metric_value(key: str, value: float) -> str:
     key_lower = key.lower()
@@ -910,7 +517,6 @@ def _clean_metric(value: Optional[float]) -> Optional[float]:
     if not math.isfinite(numeric):
         return None
     return numeric
-
 
 def _build_metric_entries(data: Dict[str, Optional[float]]) -> List[Dict[str, Any]]:
     metrics: List[Dict[str, Any]] = []
@@ -972,7 +578,6 @@ def _build_metric_entries(data: Dict[str, Optional[float]]) -> List[Dict[str, An
         )
 
     return metrics
-
 
 def draw_inside(display, transition: bool=False):
     provider, read_fn = _probe_sensor()
@@ -1064,6 +669,18 @@ def draw_inside(display, transition: bool=False):
 
     title_block_h = subtitle_y + (sh if subtitle else 0)
 
+    # Aspect awareness
+    is_square = abs(W - H) < 4  # treat as square if nearly equal
+    # On square: more vertical; on wide: more horizontal metric space
+    if is_square:
+        temp_ratio_base = 0.56
+        temp_ratio_shrink_per_metric = 0.028
+        min_temp_px = max(120, int(H * 0.15))
+    else:
+        temp_ratio_base = 0.50
+        temp_ratio_shrink_per_metric = 0.022
+        min_temp_px = max(96, int(H * 0.18))
+
     # --- Temperature panel --------------------------------------------------
     temp_value = f"{temp_f:.1f}°F"
     descriptor = ""
@@ -1075,29 +692,32 @@ def draw_inside(display, transition: bool=False):
     content_height = max(1, content_bottom - content_top)
 
     metric_count = len(metrics)
-    _, grid_rows = _metric_grid_dimensions(metric_count)
+    _, grid_rows = _metric_grid_dimensions(metric_count, is_square)
+
     if metric_count:
-        temp_ratio = max(0.42, 0.58 - 0.03 * min(metric_count, 6))
-        min_temp = max(84, 118 - 8 * min(metric_count, 6))
+        temp_ratio = max(0.42, temp_ratio_base - temp_ratio_shrink_per_metric * min(metric_count, 8))
+        min_temp = min_temp_px
     else:
-        temp_ratio = 0.82
-        min_temp = 128
+        temp_ratio = 0.82 if is_square else 0.72
+        min_temp = min_temp_px + (40 if is_square else 24)
 
     temp_height = min(content_height, max(min_temp, int(content_height * temp_ratio)))
+
     metric_block_gap = 12 if metric_count else 0
     if metric_count:
-        min_metric_row_height = 44
-        min_metric_gap = 10 if grid_rows > 1 else 0
+        min_metric_row_height = 56 if is_square else 48
+        min_metric_gap = 12 if grid_rows > 1 else 0
         target_metrics_height = (
             grid_rows * min_metric_row_height + max(0, grid_rows - 1) * min_metric_gap
         )
         preferred_temp_cap = content_height - (target_metrics_height + metric_block_gap)
-        min_temp_floor = min(54, content_height)
+        min_temp_floor = min(84 if is_square else 64, content_height)
         preferred_temp_cap = max(min_temp_floor, preferred_temp_cap)
         temp_height = min(temp_height, preferred_temp_cap)
         temp_height = max(min_temp_floor, min(temp_height, content_height))
     else:
         metric_block_gap = 0
+
     temp_rect = (
         side_pad,
         content_top,
@@ -1112,8 +732,8 @@ def draw_inside(display, transition: bool=False):
         temp_f,
         temp_value,
         descriptor,
-        temp_base,
-        label_base,
+        getattr(config, "FONT_TIME", getattr(config, "FONT_TITLE_SPORTS", None)),
+        getattr(config, "FONT_INSIDE_LABEL", getattr(config, "FONT_DATE_SPORTS", None)),
     )
 
     if metrics:
@@ -1123,7 +743,10 @@ def draw_inside(display, transition: bool=False):
             W - side_pad,
             content_bottom,
         )
-        _draw_metric_rows(draw, metrics_rect, metrics, label_base, value_base)
+        _draw_metric_rows(draw, metrics_rect, metrics,
+                          getattr(config, "FONT_INSIDE_LABEL", getattr(config, "FONT_DATE_SPORTS", None)),
+                          getattr(config, "FONT_INSIDE_VALUE", getattr(config, "FONT_DATE_SPORTS", None)),
+                          is_square)
 
     if transition:
         return img
