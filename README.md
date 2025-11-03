@@ -323,6 +323,11 @@ ExecStart=/home/pi/desk_display/venv/bin/python /home/pi/desk_display/main.py
 ExecStop=/bin/bash -lc '/home/pi/desk_display/cleanup.sh'
 Restart=always
 User=pi
+# Uncomment the next line if you store secrets in /home/pi/desk_display/.env
+# (the leading dash keeps systemd happy when the file is missing during setup).
+#EnvironmentFile=-/home/pi/desk_display/.env
+# Uncomment the next line to use systemd's user runtime dir (recommended on Raspberry Pi OS)
+#Environment=XDG_RUNTIME_DIR=/run/user/%U
 
 [Install]
 WantedBy=multi-user.target
@@ -349,6 +354,14 @@ chmod +x /home/pi/desk_display/cleanup.sh
 `ExecStop` runs `cleanup.sh` on every shutdown so the LCD blanks immediately and any lingering screenshots or videos are swept
 into the archive folders. The service is marked `Restart=always`, so crashes or manual restarts via `systemctl restart` will
 trigger a fresh boot after cleanup completes.
+
+If the unit refuses to start, check the logs with `journalctl -u desk_display.service -b` or `systemctl status desk_display.service`.
+Systemd stops when a referenced `EnvironmentFile` is missing; either create the `.env` file or use the dashed form shown above so
+the service can boot without it.
+
+The application now falls back to a private runtime directory under `/tmp` when `XDG_RUNTIME_DIR` is missing so SDL/pygame can
+start even when launched outside a login session. Setting the environment variable explicitly (see commented example above)
+restores the standard `/run/user/<uid>` path and avoids the fallback warning.
 
 ### Display HAT Mini controls
 
