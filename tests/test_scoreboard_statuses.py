@@ -151,3 +151,37 @@ def test_possession_side_does_not_match_with_only_numeric_tokens():
 
     assert _find_possession_side(game) is None
 
+
+def test_possession_side_ignores_ambiguous_shared_tokens():
+    game = {
+        "competitors": [
+            {
+                "homeAway": "away",
+                "team": {
+                    "id": "1",
+                    "abbreviation": "NYJ",
+                    "slug": "new-york-jets",
+                },
+            },
+            {
+                "homeAway": "home",
+                "team": {
+                    "id": "2",
+                    "abbreviation": "NYG",
+                    "slug": "new-york-giants",
+                },
+            },
+        ],
+        "situation": {
+            "lastPlay": {
+                "team": {
+                    "id": "2",
+                    "abbreviation": "NYG",
+                    "slug": "new-york-giants",
+                }
+            }
+        },
+    }
+
+    assert _find_possession_side(game) == "home"
+
