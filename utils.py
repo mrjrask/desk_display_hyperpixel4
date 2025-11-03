@@ -840,6 +840,22 @@ def _adjust_logo_brightness(logo: Image.Image, base_dir: str, abbr: str) -> Imag
 
 def standard_next_game_logo_height(panel_height: int) -> int:
     """Return the shared next-game logo height used across team screens."""
+    if panel_height <= 0:
+        return 0
+
+    try:
+        from config import HEIGHT as CONFIG_HEIGHT, NEXT_GAME_LOGO_FONT_SIZE
+    except Exception:
+        CONFIG_HEIGHT = None
+        NEXT_GAME_LOGO_FONT_SIZE = None
+
+    if NEXT_GAME_LOGO_FONT_SIZE and CONFIG_HEIGHT:
+        if panel_height == CONFIG_HEIGHT:
+            return NEXT_GAME_LOGO_FONT_SIZE
+        if CONFIG_HEIGHT > 0:
+            scaled = int(round(NEXT_GAME_LOGO_FONT_SIZE * (panel_height / CONFIG_HEIGHT)))
+            return max(1, scaled)
+
     if panel_height >= 128:
         return 375
     if panel_height >= 96:
