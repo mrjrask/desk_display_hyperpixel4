@@ -503,6 +503,10 @@ FONT_TEAM_SPORTS_SMALL  = _load_font("TimesSquare-m105.ttf", scale_font(33))
 FONT_SCORE              = _load_font("TimesSquare-m105.ttf", scale_font(41))
 FONT_STATUS             = _load_font("TimesSquare-m105.ttf", scale_font(30))
 
+# Shared sports logo row sizing. This value replaces ad-hoc calculations in the
+# team schedule screens so logo heights can be tuned from a single location.
+NEXT_GAME_LOGO_FONT_SIZE = scale_y(60)
+
 FONT_INSIDE_LABEL       = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
 FONT_INSIDE_VALUE       = _load_font("DejaVuSans.ttf",      scale_font(17))
 FONT_TITLE_INSIDE       = _load_font("DejaVuSans-Bold.ttf", scale_font(17))

@@ -38,7 +38,6 @@ from typing import Dict, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-import config
 from config import (
     FONT_DATE_SPORTS,
     FONT_TEAM_SPORTS,
@@ -48,13 +47,12 @@ from config import (
     NHL_IMAGES_DIR,
     NHL_TEAM_ID,
     NHL_TEAM_TRICODE,
+    NEXT_GAME_LOGO_FONT_SIZE,
     TIMES_SQUARE_FONT_PATH,
     WIDTH,
     HEIGHT,
 )
 from services.http_client import NHL_HEADERS, get_session, request_json
-from utils import standard_next_game_logo_height
-
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NHL_DIR = NHL_IMAGES_DIR
 
@@ -1034,17 +1032,11 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     bottom_y      = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
     # Desired logo height (bigger on 128px; adapt if smaller/other displays)
-    base_logo_h = standard_next_game_logo_height(HEIGHT)
-    desired_logo_h = max(
-        1,
-        int(round(base_logo_h * 1.15 * 1.20)),  # 20% bump on top of Hawks baseline size
-    )
+    desired_logo_h = NEXT_GAME_LOGO_FONT_SIZE
 
     # Compute max logo height to fit between the top content and bottom line
     available_h = max(10, bottom_y - (y_top + 2))  # space for logos row
-    max_logo_h_ratio = 0.34 if HEIGHT <= 240 else 0.25
-    max_logo_h = max(24, int(round(HEIGHT * max_logo_h_ratio)))
-    logo_h = min(desired_logo_h, available_h, max_logo_h)
+    logo_h = max(1, min(desired_logo_h, available_h))
     # Compute a row top such that the logos row is **centered vertically**.
     # But never allow overlap with top content nor with bottom label.
     available_space = max(0, bottom_y - y_top)
