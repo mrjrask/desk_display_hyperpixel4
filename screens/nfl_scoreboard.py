@@ -267,11 +267,18 @@ def _score_value(side: dict) -> Optional[int]:
     return None
 
 
-def _team_identifier_tokens(team: dict) -> set[str]:
+def _team_identifier_tokens(team: dict) -> list[str]:
     if not isinstance(team, dict):
-        return set()
+        return []
 
-    tokens: set[str] = set()
+    tokens: list[str] = []
+    seen: set[str] = set()
+
+    def _add(token: str) -> None:
+        if token and token not in seen:
+            tokens.append(token)
+            seen.add(token)
+
     for key in _POSSESSION_IDENTIFIER_KEYS:
         if key not in team:
             continue
@@ -290,15 +297,15 @@ def _team_identifier_tokens(team: dict) -> set[str]:
             continue
 
         if key == "id":
-            tokens.add(text)
+            _add(text)
             continue
 
         normalized = text.lower()
-        tokens.add(normalized)
+        _add(normalized)
 
         for part in re.split(r"[^0-9A-Za-z]+", normalized):
             if part:
-                tokens.add(part)
+                _add(part)
 
     return tokens
 
@@ -335,8 +342,9 @@ def _final_results(away: dict, home: dict) -> dict:
     return {"away": away_result, "home": home_result}
 
 
-def _build_possession_lookup(game: dict) -> dict[str, str]:
-    lookup: dict[str, str] = {}
+def _build_possession_lookup(game: dict) -> dict[str, Optional[str]]:
+    lookup: dict[str, Optional[str]] = {}
+    ambiguous: set[str] = set()
     competitors = (game or {}).get("competitors", []) or []
     for competitor in competitors:
         side = competitor.get("homeAway")
@@ -344,6 +352,18 @@ def _build_possession_lookup(game: dict) -> dict[str, str]:
             continue
         team = competitor.get("team") or {}
         for token in _team_identifier_tokens(team):
+            if token in ambiguous:
+                continue
+            if token not in lookup:
+                lookup[token] = side
+                continue
+            existing = lookup[token]
+            if existing is None:
+                continue
+            if existing != side:
+                lookup[token] = None
+                ambiguous.add(token)
+                continue
             lookup[token] = side
     return lookup
 
@@ -402,20 +422,21 @@ def _find_possession_side(game: dict) -> Optional[str]:
     if not lookup:
         return None
 
-    matched: set[str] = set()
-
     last_play = situation.get("lastPlay")
     if isinstance(last_play, dict):
         team_info = last_play.get("team")
         if isinstance(team_info, dict):
+            last_play_matches: set[str] = set()
             for token in _team_identifier_tokens(team_info):
                 side = lookup.get(token)
                 if side:
-                    matched.add(side)
+                    last_play_matches.add(side)
+                if len(last_play_matches) > 1:
                     break
-        if len(matched) == 1:
-            return next(iter(matched))
+            if len(last_play_matches) == 1:
+                return next(iter(last_play_matches))
 
+    matched: set[str] = set()
     for text in _candidate_possession_strings(game):
         for token in _tokenize_possession_text(text):
             side = lookup.get(token)
