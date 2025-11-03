@@ -1,4 +1,4 @@
-"""Tests for Display HAT Mini button handling utilities."""
+"""Tests for display button handling utilities."""
 
 from types import SimpleNamespace
 

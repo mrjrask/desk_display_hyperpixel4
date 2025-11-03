@@ -44,15 +44,6 @@ try:
 except AttributeError:
     Image.ANTIALIAS = Image.Resampling.LANCZOS
 
-# Display HAT Mini driver (optional at import time)
-try:  # pragma: no cover - hardware import
-    from displayhatmini import DisplayHATMini  # type: ignore
-except (ImportError, RuntimeError) as _displayhat_exc:  # pragma: no cover - hardware import
-    DisplayHATMini = None  # type: ignore
-    _DISPLAY_HAT_ERROR = _displayhat_exc
-else:  # pragma: no cover - hardware import
-    _DISPLAY_HAT_ERROR = None
-
 try:  # pragma: no cover - optional dependency
     import pygame
 except ImportError:  # pragma: no cover - optional dependency
@@ -155,7 +146,7 @@ class Display:
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
 
         preferred_backend = DISPLAY_BACKEND
-        if preferred_backend not in {"auto", "pygame", "displayhatmini", "hatmini"}:
+        if preferred_backend not in {"auto", "pygame"}:
             logging.warning(
                 "Unknown DISPLAY_BACKEND '%s'; falling back to automatic detection.",
                 preferred_backend,
@@ -163,18 +154,14 @@ class Display:
             preferred_backend = "auto"
 
         pygame_error: Optional[str] = None
-        hat_error: Optional[str] = None
 
         if preferred_backend in ("auto", "pygame"):
             success, pygame_error = self._init_pygame_backend()
         else:
             success = False
 
-        if not success and preferred_backend in ("auto", "displayhatmini", "hatmini"):
-            success, hat_error = self._init_displayhat_backend()
-
         if not success:
-            reasons = [reason for reason in (pygame_error, hat_error) if reason]
+            reasons = [reason for reason in (pygame_error,) if reason]
             if reasons:
                 logging.warning(
                     "Display backend unavailable; running headless (%s).",
@@ -278,33 +265,6 @@ class Display:
                 os.environ.pop("SDL_VIDEODRIVER", None)
             else:
                 os.environ["SDL_VIDEODRIVER"] = original_driver
-
-    def _init_displayhat_backend(self) -> Tuple[bool, Optional[str]]:
-        self._stop_pygame_presenter()
-        if DisplayHATMini is None:  # pragma: no cover - hardware import
-            if _DISPLAY_HAT_ERROR:
-                return False, f"Display HAT Mini driver unavailable ({_DISPLAY_HAT_ERROR})"
-            return False, "Display HAT Mini driver unavailable"
-
-        try:  # pragma: no cover - hardware import
-            self._display = DisplayHATMini(self._buffer)
-            self._display.set_backlight(1.0)
-            for name in self._BUTTON_NAMES:
-                pin_name = f"BUTTON_{name}"
-                self._button_pins[name] = getattr(self._display, pin_name, None)
-        except Exception as exc:  # pragma: no cover - hardware import
-            self._display = None
-            return False, f"Failed to initialize Display HAT Mini hardware ({exc})"
-
-        self._backend = "displayhatmini"
-        logging.info(
-            "🖼️  Display HAT Mini initialized for %s (%dx%d, rotation %d°).",
-            DISPLAY_PROFILE,
-            self.width,
-            self.height,
-            self.rotation,
-        )
-        return True, None
 
     def _pygame_present_loop(self) -> None:
         if pygame is None:
@@ -465,14 +425,6 @@ class Display:
                 logging.error("Pygame display reset failed: %s", reason)
             else:
                 logging.error("Pygame display reset failed for an unknown reason.")
-
-            # As a last resort try to fall back to the Display HAT Mini backend.
-            self._stop_pygame_presenter()
-            success, hat_reason = self._init_displayhat_backend()
-            if success:
-                logging.info("🛟 Fell back to Display HAT Mini backend after pygame failure.")
-            elif hat_reason:
-                logging.error("Display HAT Mini recovery failed: %s", hat_reason)
 
     def clear(self):
         self._buffer = Image.new("RGB", (self.width, self.height), "black")
@@ -983,7 +935,7 @@ def _start_github_led_animator(display: "Display") -> None:
 
 
 def _update_github_led(state: bool) -> None:
-    """Reflect GitHub update status on the Display HAT Mini LED."""
+    """Reflect GitHub update status on the display LED."""
 
     global _GITHUB_LED_ANIMATOR, _GITHUB_LED_STATE
 

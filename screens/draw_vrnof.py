@@ -2,7 +2,7 @@
 """
 draw_vrnof.py
 
-Displays VRNOF stock price, change, and all-time P/L on the Display HAT Mini,
+Displays VRNOF stock price, change, and all-time P/L on the display,
 with a 10-minute freshness requirement. Title and all-time P/L remain fixed; price/change vertically centered on screen.
 Exact cost-basis calculation from individual lots.
 """

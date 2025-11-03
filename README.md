@@ -1,6 +1,6 @@
-# Desk Scoreboard & Info Display (Pimoroni Display HAT Mini)
+# Desk Scoreboard & Info Display (Pimoroni HyperPixel 4.0 Square)
 
-A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Pimoroni Display HAT Mini (320×240 ST7789 LCD). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
+A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Pimoroni HyperPixel 4.0 Square (720×720 LCD). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
 
 > **Highlights**
 > - Smooth animations: scroll and fade‑in
@@ -31,7 +31,7 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 ## Requirements
 
 - Raspberry Pi (tested on Pi Zero/Zero 2 W)
-- Pimoroni **Display HAT Mini (320×240 ST7789 LCD)** wired to SPI0
+- Pimoroni **HyperPixel 4.0 Square (720×720 LCD)** wired to SPI0
 - Python 3.9+
 - Packages (install via apt / pip):
   ```bash
