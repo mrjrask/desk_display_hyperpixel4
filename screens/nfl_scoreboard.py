@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+import re
 import time
 from typing import Iterable, Optional
 
@@ -73,6 +74,8 @@ FINAL_WINNING_SCORE_COLOR = SCOREBOARD_FINAL_WINNING_SCORE_COLOR
 FINAL_LOSING_SCORE_COLOR = SCOREBOARD_FINAL_LOSING_SCORE_COLOR
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 
+_POSSESSION_IDENTIFIER_KEYS = ("id", "abbreviation", "abbrev", "slug")
+
 IN_GAME_STATUS_OVERRIDES = {
     "end of the 1st": "End of the 1st",
     "end of 1st": "End of the 1st",
@@ -84,6 +87,7 @@ IN_GAME_STATUS_OVERRIDES = {
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _LEAGUE_LOGO: Optional[Image.Image] = None
 _LEAGUE_LOGO_LOADED = False
+_POSSESSION_ICON: Optional[Image.Image] = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -138,6 +142,57 @@ def _get_league_logo() -> Optional[Image.Image]:
                 break
         _LEAGUE_LOGO_LOADED = True
     return _LEAGUE_LOGO
+
+
+def _get_possession_icon() -> Optional[Image.Image]:
+    global _POSSESSION_ICON
+    if _POSSESSION_ICON is not None:
+        return _POSSESSION_ICON
+
+    try:
+        height = max(14, LOGO_HEIGHT // 5)
+        width = max(10, int(round(height * 1.6)))
+        icon = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(icon)
+
+        pad_y = max(1, height // 6)
+        outline = max(1, height // 7)
+        body_color = (154, 93, 48)
+        stripe_color = (255, 255, 255)
+
+        draw.ellipse(
+            (0, pad_y, width - 1, height - pad_y - 1),
+            fill=body_color,
+            outline=stripe_color,
+            width=outline,
+        )
+
+        stripe_margin = max(1, width // 6)
+        stripe_width = max(1, width // 18)
+        draw.line(
+            (stripe_margin, pad_y + 1, stripe_margin, height - pad_y - 2),
+            fill=stripe_color,
+            width=stripe_width,
+        )
+        draw.line(
+            (width - stripe_margin - 1, pad_y + 1, width - stripe_margin - 1, height - pad_y - 2),
+            fill=stripe_color,
+            width=stripe_width,
+        )
+
+        lace_y = (pad_y + height - pad_y - 1) // 2
+        lace_half = max(1, width // 6)
+        draw.line(
+            (width // 2 - lace_half, lace_y, width // 2 + lace_half, lace_y),
+            fill=stripe_color,
+            width=max(1, height // 6),
+        )
+
+        _POSSESSION_ICON = icon
+        return _POSSESSION_ICON
+    except Exception:
+        _POSSESSION_ICON = None
+        return None
 
 
 def _team_logo_abbr(team: dict) -> str:
@@ -212,6 +267,42 @@ def _score_value(side: dict) -> Optional[int]:
     return None
 
 
+def _team_identifier_tokens(team: dict) -> set[str]:
+    if not isinstance(team, dict):
+        return set()
+
+    tokens: set[str] = set()
+    for key in _POSSESSION_IDENTIFIER_KEYS:
+        if key not in team:
+            continue
+        value = team.get(key)
+        if value is None:
+            continue
+
+        if isinstance(value, (int, float)):
+            if key != "id":
+                continue
+            text = str(int(value))
+        else:
+            text = str(value).strip()
+
+        if not text:
+            continue
+
+        if key == "id":
+            tokens.add(text)
+            continue
+
+        normalized = text.lower()
+        tokens.add(normalized)
+
+        for part in re.split(r"[^0-9A-Za-z]+", normalized):
+            if part:
+                tokens.add(part)
+
+    return tokens
+
+
 def _team_result(side: dict, opponent: dict) -> Optional[str]:
     for key in ("isWinner", "winner", "won"):
         value = (side or {}).get(key)
@@ -242,6 +333,107 @@ def _final_results(away: dict, home: dict) -> dict:
         away_result = "win"
 
     return {"away": away_result, "home": home_result}
+
+
+def _build_possession_lookup(game: dict) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    competitors = (game or {}).get("competitors", []) or []
+    for competitor in competitors:
+        side = competitor.get("homeAway")
+        if side not in {"away", "home"}:
+            continue
+        team = competitor.get("team") or {}
+        for token in _team_identifier_tokens(team):
+            lookup[token] = side
+    return lookup
+
+
+def _tokenize_possession_text(text: str) -> list[str]:
+    if not text:
+        return []
+    return [token for token in re.findall(r"[0-9A-Za-z]+", text.lower()) if token]
+
+
+def _candidate_possession_strings(game: dict) -> list[str]:
+    situation = (game or {}).get("situation", {}) or {}
+    candidates: list[str] = []
+
+    for key in (
+        "possessionText",
+        "shortDownDistanceText",
+        "downDistanceText",
+        "lastPlayText",
+    ):
+        value = situation.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value)
+
+    last_play = situation.get("lastPlay")
+    if isinstance(last_play, dict):
+        for key in ("text", "shortText"):
+            value = last_play.get(key)
+            if isinstance(value, str) and value.strip():
+                candidates.append(value)
+
+    return candidates
+
+
+def _find_possession_side(game: dict) -> Optional[str]:
+    competitors = (game or {}).get("competitors", []) or []
+    if not competitors:
+        return None
+
+    situation = (game or {}).get("situation", {}) or {}
+    possession_id = situation.get("possession")
+    if possession_id is not None:
+        poss_id = str(possession_id).strip()
+        if poss_id:
+            for competitor in competitors:
+                team = competitor.get("team") or {}
+                team_id = team.get("id")
+                if team_id is None:
+                    continue
+                if str(team_id).strip() == poss_id:
+                    side = competitor.get("homeAway")
+                    if side in {"away", "home"}:
+                        return side
+
+    lookup = _build_possession_lookup(game)
+    if not lookup:
+        return None
+
+    matched: set[str] = set()
+
+    last_play = situation.get("lastPlay")
+    if isinstance(last_play, dict):
+        team_info = last_play.get("team")
+        if isinstance(team_info, dict):
+            for token in _team_identifier_tokens(team_info):
+                side = lookup.get(token)
+                if side:
+                    matched.add(side)
+                    break
+        if len(matched) == 1:
+            return next(iter(matched))
+
+    for text in _candidate_possession_strings(game):
+        for token in _tokenize_possession_text(text):
+            side = lookup.get(token)
+            if not side:
+                continue
+            matched.add(side)
+            if len(matched) > 1:
+                return None
+
+    if len(matched) == 1:
+        return next(iter(matched))
+
+    return None
+
+
+def _team_has_possession(game: dict) -> dict[str, bool]:
+    side = _find_possession_side(game)
+    return {"away": side == "away", "home": side == "home"}
 def _score_fill(team_key: str, *, in_progress: bool, final: bool, results: dict) -> tuple[int, int, int]:
     if in_progress:
         return IN_PROGRESS_SCORE_COLOR
@@ -312,6 +504,24 @@ def _center_text(draw: ImageDraw.ImageDraw, text: str, font, x: int, width: int,
     draw.text((tx, ty), text, font=font, fill=fill)
 
 
+def _paste_possession_icon(canvas: Image.Image, column_idx: int, top: int):
+    icon = _get_possession_icon()
+    if icon is None:
+        return
+
+    column_left = COL_X[column_idx]
+    column_width = COL_WIDTHS[column_idx]
+
+    x = column_left + column_width - icon.width - 12
+    y = top + SCORE_ROW_H - icon.height - 12
+    if x < column_left:
+        x = column_left
+    if y < top:
+        y = top
+
+    canvas.paste(icon, (x, y), icon)
+
+
 def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict, top: int):
     competitors = (game or {}).get("competitors", [])
     away = next((c for c in competitors if c.get("homeAway") == "away"), {})
@@ -323,6 +533,7 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     in_progress = _is_game_in_progress(game)
     final = _is_game_final(game)
     results = _final_results(away, home) if final else {"away": None, "home": None}
+    possession_flags = _team_has_possession(game)
 
     score_top = top
     for idx, text in ((0, away_text), (2, "@"), (4, home_text)):
@@ -344,6 +555,8 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo.width) // 2
         y0 = score_top + (SCORE_ROW_H - logo.height) // 2
         canvas.paste(logo, (x0, y0), logo)
+        if possession_flags.get(team_key):
+            _paste_possession_icon(canvas, idx, score_top)
 
     status_top = score_top + SCORE_ROW_H
     status_text = _format_status(game)
