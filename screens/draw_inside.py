@@ -19,6 +19,8 @@ import re
 import sys
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
+export INSIDE_SENSOR_I2C_BUS=13
+
 from PIL import Image, ImageDraw
 import config
 from utils import (
