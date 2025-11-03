@@ -7,6 +7,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 # ─── Environment helpers ───────────────────────────────────────────────────────
 
@@ -168,6 +169,22 @@ def _int_from_env(name: str, default: int) -> int:
         logging.warning("%s must be greater than zero; using default %d", name, default)
         return default
     return value
+
+
+def _optional_int_from_env(name: str) -> Optional[int]:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        logging.warning("Invalid %s value %r; ignoring", name, raw_value)
+        return None
+
+
+# Optional override for the bus number used by the inside environmental sensor.
+INSIDE_SENSOR_I2C_BUS = _optional_int_from_env("INSIDE_SENSOR_I2C_BUS")
+
 
 # Supported HyperPixel panels.  The keys roughly match the product names so an
 # environment variable such as ``DISPLAY_PROFILE=hyperpixel4`` can be used to
