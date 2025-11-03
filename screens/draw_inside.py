@@ -15,12 +15,8 @@ Everything is dynamically sized from config.WIDTH/HEIGHT, so it adapts to square
 
 from __future__ import annotations
 import time
-import glob
 import logging
 import math
-import os
-import re
-import sys
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from PIL import Image, ImageDraw
@@ -89,6 +85,7 @@ def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings
         p_h = _extract_field(env, "pressure_hpa")
         g   = _extract_field(env, "gas_ohms")
 
+        # If env has no humidity, try SHT4x fallback
         if h is None and sht:
             h = _extract_field(sht, "humidity_percent")
 
@@ -321,29 +318,19 @@ def _draw_metric_row(
     min_gap = max(6, height // 12)
     total_needed = label_h + min_gap + value_h
     while total_needed > available_height and (label_size > label_min_pt or value_size > value_min_pt):
-        shrink_label = label_size > label_min_pt and (
-            label_h >= value_h or value_size <= value_min_pt
-        )
-        if shrink_label:
+        shrink_label = label_h >= value_h or value_size <= value_min_pt
+        if shrink_label and label_size > label_min_pt:
             next_size = max(label_min_pt, label_size - 1)
-            if next_size == label_size:
-                break
             label_font = clone_font(label_base, next_size)
-            new_size = getattr(label_font, "size", label_size)
-            if new_size >= label_size:
-                break
-            label_size = new_size
+            label_size = getattr(label_font, "size", label_size - 1)
             label_w, label_h = measure_text(draw, label, label_font)
-        else:
+        elif value_size > value_min_pt:
             next_size = max(value_min_pt, value_size - 1)
-            if next_size == value_size:
-                break
             value_font = clone_font(value_base, next_size)
-            new_size = getattr(value_font, "size", value_size)
-            if new_size >= value_size:
-                break
-            value_size = new_size
+            value_size = getattr(value_font, "size", value_size - 1)
             value_w, value_h = measure_text(draw, value, value_font)
+        else:
+            break
         total_needed = label_h + min_gap + value_h
 
     label_w = min(label_w, available_width)
@@ -353,7 +340,6 @@ def _draw_metric_row(
     label_y = y0 + padding_y
     value_x = x0 + padding_x
     value_y = y1 - padding_y - value_h
-    min_gap = max(6, height // 12)
     if value_y - (label_y + label_h) < min_gap:
         value_y = min(y1 - padding_y - value_h, label_y + label_h + min_gap)
 
@@ -367,7 +353,6 @@ def _metric_grid_dimensions(count: int, is_square: bool) -> Tuple[int, int]:
     if count <= 0:
         return 0, 0
     if is_square:
-        # Square canvas: favor up to 3 columns when many metrics
         if count <= 2:
             columns = count
         elif count <= 6:
@@ -375,7 +360,6 @@ def _metric_grid_dimensions(count: int, is_square: bool) -> Tuple[int, int]:
         else:
             columns = 3
     else:
-        # Wide canvas (800x480): favor 3 columns sooner
         if count <= 3:
             columns = count
         elif count <= 8:
@@ -405,7 +389,6 @@ def _draw_metric_rows(
     if columns <= 0 or rows <= 0:
         return
 
-    # Aspect-aware gaps
     if columns > 1:
         desired_h_gap = max(8, width // (30 if is_square else 40))
         max_h_gap = max(0, (width - columns) // (columns - 1))
@@ -671,7 +654,8 @@ def draw_inside(display, transition: bool=False):
 
     # Aspect awareness
     is_square = abs(W - H) < 4  # treat as square if nearly equal
-    # On square: more vertical; on wide: more horizontal metric space
+
+    # --- Temperature panel --------------------------------------------------
     if is_square:
         temp_ratio_base = 0.56
         temp_ratio_shrink_per_metric = 0.028
@@ -681,7 +665,6 @@ def draw_inside(display, transition: bool=False):
         temp_ratio_shrink_per_metric = 0.022
         min_temp_px = max(96, int(H * 0.18))
 
-    # --- Temperature panel --------------------------------------------------
     temp_value = f"{temp_f:.1f}°F"
     descriptor = ""
 
