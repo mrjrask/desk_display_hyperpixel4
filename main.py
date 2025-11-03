@@ -20,6 +20,8 @@ warnings.filterwarnings("ignore", category=PinFactoryFallback)
 warnings.filterwarnings("ignore", category=NativePinFactoryFallback)
 
 import os
+import pathlib
+import tempfile
 import time
 import logging
 import threading
@@ -31,6 +33,44 @@ from contextlib import nullcontext
 from typing import Dict, Optional, Set
 
 gc = __import__('gc')
+
+
+_startup_warnings = []
+
+
+def _prepare_runtime_dir() -> None:
+    """Ensure XDG_RUNTIME_DIR points at a writable directory."""
+
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir and os.path.isdir(runtime_dir):
+        return
+
+    uid_dir = pathlib.Path("/run/user") / str(os.getuid())
+    if uid_dir.is_dir():
+        os.environ.setdefault("XDG_RUNTIME_DIR", str(uid_dir))
+        return
+
+    fallback_dir = pathlib.Path(tempfile.gettempdir()) / f"xdg-runtime-{os.getuid()}"
+    try:
+        fallback_dir.mkdir(mode=0o700, exist_ok=True)
+    except Exception as exc:
+        _startup_warnings.append(
+            f"Could not create fallback runtime directory '{fallback_dir}': {exc}"
+        )
+        return
+
+    try:
+        fallback_dir.chmod(0o700)
+    except Exception:
+        pass
+
+    os.environ["XDG_RUNTIME_DIR"] = str(fallback_dir)
+    _startup_warnings.append(
+        f"XDG_RUNTIME_DIR was unset; using fallback directory '{fallback_dir}'"
+    )
+
+
+_prepare_runtime_dir()
 
 from PIL import Image, ImageDraw
 
@@ -77,6 +117,9 @@ logging.basicConfig(
 )
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.info("🖥️  Starting display service…")
+
+for _message in _startup_warnings:
+    logging.warning(_message)
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
