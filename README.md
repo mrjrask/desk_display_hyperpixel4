@@ -1,6 +1,6 @@
-# Desk Scoreboard & Info Display (Pimoroni HyperPixel 4.0 Square)
+# Desk Scoreboard & Info Display (Pimoroni HyperPixel 4.0 / 4.0 Square)
 
-A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Pimoroni HyperPixel 4.0 Square (720×720 LCD). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
+A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Pimoroni HyperPixel 4.0 panel (Square 720×720 or standard 800×480). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
 
 > **Highlights**
 > - Smooth animations: scroll and fade‑in
@@ -31,7 +31,7 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 ## Requirements
 
 - Raspberry Pi (tested on Pi Zero/Zero 2 W)
-- Pimoroni **HyperPixel 4.0 Square (720×720 LCD)** wired to SPI0
+- Pimoroni **HyperPixel 4.0 Square (720×720 LCD)** or **HyperPixel 4.0 (800×480 LCD)** wired to SPI0
 - Python 3.9+
 - Packages (install via apt / pip):
   ```bash
@@ -129,13 +129,31 @@ desk_display/
 
 Most runtime behavior is controlled in `config.py`:
 
-- **Display:** `WIDTH=320`, `HEIGHT=240`
+- **Display:** `DISPLAY_PROFILE`, `DISPLAY_WIDTH`, `DISPLAY_HEIGHT`
 - **Intervals:** `SCREEN_DELAY`, `TEAM_STANDINGS_DISPLAY_SECONDS`, `SCHEDULE_UPDATE_INTERVAL`
 - **Feature flags:** `ENABLE_SCREENSHOTS`, `ENABLE_VIDEO`, `ENABLE_WIFI_MONITOR`
 - **Weather:** `ENABLE_WEATHER`, `LATITUDE/LONGITUDE`
 - **Travel:** `TRAVEL_MODE` (`to_home` or `to_work`)
 - **MLB:** constants and timezone `CENTRAL_TIME`
 - **Fonts:** make sure `fonts/` contains the TTFs above
+
+### Display profiles
+
+Select the panel geometry with `DISPLAY_PROFILE` (defaults to `hyperpixel4_square`). Available options:
+
+- `hyperpixel4_square` – 720×720 (square)
+- `hyperpixel4_square_portrait` – 720×720 rotated for portrait mounting
+- `hyperpixel4` / `hyperpixel4_landscape` – 800×480 (rectangular landscape)
+- `hyperpixel4_portrait` – 480×800 (rectangular portrait)
+
+Short aliases such as `hp4`, `hp4_landscape`, `hp4_portrait`, `square`, and `portrait` are also accepted. Override pixel
+dimensions explicitly with `DISPLAY_WIDTH` / `DISPLAY_HEIGHT` when experimenting with other panels.
+
+Example:
+
+```bash
+DISPLAY_PROFILE=hyperpixel4_landscape python main.py
+```
 
 ### Screen sequencing
 

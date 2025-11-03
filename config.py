@@ -200,8 +200,14 @@ _DISPLAY_PROFILES = {
 
 _DISPLAY_PROFILE_ALIASES = {
     "hp4": "hyperpixel4",
+    "hp4_landscape": "hyperpixel4_landscape",
+    "hp4_portrait": "hyperpixel4_portrait",
     "hp4_square": "hyperpixel4_square",
+    "hp4_square_portrait": "hyperpixel4_square_portrait",
+    "landscape": "hyperpixel4_landscape",
+    "portrait": "hyperpixel4_portrait",
     "square": "hyperpixel4_square",
+    "square_portrait": "hyperpixel4_square_portrait",
     "rect": "hyperpixel4",
     "rectangle": "hyperpixel4",
 }
