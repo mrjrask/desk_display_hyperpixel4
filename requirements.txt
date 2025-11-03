@@ -5,7 +5,8 @@ Pillow
 waitress
 yfinance 
 numpy
-adafruit-blinka 
+adafruit-blinka
+adafruit-extended-bus
 adafruit-circuitpython-bme680
 adafruit-circuitpython-sht4x
 spidev

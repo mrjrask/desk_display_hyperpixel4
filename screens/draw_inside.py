@@ -11,9 +11,11 @@ Everything is dynamically sized to stay legible on the configured canvas.
 
 from __future__ import annotations
 import time
+import glob
 import logging
 import math
 import os
+import re
 import sys
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -34,6 +36,11 @@ try:
 except Exception:  # allows non-Pi dev boxes
     board = None
     busio = None
+
+try:
+    from adafruit_extended_bus import ExtendedI2C  # type: ignore
+except Exception:
+    ExtendedI2C = None
 
 W, H = config.WIDTH, config.HEIGHT
 
@@ -344,6 +351,108 @@ def _scan_i2c_addresses(i2c: Any) -> Set[int]:
     return addresses
 
 
+def _parse_i2c_bus_candidates(message: str) -> List[int]:
+    buses: List[int] = []
+    if not message:
+        return buses
+
+    for raw_bus in re.findall(r"\((\d+),\s*\d+,\s*\d+\)", message):
+        try:
+            buses.append(int(raw_bus))
+        except ValueError:
+            continue
+
+    return buses
+
+
+def _enumerate_system_i2c_buses() -> List[int]:
+    buses: Set[int] = set()
+
+    for path in glob.glob("/dev/i2c-*"):
+        _, _, suffix = path.rpartition("-")
+        try:
+            buses.add(int(suffix))
+        except ValueError:
+            continue
+
+    return sorted(buses)
+
+
+def _initialise_i2c_bus() -> Optional[Any]:
+    if board is None or busio is None:
+        return None
+
+    candidate_buses: List[int] = []
+    env_bus = getattr(config, "INSIDE_SENSOR_I2C_BUS", None)
+    if isinstance(env_bus, int):
+        candidate_buses.append(env_bus)
+
+    default_exc: Optional[Exception] = None
+
+    scl = getattr(board, "SCL", None)
+    sda = getattr(board, "SDA", None)
+    if scl is not None and sda is not None:
+        try:
+            return busio.I2C(scl, sda)
+        except Exception as exc:
+            logging.warning("draw_inside: failed to initialise I2C bus: %s", exc)
+            default_exc = exc
+            candidate_buses.extend(_parse_i2c_bus_candidates(str(exc)))
+    else:
+        logging.debug("draw_inside: board module missing SCL/SDA attributes")
+
+    if candidate_buses and ExtendedI2C is None:
+        if env_bus is not None:
+            logging.warning(
+                "draw_inside: INSIDE_SENSOR_I2C_BUS=%s set but adafruit-extended-bus is not installed",
+                env_bus,
+            )
+        else:
+            logging.debug(
+                "draw_inside: adafruit-extended-bus not available; cannot try alternate I2C buses"
+            )
+        return None
+
+    if ExtendedI2C is None:
+        return None
+
+    candidate_buses.extend(_enumerate_system_i2c_buses())
+
+    tried: Set[int] = set()
+    for bus_num in candidate_buses:
+        if not isinstance(bus_num, int):
+            continue
+        if bus_num < 0 or bus_num in tried:
+            continue
+        tried.add(bus_num)
+        try:
+            return ExtendedI2C(bus_num)
+        except Exception as exc:
+            if env_bus == bus_num:
+                logging.warning(
+                    "draw_inside: failed to initialise ExtendedI2C bus %s from INSIDE_SENSOR_I2C_BUS: %s",
+                    bus_num,
+                    exc,
+                )
+            else:
+                logging.debug(
+                    "draw_inside: ExtendedI2C bus %s not available: %s",
+                    bus_num,
+                    exc,
+                )
+
+    if env_bus is not None and env_bus not in tried:
+        logging.warning(
+            "draw_inside: no usable I2C bus found for INSIDE_SENSOR_I2C_BUS=%s",
+            env_bus,
+        )
+
+    if default_exc is not None:
+        logging.debug("draw_inside: exhausted alternate I2C buses after error: %s", default_exc)
+
+    return None
+
+
 def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings]]]:
     """Try the available sensor drivers and return the first match."""
 
@@ -351,10 +460,8 @@ def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings
         logging.warning("BME* libs not available on this host; skipping sensor probe")
         return None, None
 
-    try:
-        i2c = busio.I2C(getattr(board, "SCL"), getattr(board, "SDA"))
-    except Exception as exc:
-        logging.warning("draw_inside: failed to initialise I2C bus: %s", exc)
+    i2c = _initialise_i2c_bus()
+    if i2c is None:
         return None, None
 
     addresses = _scan_i2c_addresses(i2c)
