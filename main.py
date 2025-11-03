@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main display loop driving the Pimoroni Display HAT Mini LCD,
+Main display loop driving the Pimoroni HyperPixel 4.0 Square LCD,
 with optional screenshot capture, H.264 MP4 video capture, Wi-Fi triage,
 screen-config sequencing, and batch screenshot archiving.
 
@@ -207,7 +207,7 @@ def _restart_desk_display_service() -> None:
 
 
 def _check_control_buttons() -> bool:
-    """Handle Display HAT Mini control buttons.
+    """Handle display control buttons.
 
     Returns True when the caller should skip to the next screen immediately.
     """

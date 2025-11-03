@@ -1098,7 +1098,7 @@ def draw_nba_scoreboard(display, transition: bool = False) -> ScreenImage:
 
 @log_call
 def main(argv: Optional[Iterable[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Render the NBA scoreboard to the Display HAT Mini")
+    parser = argparse.ArgumentParser(description="Render the NBA scoreboard to the display")
     parser.add_argument("--transition", action="store_true", help="Animate the scoreboard as a transition")
     args = parser.parse_args(list(argv) if argv is not None else None)
 

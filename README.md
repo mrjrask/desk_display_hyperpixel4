@@ -1,6 +1,6 @@
-# Desk Scoreboard & Info Display (Pimoroni Display HAT Mini)
+# Desk Scoreboard & Info Display (Pimoroni HyperPixel 4.0 Square)
 
-A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Pimoroni Display HAT Mini (320×240 ST7789 LCD). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
+A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Pimoroni HyperPixel 4.0 Square (720×720 LCD). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
 
 > **Highlights**
 > - Smooth animations: scroll and fade‑in
@@ -31,7 +31,7 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 ## Requirements
 
 - Raspberry Pi (tested on Pi Zero/Zero 2 W)
-- Pimoroni **Display HAT Mini (320×240 ST7789 LCD)** wired to SPI0
+- Pimoroni **HyperPixel 4.0 Square (720×720 LCD)** wired to SPI0
 - Python 3.9+
 - Packages (install via apt / pip):
   ```bash
@@ -350,7 +350,7 @@ chmod +x /home/pi/desk_display/cleanup.sh
 into the archive folders. The service is marked `Restart=always`, so crashes or manual restarts via `systemctl restart` will
 trigger a fresh boot after cleanup completes.
 
-### Display HAT Mini controls
+### Display controls
 
 - **X button:** skips the remainder of the current screen and moves on immediately.
 - **Y button:** requests a `systemctl restart desk_display.service`, which stops the service, runs `cleanup.sh`, and starts a
