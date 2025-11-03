@@ -344,9 +344,9 @@ def _coerce_color_component(env_name: str, default: int) -> int:
 # Default background color for scoreboards and standings screens. Use an RGB
 # tuple so callers can request either RGB or RGBA colors as needed.
 SCOREBOARD_BACKGROUND_COLOR = (
-    _coerce_color_component("SCOREBOARD_BACKGROUND_R", 180),
-    _coerce_color_component("SCOREBOARD_BACKGROUND_G", 180),
-    _coerce_color_component("SCOREBOARD_BACKGROUND_B", 180),
+    _coerce_color_component("SCOREBOARD_BACKGROUND_R", 80),
+    _coerce_color_component("SCOREBOARD_BACKGROUND_G", 80),
+    _coerce_color_component("SCOREBOARD_BACKGROUND_B", 80),
 )
 
 # Score colors shared across scoreboard implementations.
