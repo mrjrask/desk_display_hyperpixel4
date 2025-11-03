@@ -4,6 +4,7 @@
 # Supports: SHT41 (SHT4x), BME280, BME680, BME688 (via bme68x), LTR559 (lux/prox), LSM6DS3 (IMU)
 # Picks up INSIDE_SENSOR_I2C_BUS if set; otherwise tries likely buses automatically.
 
+import logging
 import os
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -54,10 +55,7 @@ ADDR = {
     "BME68X": [0x76, 0x77],
 }
 
-LIKELY_BUSES = [
-    int(os.getenv("INSIDE_SENSOR_I2C_BUS")) if os.getenv("INSIDE_SENSOR_I2C_BUS") else None,
-    15, 13, 14, 1, 0, 10
-]
+LIKELY_BUSES_DEFAULT = [15, 13, 14, 1, 0, 10]
 
 def _dedupe(seq):
     seen = set()
@@ -269,7 +267,21 @@ def _read_lsm6ds(dev) -> Dict[str, Any]:
 
 # --- Main probe/read API ------------------------------------------------------
 def _candidate_buses() -> List[int]:
-    return _dedupe(LIKELY_BUSES)
+    override_raw = os.getenv("INSIDE_SENSOR_I2C_BUS")
+    override: Optional[int] = None
+    if override_raw is not None:
+        try:
+            override = int(override_raw)
+        except (TypeError, ValueError):
+            logging.warning(
+                "Invalid INSIDE_SENSOR_I2C_BUS value %r; ignoring override", override_raw
+            )
+
+    buses: List[Optional[int]] = []
+    if override is not None:
+        buses.append(override)
+    buses.extend(LIKELY_BUSES_DEFAULT)
+    return _dedupe(buses)
 
 def read_all() -> Dict[str, Any]:
     """
