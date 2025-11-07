@@ -13,7 +13,10 @@ Shows the next Chicago Bears game with:
 
 import datetime
 import os
+from typing import Optional
+
 from PIL import Image, ImageDraw
+
 import config
 from config import (
     BEARS_BOTTOM_MARGIN,
@@ -72,41 +75,77 @@ def show_bears_next_game(display, transition=False):
         bw, bh = draw.textsize(bottom, font=config.FONT_DATE_SPORTS)
         bottom_y = config.HEIGHT - bh - BEARS_BOTTOM_MARGIN  # keep on-screen
 
-        desired_logo_h = NEXT_GAME_LOGO_FONT_SIZE
         available_h = max(10, bottom_y - (y_txt + 2))
-        logo_h = max(1, min(desired_logo_h, available_h))
+        max_logo_height = max(32, min(available_h, int(round(config.HEIGHT * 0.65))))
+        base_away_logo = load_team_logo(NFL_LOGO_DIR, away_ab, height=max_logo_height)
+        base_home_logo = load_team_logo(NFL_LOGO_DIR, home_ab, height=max_logo_height)
 
-        logo_away = load_team_logo(NFL_LOGO_DIR, away_ab, height=logo_h)
-        logo_home = load_team_logo(NFL_LOGO_DIR, home_ab, height=logo_h)
+        at_txt = loc_sym
+        at_w, _ = draw.textsize(at_txt, font=config.FONT_TEAM_SPORTS)
+        max_width = config.WIDTH - 24
+        spacing_ratio = 0.16
 
-        elems   = [logo_away, loc_sym, logo_home]
-        spacing = 8
-        widths  = [
-            el.width if isinstance(el, Image.Image)
-            else draw.textsize(el, font=config.FONT_TEAM_SPORTS)[0]
-            for el in elems
-        ]
-        total_w = sum(widths) + spacing*(len(widths)-1)
-        x0      = (config.WIDTH - total_w)//2
+        def _scaled(logo: Optional[Image.Image], height: int) -> Optional[Image.Image]:
+            if logo is None:
+                return None
+            if logo.height == height:
+                return logo
+            ratio = height / float(logo.height)
+            return logo.resize((max(1, int(round(logo.width * ratio))), height), Image.LANCZOS)
 
-        # Vertical center of logos/text block between opponent text and bottom label
-        block_h = max(logo_away.height, logo_home.height)
+        def _text_width(text: str) -> int:
+            return draw.textsize(text, font=config.FONT_TEAM_SPORTS)[0]
+
+        min_height = 32
+        best_layout: Optional[tuple[int, int, Optional[Image.Image], Optional[Image.Image]]] = None
+        starting_height = min(max_logo_height, max(min_height, available_h))
+        for test_h in range(int(starting_height), min_height - 1, -2):
+            spacing = max(12, int(round(test_h * spacing_ratio)))
+            away_logo = _scaled(base_away_logo, test_h)
+            home_logo = _scaled(base_home_logo, test_h)
+            total = at_w + spacing * 2
+            total += away_logo.width if away_logo else _text_width(away_ab.upper())
+            total += home_logo.width if home_logo else _text_width(home_ab.upper())
+            if total <= max_width:
+                best_layout = (test_h, spacing, away_logo, home_logo)
+                break
+
+        if best_layout is None:
+            fallback_h = max(min_height, int(round(starting_height * 0.85)))
+            spacing = max(10, int(round(fallback_h * spacing_ratio)))
+            best_layout = (
+                fallback_h,
+                spacing,
+                _scaled(base_away_logo, fallback_h),
+                _scaled(base_home_logo, fallback_h),
+            )
+
+        logo_h, spacing, logo_away, logo_home = best_layout
+        block_h = logo_h
         space_top = y_txt
         space_bottom = bottom_y
         available_space = max(0, space_bottom - space_top)
-        y_logo = space_top + max(0, (available_space - block_h)//2)
+        y_logo = space_top + max(0, (available_space - block_h) // 2)
 
-        # Draw logos and '@'
-        x = x0
-        for el in elems:
+        elements = []
+        elements.append(logo_away if logo_away else away_ab.upper())
+        elements.append(at_txt)
+        elements.append(logo_home if logo_home else home_ab.upper())
+
+        total_w = sum(
+            el.width if isinstance(el, Image.Image) else _text_width(str(el))
+            for el in elements
+        ) + spacing * (len(elements) - 1)
+        x = max(0, (config.WIDTH - total_w) // 2)
+
+        for el in elements:
             if isinstance(el, Image.Image):
                 img.paste(el, (x, y_logo), el)
                 x += el.width + spacing
             else:
                 w_sy, h_sy = draw.textsize(el, font=config.FONT_TEAM_SPORTS)
-                y_sy = y_logo + (block_h - h_sy)//2
-                draw.text((x, y_sy), el,
-                          font=config.FONT_TEAM_SPORTS, fill=(255,255,255))
+                y_sy = y_logo + (block_h - h_sy) // 2
+                draw.text((x, y_sy), el, font=config.FONT_TEAM_SPORTS, fill=(255, 255, 255))
                 x += w_sy + spacing
 
         # Draw bottom text
