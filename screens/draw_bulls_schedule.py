@@ -304,7 +304,7 @@ def _render_message(title: str, message: str) -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(img)
     y = 2
-    y += _draw_title_line(draw, title)
+    y += _draw_title_line(draw, y, title)
     y += 4
     _center_wrapped_text(draw, y, message, FONT_BOTTOM, max_width=WIDTH - 8)
     return img
@@ -436,7 +436,7 @@ def _render_scoreboard(
     draw = ImageDraw.Draw(img)
 
     y = 2
-    y += _draw_title_line(draw, title)
+    y += _draw_title_line(draw, y, title)
 
     if inline_status:
         y += 1
@@ -495,7 +495,7 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     draw = ImageDraw.Draw(img)
 
     y = 2
-    y += _draw_title_line(draw, title)
+    y += _draw_title_line(draw, y, title)
     y += 1
 
     matchup = _format_matchup_line(game)
