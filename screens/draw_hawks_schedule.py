@@ -594,59 +594,79 @@ def _draw_scoreboard(
     put_sog_label: bool = True,
     bottom_reserved_px: int = 0,
 ) -> int:
-    """Draw a compact 2×3 scoreboard. Returns bottom y."""
-    # Column widths: first column dominates for logo + name, remaining space split
-    # for score/SOG with the score column slightly wider than SOG.
-    col1_w = min(WIDTH - 32, max(84, int(WIDTH * 0.72)))
-    remaining = max(24, WIDTH - col1_w)
-    col2_w = max(12, int(round(remaining * 0.55)))
-    col3_w = max(8, WIDTH - col1_w - col2_w)
-    # Ensure we account for rounding adjustments.
+    """Draw a large 2×3 scoreboard that fills the available space."""
+
+    col1_w = min(WIDTH - 40, max(120, int(WIDTH * 0.7)))
+    remaining = max(40, WIDTH - col1_w)
+    col2_w = max(48, int(round(remaining * 0.55)))
+    col3_w = max(32, WIDTH - col1_w - col2_w)
     if col1_w + col2_w + col3_w != WIDTH:
         col3_w = WIDTH - col1_w - col2_w
     x0, x1, x2, x3 = 0, col1_w, col1_w + col2_w, WIDTH
 
-    y = top_y
-
-    header_h = _text_h(d, FONT_SMALL) + 4 if put_sog_label else 0
-    table_top = y
-
-    # Row heights — compact
+    table_top = top_y
     total_available = max(0, HEIGHT - bottom_reserved_px - table_top)
-    available_for_rows = max(0, total_available - header_h)
-    row_h = max(available_for_rows // 2, 32)
-    row_h = min(row_h, 48)
-    if row_h * 2 > available_for_rows and available_for_rows > 0:
-        row_h = max(24, available_for_rows // 2)
-    if row_h <= 0:
-        row_h = 32
+    base_row_height = max(96, int(round(HEIGHT * 0.28)))
 
-    table_height = header_h + (row_h * 2)
+    header_font = FONT_SMALL
+    header_h = _text_h(d, header_font) + 6 if put_sog_label else 0
+    available_for_rows = max(0, total_available - header_h)
+
+    if available_for_rows > 0:
+        row_h = max(available_for_rows // 2, base_row_height)
+        row_h = min(row_h, available_for_rows)
+    else:
+        row_h = base_row_height
+    if available_for_rows and row_h * 2 > available_for_rows:
+        row_h = max(64, available_for_rows // 2)
+
+    def _font_sizes(row_height: int) -> tuple[int, int, int, int]:
+        name_size = max(36, int(round(row_height * 0.45)))
+        score_size = max(44, int(round(row_height * 0.65)))
+        sog_size = max(32, int(round(row_height * 0.45)))
+        header_size = max(24, int(round(row_height * 0.28))) if put_sog_label else 0
+        return name_size, score_size, sog_size, header_size
+
+    name_size, score_size, sog_size, header_size = _font_sizes(row_h)
+    header_font = _ts(header_size) if put_sog_label else FONT_SMALL
+    header_h = _text_h(d, header_font) + 6 if put_sog_label else 0
+    available_for_rows = max(0, total_available - header_h)
+    if available_for_rows > 0:
+        row_h = max(available_for_rows // 2, row_h)
+        row_h = min(row_h, available_for_rows)
+    if available_for_rows and row_h * 2 > available_for_rows:
+        row_h = max(64, available_for_rows // 2)
+    name_size, score_size, sog_size, header_size = _font_sizes(row_h)
+    name_font = _ts(name_size)
+    score_font = _ts(score_size)
+    sog_font = _ts(sog_size)
+    header_font = _ts(header_size) if put_sog_label else FONT_SMALL
+    header_h = _text_h(d, header_font) + 6 if put_sog_label else 0
+
+    table_height = header_h + row_h * 2
     if total_available:
         table_height = min(table_height, total_available)
-    if table_height < (header_h + 2):
+    if table_height < header_h + 2:
         table_height = header_h + 2
     table_bottom = min(table_top + table_height, HEIGHT - bottom_reserved_px)
-    table_height = max(header_h + 2, table_bottom - table_top)
-    table_bottom = table_top + table_height
-
     header_bottom = table_top + header_h
-    row_area_height = max(2, table_height - header_h)
+    row_area_height = max(2, table_bottom - header_bottom)
     row1_h = max(1, row_area_height // 2)
     row2_h = max(1, row_area_height - row1_h)
     row1_top = header_bottom
-    split_y = row1_top + row1_h
+    row2_top = row1_top + row1_h
 
-    # We keep the invisible grid for layout math only—no rendered lines.
-
-    # Column headers inside the table
-    if header_h:
-        header_y = table_top + (header_h - _text_h(d, FONT_SMALL)) // 2
-        score_lbl = ""
+    if put_sog_label and header_h:
+        header_y = table_top + (header_h - _text_h(d, header_font)) // 2
         sog_lbl = "SOG"
-        if score_lbl:
-            d.text((x1 + (col2_w - _text_w(d, score_lbl, FONT_SMALL)) // 2, header_y), score_lbl, font=FONT_SMALL, fill="white")
-        d.text((x2 + (col3_w - _text_w(d, sog_lbl, FONT_SMALL)) // 2, header_y), sog_lbl, font=FONT_SMALL, fill="white")
+        d.text(
+            (x2 + (col3_w - _text_w(d, sog_lbl, header_font)) // 2, header_y),
+            sog_lbl,
+            font=header_font,
+            fill="white",
+        )
+
+    logo_target = max(48, int(round(max(row1_h, row2_h) * 0.85)))
 
     def _prepare_row(
         row_top: int,
@@ -656,16 +676,12 @@ def _draw_scoreboard(
         sog: Optional[int],
         label: Optional[str],
     ) -> Dict:
-        base_logo_height = max(1, row_height - 4)
-        logo_height = min(56, base_logo_height)
-        if row_height >= 38:
-            logo_height = min(56, max(logo_height, min(row_height - 2, 48)))
-        logo_height = max(1, min(int(round(logo_height * 1.3)), row_height - 2, 64))
+        logo_height = max(1, min(logo_target, row_height - 6))
         logo = _load_logo_png(tri, height=logo_height)
         logo_w = logo.size[0] if logo else 0
         text = (label or "").strip() or (tri or "").upper() or "—"
-        text_start = x0 + 6 + (logo_w + 6 if logo else 0)
-        max_width = max(1, x1 - text_start - 4)
+        text_start = x0 + 12 + (logo_w + 8 if logo else 0)
+        max_width = max(1, x1 - text_start - 6)
         return {
             "top": row_top,
             "height": row_height,
@@ -679,27 +695,28 @@ def _draw_scoreboard(
 
     row_specs = [
         _prepare_row(row1_top, row1_h, away_tri, away_score, away_sog, away_label),
-        _prepare_row(split_y, row2_h, home_tri, home_score, home_sog, home_label),
+        _prepare_row(row2_top, row2_h, home_tri, home_score, home_sog, home_label),
     ]
 
     def _fits(font: ImageFont.ImageFont) -> bool:
-        return all(
-            _text_w(d, spec["base_text"], font) <= spec["max_width"]
-            for spec in row_specs
-            if spec["max_width"] > 0 and spec["base_text"]
-        )
+        for spec in row_specs:
+            if spec["max_width"] <= 0 or not spec["base_text"]:
+                continue
+            if _text_w(d, spec["base_text"], font) > spec["max_width"]:
+                return False
+        return True
 
-    name_font = FONT_ABBR
     if not _fits(name_font):
-        size = getattr(FONT_ABBR, "size", None) or _ABBR_FONT_SIZE
-        min_size = max(8, int(round(_ABBR_FONT_SIZE * 0.5)))
+        start_size = getattr(name_font, "size", name_size)
+        min_size = max(20, int(round(start_size * 0.5)))
         chosen = None
-        for test_size in range(size - 1, min_size - 1, -1):
+        for test_size in range(start_size - 1, min_size - 1, -1):
             candidate = _ts(test_size)
             if _fits(candidate):
                 chosen = candidate
                 break
-        name_font = chosen or _ts(min_size)
+        if chosen is not None:
+            name_font = chosen
 
     def _draw_row(spec: Dict):
         y_top = spec["top"]
@@ -711,16 +728,16 @@ def _draw_scoreboard(
         logo = spec["logo"]
 
         cy = y_top + row_height // 2
-        lx = x0 + 6
+        lx = x0 + 12
         tx = lx
         if logo:
             lw, lh = logo.size
-            ly = cy - lh//2
+            ly = cy - lh // 2
             try:
                 img.paste(logo, (lx, ly), logo)
             except Exception:
                 pass
-            tx = lx + lw + 6
+            tx = lx + lw + 8
 
         max_width = spec["max_width"]
         font = name_font
@@ -733,29 +750,29 @@ def _draw_scoreboard(
 
         ah = _text_h(d, font)
         aw = _text_w(d, text, font)
-        max_tx = x1 - aw - 4
+        max_tx = x1 - aw - 6
         tx = min(tx, max_tx)
-        tx = max(tx, x0 + 4)
-        d.text((tx, cy - ah//2), text, font=font, fill="white")
+        tx = max(tx, x0 + 6)
+        d.text((tx, cy - ah // 2), text, font=font, fill="white")
 
         sc = "-" if score is None else str(score)
-        sw = _text_w(d, sc, FONT_SCORE)
-        sh = _text_h(d, FONT_SCORE)
-        sx = x1 + (col2_w - sw)//2
-        sy = cy - sh//2
-        d.text((sx, sy), sc, font=FONT_SCORE, fill="white")
+        sw = _text_w(d, sc, score_font)
+        sh = _text_h(d, score_font)
+        sx = x1 + (col2_w - sw) // 2
+        sy = cy - sh // 2
+        d.text((sx, sy), sc, font=score_font, fill="white")
 
         sog_txt = "-" if sog is None else str(sog)
-        gw = _text_w(d, sog_txt, FONT_SOG)
-        gh = _text_h(d, FONT_SOG)
-        gx = x2 + (col3_w - gw)//2
-        gy = cy - gh//2
-        d.text((gx, gy), sog_txt, font=FONT_SOG, fill="white")
+        gw = _text_w(d, sog_txt, sog_font)
+        gh = _text_h(d, sog_font)
+        gx = x2 + (col3_w - gw) // 2
+        gy = cy - gh // 2
+        d.text((gx, gy), sog_txt, font=sog_font, fill="white")
 
     for spec in row_specs:
         _draw_row(spec)
 
-    return table_bottom  # bottom of table
+    return table_bottom
 
 
 def _ordinal(n: int) -> str:
@@ -1031,57 +1048,78 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     bottom_h      = _text_h(d, FONT_BOTTOM) if bottom_text else 0
     bottom_y      = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
-    # Desired logo height (bigger on 128px; adapt if smaller/other displays)
-    desired_logo_h = NEXT_GAME_LOGO_FONT_SIZE
+    available_h = max(10, bottom_y - (y_top + 2))
+    max_logo_height = max(36, min(available_h, int(round(HEIGHT * 0.6))))
+    base_away_logo = _load_logo_png(away_tri, height=max_logo_height)
+    base_home_logo = _load_logo_png(home_tri, height=max_logo_height)
 
-    # Compute max logo height to fit between the top content and bottom line
-    available_h = max(10, bottom_y - (y_top + 2))  # space for logos row
-    logo_h = max(1, min(desired_logo_h, available_h))
-    # Compute a row top such that the logos row is **centered vertically**.
-    # But never allow overlap with top content nor with bottom label.
-    available_space = max(0, bottom_y - y_top)
-    centered_top = y_top + max(0, (available_space - logo_h) // 2)
-    row_y = min(max(y_top + 1, centered_top), max(y_top + 1, bottom_y - logo_h - 1))
-
-    # Render logos at computed height (from local PNGs)
-    away_logo = _load_logo_png(away_tri, height=logo_h)
-    home_logo = _load_logo_png(home_tri, height=logo_h)
-
-    # Center '@' between logos
     at_txt = "@"
-    at_w   = _text_w(d, at_txt, FONT_NEXT_OPP)
-    at_h   = _text_h(d, FONT_NEXT_OPP)
-    at_x   = (WIDTH - at_w) // 2
-    at_y   = row_y + (logo_h - at_h)//2
-    d.text((at_x, at_y), at_txt, font=FONT_NEXT_OPP, fill="white")
+    at_w = _text_w(d, at_txt, FONT_NEXT_OPP)
+    max_width = WIDTH - 24
+    spacing_ratio = 0.16
 
-    # Away logo left of '@'
-    if away_logo:
-        aw, ah = away_logo.size
-        right_limit = at_x - 4
-        ax = max(2, right_limit - aw)
-        ay = row_y + (logo_h - ah)//2
-        img.paste(away_logo, (ax, ay), away_logo)
-    else:
-        # fallback text
-        txt = (away_tri or "AWY")
-        tx  = (at_x - 6) // 2 - _text_w(d, txt, FONT_NEXT_OPP)//2
-        ty  = row_y + (logo_h - at_h)//2
-        d.text((tx, ty), txt, font=FONT_NEXT_OPP, fill="white")
+    def _scaled(logo: Optional[Image.Image], height: int) -> Optional[Image.Image]:
+        if logo is None:
+            return None
+        if logo.height == height:
+            return logo
+        ratio = height / float(logo.height)
+        return logo.resize((max(1, int(round(logo.width * ratio))), height), Image.LANCZOS)
 
-    # Home logo right of '@'
-    if home_logo:
-        hw, hh = home_logo.size
-        left_limit = at_x + at_w + 4
-        hx = min(WIDTH - hw - 2, left_limit)
-        hy = row_y + (logo_h - hh)//2
-        img.paste(home_logo, (hx, hy), home_logo)
-    else:
-        # fallback text
-        txt = (home_tri or "HME")
-        tx  = at_x + at_w + ((WIDTH - (at_x + at_w)) // 2) - _text_w(d, txt, FONT_NEXT_OPP)//2
-        ty  = row_y + (logo_h - at_h)//2
-        d.text((tx, ty), txt, font=FONT_NEXT_OPP, fill="white")
+    def _text_width(text: str) -> int:
+        return _text_w(d, text, FONT_NEXT_OPP)
+
+    min_height = 34
+    best_layout: Optional[tuple[int, int, Optional[Image.Image], Optional[Image.Image]]] = None
+    starting_height = min(max_logo_height, max(min_height, available_h))
+    for test_h in range(int(starting_height), min_height - 1, -2):
+        spacing = max(12, int(round(test_h * spacing_ratio)))
+        away_logo = _scaled(base_away_logo, test_h)
+        home_logo = _scaled(base_home_logo, test_h)
+        total = at_w + spacing * 2
+        total += away_logo.width if away_logo else _text_width(away_tri or "AWY")
+        total += home_logo.width if home_logo else _text_width(home_tri or "HME")
+        if total <= max_width:
+            best_layout = (test_h, spacing, away_logo, home_logo)
+            break
+
+    if best_layout is None:
+        fallback_h = max(min_height, int(round(starting_height * 0.85)))
+        spacing = max(10, int(round(fallback_h * spacing_ratio)))
+        best_layout = (
+            fallback_h,
+            spacing,
+            _scaled(base_away_logo, fallback_h),
+            _scaled(base_home_logo, fallback_h),
+        )
+
+    logo_h, spacing, away_logo, home_logo = best_layout
+    block_h = logo_h
+    available_space = max(0, bottom_y - y_top)
+    centered_top = y_top + max(0, (available_space - block_h) // 2)
+    row_y = min(max(y_top + 1, centered_top), max(y_top + 1, bottom_y - block_h - 1))
+
+    elements = [
+        away_logo if away_logo else (away_tri or "AWY"),
+        at_txt,
+        home_logo if home_logo else (home_tri or "HME"),
+    ]
+    total_w = sum(
+        el.width if isinstance(el, Image.Image) else _text_width(str(el))
+        for el in elements
+    ) + spacing * (len(elements) - 1)
+    x = max(0, (WIDTH - total_w) // 2)
+
+    for el in elements:
+        if isinstance(el, Image.Image):
+            img.paste(el, (x, row_y), el)
+            x += el.width + spacing
+        else:
+            w_sy = _text_width(str(el))
+            h_sy = _text_h(d, FONT_NEXT_OPP)
+            y_sy = row_y + (block_h - h_sy) // 2
+            d.text((x, y_sy), str(el), font=FONT_NEXT_OPP, fill="white")
+            x += w_sy + spacing
 
     # Bottom label (always includes time)
     if bottom_text:

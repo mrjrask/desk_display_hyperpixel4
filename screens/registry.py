@@ -28,6 +28,7 @@ from screens.draw_travel_time import draw_travel_time_screen
 from screens.draw_vrnof import draw_vrnof_screen
 from screens.draw_weather import draw_weather_screen_1, draw_weather_screen_2
 from screens.draw_date_time import draw_date, draw_time
+from screens.draw_nixie import draw_nixie
 from screens.mlb_schedule import (
     draw_box_score,
     draw_cubs_result,
@@ -158,6 +159,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
 
     register("date", lambda: draw_date(context.display, transition=False))
     register("time", lambda: draw_time(context.display, transition=True))
+    register("nixie", lambda: draw_nixie(context.display, transition=True))
 
     weather_data = context.cache.get("weather")
     weather_logo = context.logos.get("weather logo")
@@ -455,43 +457,42 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
     register("AL West", lambda: draw_AL_West(context.display, transition=True))
     register("AL Wild Card", lambda: draw_AL_WildCard(context.display, transition=True))
 
-    bulls = context.cache.get("bulls") or {}
-    if any(bulls.values()):
-        register_logo("bulls logo")
-        bulls_next = bulls.get("next")
-        bulls_next_home = bulls.get("next_home")
-        if _games_match(bulls_next_home, bulls_next):
-            bulls_next_home = None
+    bulls_raw = context.cache.get("bulls")
+    bulls = bulls_raw if isinstance(bulls_raw, dict) else {}
+    register_logo("bulls logo")
+    bulls_next = bulls.get("next")
+    bulls_next_home = bulls.get("next_home")
+    if _games_match(bulls_next_home, bulls_next):
+        bulls_next_home = None
 
-        register(
-            "bulls last",
-            lambda data=bulls.get("last"): draw_last_bulls_game(
-                context.display, data, transition=True
-            ),
-            available=bool(bulls.get("last")),
-        )
-        register(
-            "bulls live",
-            lambda data=bulls.get("live"): draw_live_bulls_game(
-                context.display, data, transition=True
-            ),
-            available=bool(bulls.get("live")),
-        )
-        register(
-            "bulls next",
-            lambda data=bulls_next: draw_sports_screen_bulls(
-                context.display, data, transition=True
-            ),
-            available=bool(bulls_next),
-        )
-        if bulls_next_home:
-            register(
-                "bulls next home",
-                lambda data=bulls_next_home: draw_bulls_next_home_game(
-                    context.display, data, transition=True
-                ),
-                available=True,
-            )
+    register(
+        "bulls last",
+        lambda data=bulls.get("last"): draw_last_bulls_game(
+            context.display, data, transition=True
+        ),
+        available=True,
+    )
+    register(
+        "bulls live",
+        lambda data=bulls.get("live"): draw_live_bulls_game(
+            context.display, data, transition=True
+        ),
+        available=True,
+    )
+    register(
+        "bulls next",
+        lambda data=bulls_next: draw_sports_screen_bulls(
+            context.display, data, transition=True
+        ),
+        available=True,
+    )
+    register(
+        "bulls next home",
+        lambda data=bulls_next_home: draw_bulls_next_home_game(
+            context.display, data, transition=True
+        ),
+        available=True,
+    )
 
     return registry, metadata
 

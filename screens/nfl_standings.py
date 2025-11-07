@@ -68,13 +68,13 @@ TITLE_MARGIN_BOTTOM = 12
 DIVISION_MARGIN_TOP = 6
 DIVISION_MARGIN_BOTTOM = 8
 COLUMN_GAP_BELOW = 6
-RECORD_COLUMN_SPACING = 16
+RECORD_COLUMN_SPACING = 10
 TEAM_COLUMN_PADDING = 10
 
 TITLE_FONT = FONT_TITLE_SPORTS
 DIVISION_FONT = clone_font(FONT_TITLE_SPORTS, 42)
 COLUMN_FONT = clone_font(FONT_STATUS, 38)
-ROW_FONT = clone_font(FONT_STATUS, 52)
+ROW_FONT = clone_font(FONT_STATUS, 58)
 
 TEAM_NAMES_BY_ABBR: dict[str, str] = {
     "ARI": "Cardinals",
@@ -222,6 +222,7 @@ def _build_column_layout(team_names: Iterable[str] | None = None) -> dict[str, i
         max_column_width = max(width for _, _, width in record_columns)
         slot_width = record_area_width / record_count
         if slot_width >= max_column_width:
+            slot_width = min(slot_width, max_column_width + RECORD_COLUMN_SPACING)
             for idx, (_, key, _width) in enumerate(record_columns):
                 right_edge = record_area_left + slot_width * (idx + 1)
                 layout[key] = int(round(min(record_area_right, right_edge)))
@@ -1123,15 +1124,32 @@ def _prepare_overview_columns(
         team_count = len(teams)
         max_rows = max(max_rows, team_count)
 
-        stack_height = (
-            OVERVIEW_LOGO_HEIGHT + (team_count - 1) * OVERVIEW_VERTICAL_STEP
-            if team_count
-            else OVERVIEW_LOGO_HEIGHT
-        )
+        if team_count:
+            logo_height = OVERVIEW_LOGO_HEIGHT
+            step = OVERVIEW_VERTICAL_STEP
+            stack_height = logo_height + (team_count - 1) * step
+            if available_height > 0 and stack_height > available_height:
+                raw_step = int(round((available_height - logo_height) / max(1, team_count - 1)))
+                step = max(1, raw_step)
+                preferred = max(1, int(round(logo_height * 0.75)))
+                if step > preferred:
+                    step = preferred
+                stack_height = logo_height + (team_count - 1) * step
+                if stack_height > available_height:
+                    scale = available_height / stack_height if available_height > 0 else 1.0
+                    if scale < 1.0:
+                        logo_height = max(48, int(round(logo_height * scale)))
+                        step = max(1, int(round(step * scale)))
+                        stack_height = logo_height + (team_count - 1) * step
+        else:
+            logo_height = OVERVIEW_LOGO_HEIGHT
+            step = OVERVIEW_VERTICAL_STEP
+            stack_height = logo_height
+
         top_offset = 0
         if available_height > stack_height:
             top_offset = (available_height - stack_height) // 2
-        start_center = content_top + top_offset + OVERVIEW_LOGO_HEIGHT // 2
+        start_center = content_top + top_offset + logo_height // 2
         col_center = int((idx + 0.5) * column_width)
         width_limit = max(0, int(column_width - 2 * OVERVIEW_COLUMN_MARGIN))
 
@@ -1144,15 +1162,22 @@ def _prepare_overview_columns(
                 continue
 
             logo = logo_source.copy()
+            if logo.height != logo_height:
+                ratio_h = logo_height / float(logo.height)
+                new_size = (
+                    max(1, int(round(logo.width * ratio_h))),
+                    logo_height,
+                )
+                logo = logo.resize(new_size, Image.LANCZOS)
             if width_limit and logo.width > width_limit:
                 ratio = width_limit / float(logo.width)
                 new_size = (
-                    max(1, int(logo.width * ratio)),
-                    max(1, int(logo.height * ratio)),
+                    max(1, int(round(logo.width * ratio))),
+                    max(1, int(round(logo.height * ratio))),
                 )
                 logo = logo.resize(new_size, Image.LANCZOS)
 
-            center_y = start_center + rank * OVERVIEW_VERTICAL_STEP
+            center_y = start_center + rank * step
             y_target = int(center_y - logo.height / 2)
             x_target = int(col_center - logo.width / 2)
             drop_start = min(-logo.height, content_top - logo.height - OVERVIEW_DROP_MARGIN)
