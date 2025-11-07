@@ -46,7 +46,7 @@ RIGHT_MARGIN = 12
 TEAM_COLUMN_GAP = 10
 STATS_FIRST_COLUMN_GAP = 20
 TEAM_TO_STATS_EXTRA_GAP = 8
-STATS_COLUMN_MIN_STEP = 34
+STATS_COLUMN_MIN_STEP = 26
 ROW_PADDING = 6
 ROW_SPACING = 6
 SECTION_GAP = 16
@@ -66,7 +66,7 @@ _ROW_FONT_BASE_SIZE = 48
 ROW_FONT = clone_font(FONT_STATUS, _ROW_FONT_BASE_SIZE)
 _ROW_FONT_SIZE = getattr(ROW_FONT, "size", _ROW_FONT_BASE_SIZE)
 STATS_VALUE_FONT = clone_font(ROW_FONT, _ROW_FONT_SIZE + 6)
-_TEAM_NAME_FONT_SIZE = max(8, _ROW_FONT_SIZE + 6)
+_TEAM_NAME_FONT_SIZE = max(8, _ROW_FONT_SIZE + 10)
 TEAM_NAME_FONT = clone_font(ROW_FONT, _TEAM_NAME_FONT_SIZE)
 
 OVERVIEW_TITLE = "NHL Overview"
@@ -79,8 +79,8 @@ OVERVIEW_DIVISIONS = [
 OVERVIEW_MARGIN_X = 10
 OVERVIEW_TITLE_MARGIN_BOTTOM = 18
 OVERVIEW_BOTTOM_MARGIN = 6
-OVERVIEW_MIN_LOGO_HEIGHT = 110
-OVERVIEW_MAX_LOGO_HEIGHT = 210
+OVERVIEW_MIN_LOGO_HEIGHT = 96
+OVERVIEW_MAX_LOGO_HEIGHT = 184
 OVERVIEW_LOGO_PADDING = 16
 OVERVIEW_LOGO_OVERLAP = 12
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
@@ -155,42 +155,51 @@ def _build_column_layout(max_team_name_width: int) -> tuple[dict[str, int], int]
     if not STATS_COLUMNS:
         return layout, max(0, max_team_name_width)
 
-    column_count = len(STATS_COLUMNS)
-    min_spacing = STATS_COLUMN_MIN_STEP * max(0, column_count - 1)
+    column_metrics: list[tuple[str, int]] = []
+    header_lookup = {key: label for label, key, _ in COLUMN_HEADERS}
+    for key in STATS_COLUMNS:
+        header = header_lookup.get(key, "")
+        header_font = COLUMN_HEADER_FONTS.get(key, COLUMN_FONT)
+        header_width = _text_size(header, header_font)[0]
+        sample = "199" if key == "points" else "99"
+        value_width = _text_size(sample, STATS_VALUE_FONT)[0]
+        column_metrics.append((key, max(header_width, value_width)))
+
+    column_count = len(column_metrics)
+    spacing_default = STATS_COLUMN_MIN_STEP if column_count > 1 else 0.0
+    required_width = sum(width for _, width in column_metrics)
+    required_spacing = spacing_default * max(0, column_count - 1)
     team_to_stats_gap = STATS_FIRST_COLUMN_GAP + TEAM_TO_STATS_EXTRA_GAP
-    max_team_space = max(0, stats_right - team_x - team_to_stats_gap - min_spacing)
+
+    max_team_space = max(
+        0,
+        stats_right - team_x - team_to_stats_gap - required_width - required_spacing,
+    )
     allowed_team_space = max(0, min(max_team_name_width, max_team_space))
 
-    first_column = min(stats_right, team_x + allowed_team_space + team_to_stats_gap)
+    stats_left_edge = min(
+        stats_right,
+        team_x + allowed_team_space + team_to_stats_gap,
+    )
 
-    if column_count == 1:
-        layout[STATS_COLUMNS[0]] = stats_right
-    else:
-        available_space = max(0.0, stats_right - first_column)
-        raw_positions = [
-            first_column + available_space * (idx / (column_count - 1))
-            for idx in range(column_count)
-        ]
-        raw_positions[-1] = float(stats_right)
+    available_for_stats = max(0.0, stats_right - stats_left_edge)
+    spacing = spacing_default
+    if column_count > 1:
+        max_spacing = (available_for_stats - required_width) / max(1, column_count - 1)
+        spacing = max(0.0, min(spacing_default, max_spacing))
 
-        positions: list[int] = []
-        for idx, pos in enumerate(raw_positions):
-            if idx == column_count - 1:
-                rounded = stats_right
-            else:
-                rounded = int(round(pos))
-                rounded = min(rounded, stats_right - (column_count - 1 - idx))
-            if positions and rounded <= positions[-1]:
-                rounded = min(stats_right - (column_count - 1 - idx), positions[-1] + 1)
-            positions.append(rounded)
-
-        for key, pos in zip(STATS_COLUMNS, positions):
-            layout[key] = pos
+    positions: dict[str, int] = {}
+    x_pos = float(stats_right)
+    for key, width in reversed(column_metrics):
+        positions[key] = int(round(x_pos))
+        x_pos -= width + spacing
 
     team_name_width = max(
         0,
-        min(max_team_name_width, first_column - TEAM_COLUMN_GAP - team_x),
+        min(max_team_name_width, stats_left_edge - TEAM_COLUMN_GAP - team_x),
     )
+
+    layout.update(positions)
     return layout, team_name_width
 
 COLUMN_HEADERS = [
@@ -211,7 +220,14 @@ def _text_size(text: str, font) -> tuple[int, int]:
         return _MEASURE_DRAW.textsize(text, font)
 
 
-ROW_TEXT_HEIGHT = _text_size("PTS", ROW_FONT)[1]
+if TEAM_NICKNAMES:
+    TEAM_TEXT_HEIGHT = max(
+        _text_size(name, TEAM_NAME_FONT)[1] for name in TEAM_NICKNAMES.values()
+    )
+else:
+    TEAM_TEXT_HEIGHT = _text_size("Blackhawks", TEAM_NAME_FONT)[1]
+STATS_TEXT_HEIGHT = _text_size("99", STATS_VALUE_FONT)[1]
+ROW_TEXT_HEIGHT = max(TEAM_TEXT_HEIGHT, STATS_TEXT_HEIGHT)
 ROW_HEIGHT = max(LOGO_HEIGHT, ROW_TEXT_HEIGHT) + ROW_PADDING * 2
 COLUMN_HEADER_FONTS = {"points": COLUMN_FONT_POINTS}
 

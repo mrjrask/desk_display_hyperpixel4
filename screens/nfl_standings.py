@@ -49,8 +49,8 @@ LOGO_DIR = os.path.join(IMAGES_DIR, "nfl")
 LOGO_HEIGHT = 140
 
 # Overview animation geometry
-OVERVIEW_LOGO_HEIGHT = 200
-OVERVIEW_VERTICAL_STEP = 150
+OVERVIEW_LOGO_HEIGHT = 170
+OVERVIEW_VERTICAL_STEP = 128
 OVERVIEW_COLUMN_MARGIN = 12
 OVERVIEW_DROP_MARGIN = 24
 OVERVIEW_DROP_STEPS = 30
@@ -68,13 +68,15 @@ TITLE_MARGIN_BOTTOM = 12
 DIVISION_MARGIN_TOP = 6
 DIVISION_MARGIN_BOTTOM = 8
 COLUMN_GAP_BELOW = 6
-RECORD_COLUMN_SPACING = 10
+RECORD_COLUMN_SPACING = 8
 TEAM_COLUMN_PADDING = 10
 
 TITLE_FONT = FONT_TITLE_SPORTS
 DIVISION_FONT = clone_font(FONT_TITLE_SPORTS, 42)
 COLUMN_FONT = clone_font(FONT_STATUS, 38)
 ROW_FONT = clone_font(FONT_STATUS, 58)
+_TEAM_FONT_SIZE = getattr(ROW_FONT, "size", 58) + 4
+TEAM_NAME_FONT = clone_font(ROW_FONT, _TEAM_FONT_SIZE)
 
 TEAM_NAMES_BY_ABBR: dict[str, str] = {
     "ARI": "Cardinals",
@@ -157,10 +159,13 @@ def _text_size(text: str, font) -> tuple[int, int]:
 
 
 if TEAM_NAMES_BY_ABBR:
-    ROW_TEXT_HEIGHT = max(_text_size(name, ROW_FONT)[1] for name in TEAM_NAMES_BY_ABBR.values())
+    TEAM_TEXT_HEIGHT = max(
+        _text_size(name, TEAM_NAME_FONT)[1] for name in TEAM_NAMES_BY_ABBR.values()
+    )
 else:
-    ROW_TEXT_HEIGHT = _text_size("CHI", ROW_FONT)[1]
-ROW_HEIGHT = max(LOGO_HEIGHT, ROW_TEXT_HEIGHT) + ROW_PADDING * 2
+    TEAM_TEXT_HEIGHT = _text_size("CHI", TEAM_NAME_FONT)[1]
+RECORD_TEXT_HEIGHT = _text_size("17", ROW_FONT)[1]
+ROW_HEIGHT = max(LOGO_HEIGHT, TEAM_TEXT_HEIGHT, RECORD_TEXT_HEIGHT) + ROW_PADDING * 2
 COLUMN_TEXT_HEIGHT = max(_text_size(label, COLUMN_FONT)[1] for label, _, _ in COLUMN_HEADERS)
 COLUMN_ROW_HEIGHT = COLUMN_TEXT_HEIGHT + ROW_PADDING
 DIVISION_TEXT_HEIGHT = _text_size("NFC North", DIVISION_FONT)[1]
@@ -207,9 +212,9 @@ def _build_column_layout(team_names: Iterable[str] | None = None) -> dict[str, i
     team_left = LEFT_MARGIN + LOGO_HEIGHT + TEAM_COLUMN_PADDING
     names = list(team_names) if team_names is not None else list(TEAM_NAMES_BY_ABBR.values())
     if names:
-        team_sample_width = max(_text_size(name, ROW_FONT)[0] for name in names)
+        team_sample_width = max(_text_size(name, TEAM_NAME_FONT)[0] for name in names)
     else:
-        team_sample_width = _text_size("Commanders", ROW_FONT)[0]
+        team_sample_width = _text_size("Commanders", TEAM_NAME_FONT)[0]
     min_gap = 8
     record_area_left = team_left + team_sample_width + min_gap
     record_area_right = WIDTH - RIGHT_MARGIN
@@ -219,24 +224,35 @@ def _build_column_layout(team_names: Iterable[str] | None = None) -> dict[str, i
 
     record_count = len(record_columns)
     if record_count and record_area_width > 0:
-        max_column_width = max(width for _, _, width in record_columns)
-        slot_width = record_area_width / record_count
-        if slot_width >= max_column_width:
-            slot_width = min(slot_width, max_column_width + RECORD_COLUMN_SPACING)
-            for idx, (_, key, _width) in enumerate(record_columns):
-                right_edge = record_area_left + slot_width * (idx + 1)
-                layout[key] = int(round(min(record_area_right, right_edge)))
-        else:
-            spacing = RECORD_COLUMN_SPACING
-            x = WIDTH - RIGHT_MARGIN
+        total_width = sum(width for _, _, width in record_columns)
+        available = max(0, record_area_right - record_area_left)
+        spacing = RECORD_COLUMN_SPACING if record_count > 1 else 0.0
+        if record_count > 1:
+            max_spacing = (available - total_width) / max(1, record_count - 1)
+            spacing = max(0.0, min(spacing, max_spacing))
+
+        def _place_columns(gap: float) -> tuple[dict[str, int], float]:
+            rights: dict[str, int] = {}
+            left_edge = WIDTH
+            x_pos = float(WIDTH - RIGHT_MARGIN)
             for _label, key, width in reversed(record_columns):
-                layout[key] = x
-                x -= width + spacing
+                rights[key] = int(round(x_pos))
+                left_edge = min(left_edge, x_pos - width)
+                x_pos -= width + gap
+            return rights, left_edge
+
+        layout, min_left_edge = _place_columns(spacing)
+
+        if min_left_edge < record_area_left and record_count > 1:
+            deficit = record_area_left - min_left_edge
+            adjust = deficit / max(1, record_count - 1)
+            spacing = max(0.0, spacing - adjust)
+            layout, min_left_edge = _place_columns(spacing)
     else:
-        spacing = RECORD_COLUMN_SPACING
-        x = WIDTH - RIGHT_MARGIN
+        spacing = RECORD_COLUMN_SPACING if record_count > 1 else 0.0
+        x = float(WIDTH - RIGHT_MARGIN)
         for _label, key, width in reversed(record_columns):
-            layout[key] = x
+            layout[key] = int(round(x))
             x -= width + spacing
 
     layout["team"] = team_left
@@ -1033,12 +1049,12 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
             # Team name
             row_center = row_y + ROW_HEIGHT / 2
             try:
-                l, t, r, b = draw.textbbox((0, 0), display_text, font=ROW_FONT)
+                l, t, r, b = draw.textbbox((0, 0), display_text, font=TEAM_NAME_FONT)
                 tw, th = r - l, b - t
                 tx = column_layout["team"] - l
                 ty = int(round(row_center - th / 2 - t))
             except Exception:  # pragma: no cover - PIL fallback
-                tw, th = draw.textsize(display_text, font=ROW_FONT)
+                tw, th = draw.textsize(display_text, font=TEAM_NAME_FONT)
                 tx = column_layout["team"]
                 ty = int(round(row_center - th / 2))
 
@@ -1048,7 +1064,7 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
                 logo_y = int(round(row_center - logo.height / 2))
                 img.paste(logo, (LEFT_MARGIN, logo_y), logo)
 
-            draw.text((tx, ty), display_text, font=ROW_FONT, fill=WHITE)
+            draw.text((tx, ty), display_text, font=TEAM_NAME_FONT, fill=WHITE)
 
             # Record columns
             for value, key in ((wins, "wins"), (losses, "losses"), (ties, "ties")):
