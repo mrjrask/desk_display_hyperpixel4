@@ -75,7 +75,6 @@ except Exception:
 
 _MLB_DRAW_TITLE = getattr(_MLB, "_draw_title_with_bold_result", None) if _MLB else None
 _MLB_REL_DATE_ONLY = getattr(_MLB, "_rel_date_only", None) if _MLB else None
-_MLB_FORMAT_GAME_LABEL = getattr(_MLB, "_format_game_label", None) if _MLB else None
 
 # Title and footer fonts mirror the MLB screens via config definitions.
 FONT_TITLE  = FONT_TITLE_SPORTS
@@ -98,6 +97,38 @@ FONT_ABBR  = _ts(_ABBR_FONT_SIZE)
 FONT_SOG   = _ts(_SOG_FONT_SIZE)
 FONT_SCORE = _ts(int(round(_SOG_FONT_SIZE * 1.45)))    # make goals column stand out more
 FONT_SMALL = _ts(22 if HEIGHT > 64 else 19)    # for SOG label / live clock
+
+
+def _join_dateline_parts(*parts: Optional[str]) -> str:
+    """Join non-empty pieces with the Bulls-style bullet separator."""
+    cleaned = []
+    for part in parts:
+        if not isinstance(part, str):
+            continue
+        text = part.strip()
+        if text:
+            cleaned.append(text)
+    return " • ".join(cleaned)
+
+
+def _relative_label(date_obj: Optional[dt.date]) -> str:
+    """Mirror Bulls schedule relative labels (Today/Tomorrow/Yesterday/etc.)."""
+    if not isinstance(date_obj, dt.date):
+        return ""
+
+    today = dt.datetime.now().astimezone().date()
+    if date_obj == today:
+        return "Today"
+    if date_obj == today + dt.timedelta(days=1):
+        return "Tomorrow"
+    if date_obj == today - dt.timedelta(days=1):
+        return "Yesterday"
+
+    fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
+    try:
+        return date_obj.strftime(fmt)
+    except Exception:
+        return ""
 
 # NHL endpoints (prefer api-web; quiet legacy fallback)
 NHL_WEB_TEAM_MONTH_NOW   = NHL_API_ENDPOINTS["team_month_now"]
@@ -813,17 +844,18 @@ def _format_live_dateline(feed: Dict) -> str:
 
     if clock_state:
         state = clock_state.title() if clock_state.isupper() else clock_state
+        lower_state = state.lower()
+        if "intermission" in lower_state and period:
+            return _join_dateline_parts(state, period)
         if period:
-            if "intermission" in state.lower():
-                return f"{state} ({period})"
-            return f"{period} {state}"
+            return _join_dateline_parts(period, state)
         return state
 
     if clock:
         if clock.upper() == "END" and period:
-            return f"End of {period}"
+            return _join_dateline_parts("End", period)
         if period:
-            return f"{period} {clock}"
+            return _join_dateline_parts(period, clock)
         return clock
 
     return period
@@ -832,18 +864,15 @@ def _format_live_dateline(feed: Dict) -> str:
 # Date formatting (Last)
 
 def _format_last_date_bottom(game_date_iso: str) -> str:
-    """Return 'Yesterday' or 'Wed Sep 24' (no year)."""
+    """Return a Bulls-style relative label for the last game dateline."""
     try:
-        dt_utc = dt.datetime.fromisoformat(game_date_iso.replace("Z","+00:00"))
-        local  = dt_utc.astimezone()
-        gdate  = local.date()
+        dt_utc = dt.datetime.fromisoformat(game_date_iso.replace("Z", "+00:00"))
+        local = dt_utc.astimezone()
+        gdate = local.date()
     except Exception:
         return ""
-    today = dt.datetime.now().astimezone().date()
-    delta = (today - gdate).days
-    if delta == 1:
-        return "Yesterday"
-    return local.strftime("%a %b %-d") if os.name != "nt" else local.strftime("%a %b %#d")
+
+    return _relative_label(gdate)
 
 
 def _last_game_result_prefix(game: Dict, feed: Optional[Dict] = None) -> str:
@@ -922,9 +951,7 @@ def _format_last_bottom_line(game: Dict, feed: Optional[Dict] = None) -> str:
     else:
         date_str = _format_last_date_bottom(game.get("gameDate", ""))
 
-    if date_str:
-        return f"{prefix} {date_str}"
-    return prefix
+    return _join_dateline_parts(prefix, date_str)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Next-game helpers (names, local PNG logos, centered bigger logos)
@@ -939,10 +966,8 @@ def _format_next_bottom(
     game_date_iso: str,
     start_time_central: Optional[str] = None,
 ) -> str:
-    """
-    Always include the time:
-      "Today 7:30 PM", "Tonight 7:30 PM", "Tomorrow 6:00 PM", or "Wed Sep 24 7:30 PM".
-    """
+    """Format the next-game dateline to mirror the Bulls bullet-separated style."""
+
     local = None
     if game_date_iso:
         try:
@@ -950,56 +975,41 @@ def _format_next_bottom(
         except Exception:
             local = None
 
-    # If the official date is missing, fall back to the localised game date so we
-    # always have something for the MLB helper (otherwise it only shows the time).
-    official = (official_date or "").strip()
-    if not official and local:
-        official = local.date().isoformat()
-
-    # Determine a human readable start time we can pass to MLB or use locally.
-    start = (start_time_central or "").strip()
-    if not start and local:
+    # Determine the date we can label (prefer the localized game time, fall back to official).
+    date_obj: Optional[dt.date] = None
+    if local is not None:
+        date_obj = local.date()
+    elif official_date:
         try:
-            start = local.strftime("%-I:%M %p") if os.name != "nt" else local.strftime("%#I:%M %p")
+            date_obj = dt.date.fromisoformat(official_date[:10])
         except Exception:
-            start = ""
-    if not start and game_date_iso:
+            date_obj = None
+    elif game_date_iso:
         try:
-            dt_utc = dt.datetime.fromisoformat(game_date_iso.replace("Z", "+00:00"))
-            start_local = dt_utc.astimezone()
-            start = (
-                start_local.strftime("%-I:%M %p")
-                if os.name != "nt"
-                else start_local.strftime("%#I:%M %p")
-            )
+            date_obj = dt.datetime.fromisoformat(game_date_iso.replace("Z", "+00:00")).date()
         except Exception:
-            start = ""
+            date_obj = None
 
-    if callable(_MLB_FORMAT_GAME_LABEL):
-        return _MLB_FORMAT_GAME_LABEL(official, start)
-
-    if local is None and official:
+    # Determine time label, preferring explicit central time overrides.
+    time_label = (start_time_central or "").strip()
+    if not time_label and local is not None:
         try:
-            d = dt.datetime.strptime(official[:10], "%Y-%m-%d").date()
-            local = dt.datetime.combine(d, dt.time(19, 0)).astimezone()  # default 7pm if time missing
+            fmt = "%-I:%M %p" if os.name != "nt" else "%#I:%M %p"
+            time_label = local.strftime(fmt).replace(" 0", " ").lstrip("0")
         except Exception:
-            local = None
+            time_label = ""
 
-    if not local:
-        return ""
+    # Compose the date label.
+    if local is not None:
+        date_fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
+        try:
+            date_label = local.strftime(date_fmt)
+        except Exception:
+            date_label = _relative_label(date_obj)
+    else:
+        date_label = _relative_label(date_obj)
 
-    today    = dt.datetime.now().astimezone()
-    today_d  = today.date()
-    game_d   = local.date()
-    time_str = local.strftime("%-I:%M %p") if os.name != "nt" else local.strftime("%#I:%M %p")
-
-    if game_d == today_d:
-        return f"Tonight {time_str}" if local.hour >= 18 else f"Today {time_str}"
-    if game_d == (today_d + dt.timedelta(days=1)):
-        return f"Tomorrow {time_str}"
-    # For later dates, include weekday+date **and** time
-    date_str = local.strftime("%a %b %-d") if os.name != "nt" else local.strftime("%a %b %#d")
-    return f"{date_str} {time_str}"
+    return _join_dateline_parts(date_label, time_label)
 
 def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, log_label: str="hawks next"):
     """
