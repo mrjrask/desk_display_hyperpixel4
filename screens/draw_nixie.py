@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Animated Nixie tube clock rendered with procedurally drawn digits."""
+"""Animated Nixie tube clock that prefers rich image assets when available."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import datetime as dt
 import logging
 import time
 from functools import lru_cache
-from typing import Dict
+from pathlib import Path
+from typing import Dict, Iterable, Optional
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
@@ -28,6 +29,69 @@ SPACING_RATIO = 0.12
 COLON_RATIO = 0.28
 
 
+LOGGER = logging.getLogger(__name__)
+
+
+def _candidate_asset_directories() -> Iterable[Path]:
+    """Yield likely directories containing downloaded Nixie digit artwork."""
+
+    repo_root = Path(__file__).resolve().parents[1]
+    images_dir = repo_root / "images"
+    candidates = [
+        images_dir / "nixie-digits" / "large",
+        images_dir / "nixie-digits",
+        images_dir / "nixie_digits" / "large",
+        images_dir / "nixie_digits",
+        images_dir / "nixie",
+        images_dir / "nixie_clock" / "large",
+        images_dir / "nixie_clock",
+    ]
+    for path in candidates:
+        if path.exists() and path.is_dir():
+            yield path
+
+
+def _detect_asset_digits() -> Optional[Path]:
+    for directory in _candidate_asset_directories():
+        if all((directory / f"{digit}.png").exists() for digit in "0123456789"):
+            return directory
+    return None
+
+
+ASSET_DIGIT_DIR = _detect_asset_digits()
+
+
+def _detect_colon_asset() -> Optional[Path]:
+    if not ASSET_DIGIT_DIR:
+        return None
+
+    for name in ("colon.png", "dot.png", "colon.gif"):
+        candidate = ASSET_DIGIT_DIR / name
+        if candidate.exists():
+            return candidate
+
+    parent = ASSET_DIGIT_DIR.parent
+    if parent != ASSET_DIGIT_DIR:
+        for name in ("colon.png", "dot.png", "colon.gif"):
+            candidate = parent / name
+            if candidate.exists():
+                return candidate
+    return None
+
+
+ASSET_COLON_PATH = _detect_colon_asset()
+
+
+def _load_and_scale(path: Path, height: int) -> Image.Image:
+    image = Image.open(path).convert("RGBA")
+    if image.height == height:
+        return image
+
+    target_height = max(1, height)
+    target_width = max(1, int(round(image.width * (target_height / image.height))))
+    return image.resize((target_width, target_height), Image.LANCZOS)
+
+
 @lru_cache(maxsize=32)
 def _font_for_height(height: int) -> ImageFont.FreeTypeFont:
     target_height = max(20, height)
@@ -46,7 +110,7 @@ def _font_for_height(height: int) -> ImageFont.FreeTypeFont:
 
 
 @lru_cache(maxsize=128)
-def _digit_image(height: int, value: str) -> Image.Image:
+def _generate_digit_image(height: int, value: str) -> Image.Image:
     font = _font_for_height(height)
     padding_x = max(6, int(round(height * 0.1)))
     bbox = font.getbbox(value)
@@ -100,6 +164,31 @@ def _digit_image(height: int, value: str) -> Image.Image:
     return combined
 
 
+@lru_cache(maxsize=128)
+def _asset_digit_image(height: int, value: str) -> Optional[Image.Image]:
+    if not ASSET_DIGIT_DIR:
+        return None
+
+    path = ASSET_DIGIT_DIR / f"{value}.png"
+    if not path.exists():
+        LOGGER.warning("Nixie asset missing for digit %s at %s", value, path)
+        return None
+
+    try:
+        return _load_and_scale(path, height)
+    except Exception:  # pragma: no cover - asset could not be opened or resized
+        LOGGER.exception("Failed to load Nixie digit asset: %s", path)
+        return None
+
+
+@lru_cache(maxsize=128)
+def _digit_image(height: int, value: str) -> Image.Image:
+    asset = _asset_digit_image(height, value)
+    if asset is not None:
+        return asset
+    return _generate_digit_image(height, value)
+
+
 @lru_cache(maxsize=32)
 def _digits_for_height(height: int) -> Dict[str, Image.Image]:
     return {value: _digit_image(height, value) for value in "0123456789"}
@@ -107,6 +196,16 @@ def _digits_for_height(height: int) -> Dict[str, Image.Image]:
 
 @lru_cache(maxsize=32)
 def _colon_image(height: int) -> Image.Image:
+    if ASSET_COLON_PATH:
+        if ASSET_COLON_PATH.parent == ASSET_DIGIT_DIR:
+            asset = _asset_digit_image(height, ASSET_COLON_PATH.stem)
+            if asset is not None:
+                return asset
+        try:
+            return _load_and_scale(ASSET_COLON_PATH, max(12, height))
+        except Exception:  # pragma: no cover - fallback to procedural colon
+            LOGGER.exception("Failed to load Nixie colon asset: %s", ASSET_COLON_PATH)
+
     height = max(12, height)
     width = max(12, int(round(height * COLON_RATIO)))
     glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
