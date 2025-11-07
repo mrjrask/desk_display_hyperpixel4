@@ -2,7 +2,7 @@
 # A single source of truth for all of your possible screen IDs.
 
 SCREEN_IDS = [
-    "date", "time",
+    "date", "time", "nixie",
     "weather logo", "weather1", "weather2", "inside",
     "verano logo", "vrnof", "travel",
     "bears logo", "bears next", "nfl logo", "NFL Scoreboard", "NFL Overview NFC", "NFL Overview AFC", "NFL Standings NFC", "NFL Standings AFC", "nba logo", "NBA Scoreboard", "bulls logo", "bulls last", "bulls live", "bulls next", "bulls next home",

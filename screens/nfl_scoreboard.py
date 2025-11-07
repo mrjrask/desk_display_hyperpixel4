@@ -88,6 +88,7 @@ _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _LEAGUE_LOGO: Optional[Image.Image] = None
 _LEAGUE_LOGO_LOADED = False
 _POSSESSION_ICON: Optional[Image.Image] = None
+_POSSESSION_FONT_SIZE = max(18, LOGO_HEIGHT // 3)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -150,43 +151,26 @@ def _get_possession_icon() -> Optional[Image.Image]:
         return _POSSESSION_ICON
 
     try:
-        height = max(14, LOGO_HEIGHT // 5)
-        width = max(10, int(round(height * 1.6)))
+        base_size = max(18, LOGO_HEIGHT // 4)
+        font = clone_font(FONT_STATUS, max(base_size, _POSSESSION_FONT_SIZE))
+        glyph = "🏈"
+
+        # Measure the emoji in a generous temporary canvas to preserve its
+        # aspect ratio before cropping down to the rendered bounds.
+        temp_size = max(32, int(base_size * 2.4))
+        temp = Image.new("RGBA", (temp_size, temp_size), (0, 0, 0, 0))
+        temp_draw = ImageDraw.Draw(temp)
+        try:
+            left, top, right, bottom = temp_draw.textbbox((0, 0), glyph, font=font)
+        except Exception:
+            width, height = temp_draw.textsize(glyph, font=font)
+            left, top, right, bottom = 0, 0, width, height
+
+        width = max(1, right - left)
+        height = max(1, bottom - top)
         icon = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(icon)
-
-        pad_y = max(1, height // 6)
-        outline = max(1, height // 7)
-        body_color = (154, 93, 48)
-        stripe_color = (255, 255, 255)
-
-        draw.ellipse(
-            (0, pad_y, width - 1, height - pad_y - 1),
-            fill=body_color,
-            outline=stripe_color,
-            width=outline,
-        )
-
-        stripe_margin = max(1, width // 6)
-        stripe_width = max(1, width // 18)
-        draw.line(
-            (stripe_margin, pad_y + 1, stripe_margin, height - pad_y - 2),
-            fill=stripe_color,
-            width=stripe_width,
-        )
-        draw.line(
-            (width - stripe_margin - 1, pad_y + 1, width - stripe_margin - 1, height - pad_y - 2),
-            fill=stripe_color,
-            width=stripe_width,
-        )
-
-        lace_y = (pad_y + height - pad_y - 1) // 2
-        lace_half = max(1, width // 6)
-        draw.line(
-            (width // 2 - lace_half, lace_y, width // 2 + lace_half, lace_y),
-            fill=stripe_color,
-            width=max(1, height // 6),
-        )
+        draw.text((-left, -top), glyph, font=font, embedded_color=True)
 
         _POSSESSION_ICON = icon
         return _POSSESSION_ICON
