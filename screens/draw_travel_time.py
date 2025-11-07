@@ -280,7 +280,7 @@ TRAVEL_ICON_LSD = os.path.join(IMAGES_DIR, "travel", "lsd.png")
 TRAVEL_ICON_90 = os.path.join(IMAGES_DIR, "travel", "90.png")
 TRAVEL_ICON_94 = os.path.join(IMAGES_DIR, "travel", "94.png")
 TRAVEL_ICON_294 = os.path.join(IMAGES_DIR, "travel", "294.png")
-ROUTE_ICON_HEIGHT = 33
+ROUTE_ICON_HEIGHT = 48
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Composition

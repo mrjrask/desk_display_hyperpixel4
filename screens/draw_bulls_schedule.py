@@ -458,23 +458,27 @@ def _render_scoreboard(
 
 
 def _format_footer_last(game: Dict) -> str:
-    label = _relative_label(_get_official_date(game))
-    away = _team_entry(game, "away")
-    home = _team_entry(game, "home")
-    bulls_home = _is_bulls_side(home)
-    opponent = away if bulls_home else home
-    opponent_name = opponent.get("name") or opponent.get("tri") or ""
-    if label and opponent_name:
-        return f"{label} vs {opponent_name}" if bulls_home else f"{label} @ {opponent_name}"
-    return label or opponent_name
+    date_obj = _get_official_date(game)
+    label = _relative_label(date_obj)
+    if label:
+        return label
+    if isinstance(date_obj, dt.date):
+        fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
+        return date_obj.strftime(fmt)
+    return ""
 
 
 def _format_footer_next(game: Dict) -> str:
     start = _get_local_start(game)
-    date_label = _relative_label(_get_official_date(game))
-    time_label = _format_time(start)
-    pieces = [piece for piece in (date_label, time_label) if piece]
-    return " ".join(pieces)
+    if isinstance(start, dt.datetime):
+        date_fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
+        time_fmt = "%-I:%M %p" if os.name != "nt" else "%#I:%M %p"
+        date_part = start.strftime(date_fmt)
+        time_part = start.strftime(time_fmt).replace(" 0", " ").lstrip("0")
+        return f"{date_part} · {time_part}"
+
+    label = _relative_label(_get_official_date(game))
+    return label
 
 
 def _format_matchup_line(game: Dict) -> str:
