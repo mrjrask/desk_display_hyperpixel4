@@ -49,7 +49,7 @@ LOGO_DIR = os.path.join(IMAGES_DIR, "nfl")
 LOGO_HEIGHT = 140
 
 # Overview animation geometry
-OVERVIEW_LOGO_HEIGHT = 170
+OVERVIEW_LOGO_HEIGHT = 145
 OVERVIEW_VERTICAL_STEP = 128
 OVERVIEW_COLUMN_MARGIN = 12
 OVERVIEW_DROP_MARGIN = 24
@@ -197,7 +197,7 @@ def _build_column_layout(team_names: Iterable[str] | None = None) -> dict[str, i
     samples = {
         "wins": "17",
         "losses": "17",
-        "ties": "9",
+        "ties": "17",
     }
 
     record_columns: List[Tuple[str, str, int]] = []
@@ -208,6 +208,8 @@ def _build_column_layout(team_names: Iterable[str] | None = None) -> dict[str, i
         sample = samples.get(key, "17")
         width = _record_column_width(label or sample, sample)
         record_columns.append((label, key, width))
+
+    widths_by_key = {key: width for _label, key, width in record_columns}
 
     team_left = LEFT_MARGIN + LOGO_HEIGHT + TEAM_COLUMN_PADDING
     names = list(team_names) if team_names is not None else list(TEAM_NAMES_BY_ABBR.values())
@@ -254,6 +256,22 @@ def _build_column_layout(team_names: Iterable[str] | None = None) -> dict[str, i
         for _label, key, width in reversed(record_columns):
             layout[key] = int(round(x))
             x -= width + spacing
+
+    if {"wins", "losses", "ties"}.issubset(layout) and {
+        "wins",
+        "losses",
+        "ties",
+    }.issubset(widths_by_key):
+        wins_right = layout["wins"]
+        losses_right = layout["losses"]
+        ties_right = layout["ties"]
+        gap_wl = losses_right - widths_by_key["losses"] - wins_right
+        gap_lt = ties_right - widths_by_key["ties"] - losses_right
+        if gap_lt != gap_wl:
+            desired_left = losses_right + gap_wl
+            desired_right = desired_left + widths_by_key["ties"]
+            max_right = WIDTH - RIGHT_MARGIN
+            layout["ties"] = int(round(min(desired_right, max_right)))
 
     layout["team"] = team_left
     return layout

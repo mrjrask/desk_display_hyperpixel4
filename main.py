@@ -599,7 +599,7 @@ def load_logo(fn, height=LOGO_SCREEN_HEIGHT):
 
 cubs_logo   = load_logo("cubs.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 hawks_logo  = load_logo("hawks.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
-bulls_logo  = load_logo("nba/CHI.png")
+bulls_logo  = load_logo("nba/CHI.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 sox_logo    = load_logo("sox.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 weather_img = load_logo("weather.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 mlb_logo    = load_logo("mlb.jpg")
