@@ -65,7 +65,7 @@ COL_X = [_COL_LEFT]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 71)
+SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 75)
 STATUS_FONT             = clone_font(FONT_STATUS, 42)
 CENTER_FONT             = clone_font(FONT_STATUS, 54)
 TITLE_FONT              = FONT_TITLE_SPORTS
