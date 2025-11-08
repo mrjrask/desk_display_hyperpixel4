@@ -23,7 +23,7 @@ from screens.draw_hawks_schedule import (
     draw_live_hawks_game,
     draw_sports_screen_hawks,
 )
-from screens.draw_inside import draw_inside
+from screens.draw_inside import draw_inside, draw_inside_sensors
 from screens.draw_travel_time import draw_travel_time_screen
 from screens.draw_vrnof import draw_vrnof_screen
 from screens.draw_weather import draw_weather_screen_1, draw_weather_screen_2
@@ -180,6 +180,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         available=bool(weather_data),
     )
     register("inside", lambda: draw_inside(context.display, transition=True))
+    register("inside sensors", lambda: draw_inside_sensors(context.display, transition=True))
 
     verano_logo = context.logos.get("verano logo")
     if verano_logo is not None:
