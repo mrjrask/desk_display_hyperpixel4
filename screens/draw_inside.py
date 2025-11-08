@@ -59,18 +59,23 @@ def _mix_color(color: Tuple[int, int, int], target: Tuple[int, int, int], factor
     return tuple(int(round(color[idx] * (1 - factor) + target[idx] * factor)) for idx in range(3))
 
 # ── Sensor probe (replaced with inside_sensor) ───────────────────────────────
-def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings]]]:
+def _probe_sensor() -> Tuple[
+    Optional[str],
+    Optional[Callable[[], SensorReadings]],
+    Dict[str, Any],
+]:
     """
     Use inside_sensor.read_all() to access sensors on the correct Linux I2C bus
     (e.g., /dev/i2c-15 for HyperPixel Square breakout). Map into our
     existing SensorReadings shape:
       temp_f, humidity, pressure_inhg, voc_ohms
-    Returns (provider_label, reader_callable) or (None, None) if unavailable.
+    Returns (provider_label, reader_callable, raw_blob) or (None, None, blob) if
+    unavailable.
     """
     blob = read_all_sensors()
     if blob.get("error"):
         logging.warning("No supported indoor environmental sensor detected.")
-        return None, None
+        return None, None, blob
 
     sensors = blob.get("sensors", {})
     env = sensors.get("env_primary") or {}  # BME68x/680/280 if available
@@ -99,7 +104,7 @@ def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings
             voc_ohms=g,
         )
 
-    return provider, _reader
+    return provider, _reader, blob
 
 # ── Layout + drawing helpers ─────────────────────────────────────────────────
 
@@ -562,40 +567,158 @@ def _build_metric_entries(data: Dict[str, Optional[float]]) -> List[Dict[str, An
 
     return metrics
 
-def draw_inside(display, transition: bool=False):
-    provider, read_fn = _probe_sensor()
-    if not read_fn:
-        logging.warning("draw_inside: sensor not available")
+
+def _analyze_motion_vectors(lsm_blob: Any) -> Dict[str, Optional[float]]:
+    """Translate IMU readings into orientation/motion summaries."""
+
+    results: Dict[str, Optional[float]] = {
+        "motion_g": None,
+        "motion_delta_g": None,
+        "rotation_dps": None,
+        "pitch_deg": None,
+        "roll_deg": None,
+    }
+
+    if not isinstance(lsm_blob, dict) or lsm_blob.get("error"):
+        return results
+
+    def _vector_of(value: Any) -> Optional[Tuple[float, float, float]]:
+        if isinstance(value, (tuple, list)) and len(value) == 3:
+            try:
+                return (float(value[0]), float(value[1]), float(value[2]))
+            except Exception:
+                return None
         return None
 
-    try:
-        data = read_fn()
-        cleaned: Dict[str, Optional[float]] = {}
-        if isinstance(data, dict):
-            cleaned = {key: _clean_metric(value) for key, value in data.items()}
+    accel_vec = _vector_of(lsm_blob.get("accel_m_s2"))
+    gyro_vec = _vector_of(lsm_blob.get("gyro_rad_s"))
+
+    g = 9.80665
+
+    if accel_vec is not None:
+        ax, ay, az = accel_vec
+        total_g = math.sqrt(ax * ax + ay * ay + az * az) / g
+        results["motion_g"] = total_g
+        results["motion_delta_g"] = max(0.0, abs(total_g - 1.0))
+
+        gx = ax / g
+        gy = ay / g
+        gz = az / g
+
+        axes = {
+            "x": gx,
+            "y": gy,
+            "z": gz,
+        }
+        dominant_axis, dominant_val = max(axes.items(), key=lambda item: abs(item[1]))
+        if dominant_axis == "z":
+            results["orientation_label"] = "Face Up" if dominant_val >= 0 else "Face Down"
+        elif dominant_axis == "x":
+            results["orientation_label"] = "Landscape Right" if dominant_val >= 0 else "Landscape Left"
         else:
-            logging.debug("draw_inside: unexpected data payload type %s", type(data))
-            cleaned = {}
-        temp_f = cleaned.get("temp_f")
-    except Exception as e:
-        logging.warning(f"draw_inside: sensor read failed: {e}")
-        return None
+            results["orientation_label"] = "Portrait Up" if dominant_val >= 0 else "Portrait Down"
 
-    if temp_f is None:
-        logging.warning("draw_inside: temperature missing from sensor data")
-        return None
+        try:
+            pitch = math.degrees(math.atan2(-gx, math.sqrt(gy * gy + gz * gz)))
+            roll = math.degrees(math.atan2(gy, gz))
+            results["pitch_deg"] = pitch
+            results["roll_deg"] = roll
+        except Exception:
+            pass
 
-    metrics = _build_metric_entries(cleaned)
+    if gyro_vec is not None:
+        gx, gy, gz = gyro_vec
+        rotation = math.sqrt(gx * gx + gy * gy + gz * gz) * 180.0 / math.pi
+        results["rotation_dps"] = rotation
 
-    # Title text
-    title = "Inside"
-    subtitle = provider or ""
+    return results
 
-    # Compose canvas
-    img  = Image.new("RGB", (W, H), config.INSIDE_COL_BG)
+
+def _build_supplemental_metric_entries(sensors_blob: Dict[str, Any]) -> List[Dict[str, Any]]:
+    metrics: List[Dict[str, Any]] = []
+    if not isinstance(sensors_blob, dict):
+        return metrics
+
+    ltr = sensors_blob.get("ltr559")
+    if isinstance(ltr, dict) and not ltr.get("error"):
+        lux = _clean_metric(_extract_field(ltr, "als_lux"))
+        if lux is not None:
+            metrics.append(
+                dict(
+                    label="Light",
+                    value=f"{lux:,.0f} lux",
+                    color=config.INSIDE_CHIP_AMBER,
+                )
+            )
+
+        proximity = _clean_metric(_extract_field(ltr, "proximity"))
+        if proximity is not None:
+            prox_value = int(round(proximity))
+            metrics.append(
+                dict(
+                    label="Proximity",
+                    value=f"{prox_value}",
+                    color=_mix_color(config.INSIDE_CHIP_AMBER, config.INSIDE_CHIP_PURPLE, 0.45),
+                )
+            )
+
+    lsm = sensors_blob.get("lsm6ds")
+    motion = _analyze_motion_vectors(lsm)
+    orientation = motion.get("orientation_label")
+    if orientation:
+        pitch = motion.get("pitch_deg")
+        roll = motion.get("roll_deg")
+        tilt_bits: List[str] = []
+        if pitch is not None and math.isfinite(pitch):
+            tilt_bits.append(f"{pitch:+.0f}° pitch")
+        if roll is not None and math.isfinite(roll):
+            tilt_bits.append(f"{roll:+.0f}° roll")
+        tilt_desc = f" ({', '.join(tilt_bits)})" if tilt_bits else ""
+        metrics.append(
+            dict(
+                label="Orientation",
+                value=f"{orientation}{tilt_desc}",
+                color=config.INSIDE_CHIP_PURPLE,
+            )
+        )
+
+    motion_delta = motion.get("motion_delta_g")
+    rotation = motion.get("rotation_dps")
+    if (motion_delta is not None and math.isfinite(motion_delta)) or (
+        rotation is not None and math.isfinite(rotation)
+    ):
+        parts: List[str] = []
+        if motion_delta is not None and math.isfinite(motion_delta):
+            parts.append(f"{motion_delta:.2f} gΔ")
+        motion_total = motion.get("motion_g")
+        if motion_total is not None and math.isfinite(motion_total):
+            parts.append(f"{motion_total:.2f} g")
+        if rotation is not None and math.isfinite(rotation):
+            parts.append(f"{rotation:.0f}°/s")
+        metrics.append(
+            dict(
+                label="Motion",
+                value=" · ".join(parts) if parts else "–",
+                color=_mix_color(config.INSIDE_CHIP_PURPLE, config.INSIDE_CHIP_BLUE, 0.35),
+            )
+        )
+
+    return metrics
+
+
+def _render_inside_screen(
+    display,
+    transition: bool,
+    *,
+    title: str,
+    subtitle: str,
+    temp_f: float,
+    descriptor: str,
+    metrics: Sequence[Dict[str, Any]],
+) -> Optional[Image.Image]:
+    img = Image.new("RGB", (W, H), config.INSIDE_COL_BG)
     draw = ImageDraw.Draw(img)
 
-    # Fonts (with fallbacks)
     default_title_font = config.FONT_TITLE_SPORTS
     title_base = getattr(config, "FONT_TITLE_INSIDE", None)
     if title_base is None or getattr(title_base, "size", 0) < getattr(default_title_font, "size", 0):
@@ -606,11 +729,18 @@ def draw_inside(display, transition: bool=False):
     if subtitle_base is None or getattr(subtitle_base, "size", 0) < getattr(default_subtitle_font, "size", 0):
         subtitle_base = default_subtitle_font
 
-    temp_base  = getattr(config, "FONT_TIME",        default_title_font)
-    label_base = getattr(config, "FONT_INSIDE_LABEL", getattr(config, "FONT_DATE_SPORTS", default_title_font))
-    value_base = getattr(config, "FONT_INSIDE_VALUE", getattr(config, "FONT_DATE_SPORTS", default_title_font))
+    temp_base = getattr(config, "FONT_TIME", default_title_font)
+    label_base = getattr(
+        config,
+        "FONT_INSIDE_LABEL",
+        getattr(config, "FONT_DATE_SPORTS", default_title_font),
+    )
+    value_base = getattr(
+        config,
+        "FONT_INSIDE_VALUE",
+        getattr(config, "FONT_DATE_SPORTS", default_title_font),
+    )
 
-    # --- Title (auto-fit to width without shrinking below the standard size)
     title_side_pad = 8
     title_base_size = getattr(title_base, "size", 30)
     title_sample_h = measure_text(draw, "Hg", title_base)[1]
@@ -626,11 +756,13 @@ def draw_inside(display, transition: bool=False):
     )
     tw, th = measure_text(draw, title, t_font)
     title_y = 0
-    draw.text(((W - tw)//2, title_y), title, font=t_font, fill=config.INSIDE_COL_TITLE)
+    draw.text(((W - tw) // 2, title_y), title, font=t_font, fill=config.INSIDE_COL_TITLE)
 
     subtitle_gap = 6
     if subtitle:
-        subtitle_base_size = getattr(subtitle_base, "size", getattr(default_subtitle_font, "size", 24))
+        subtitle_base_size = getattr(
+            subtitle_base, "size", getattr(default_subtitle_font, "size", 24)
+        )
         subtitle_sample_h = measure_text(draw, "Hg", subtitle_base)[1]
         subtitle_max_h = max(1, subtitle_sample_h)
         sub_font = fit_font(
@@ -644,7 +776,7 @@ def draw_inside(display, transition: bool=False):
         )
         sw, sh = measure_text(draw, subtitle, sub_font)
         subtitle_y = title_y + th + subtitle_gap
-        draw.text(((W - sw)//2, subtitle_y), subtitle, font=sub_font, fill=config.INSIDE_COL_TITLE)
+        draw.text(((W - sw) // 2, subtitle_y), subtitle, font=sub_font, fill=config.INSIDE_COL_TITLE)
     else:
         sub_font = t_font
         sw, sh = 0, 0
@@ -652,10 +784,8 @@ def draw_inside(display, transition: bool=False):
 
     title_block_h = subtitle_y + (sh if subtitle else 0)
 
-    # Aspect awareness
-    is_square = abs(W - H) < 4  # treat as square if nearly equal
+    is_square = abs(W - H) < 4
 
-    # --- Temperature panel --------------------------------------------------
     if is_square:
         temp_ratio_base = 0.56
         temp_ratio_shrink_per_metric = 0.028
@@ -666,7 +796,7 @@ def draw_inside(display, transition: bool=False):
         min_temp_px = max(96, int(H * 0.18))
 
     temp_value = f"{temp_f:.1f}°F"
-    descriptor = ""
+    descriptor = descriptor or ""
 
     content_top = title_block_h + 12
     bottom_margin = 12
@@ -678,7 +808,9 @@ def draw_inside(display, transition: bool=False):
     _, grid_rows = _metric_grid_dimensions(metric_count, is_square)
 
     if metric_count:
-        temp_ratio = max(0.42, temp_ratio_base - temp_ratio_shrink_per_metric * min(metric_count, 8))
+        temp_ratio = max(
+            0.42, temp_ratio_base - temp_ratio_shrink_per_metric * min(metric_count, 8)
+        )
         min_temp = min_temp_px
     else:
         temp_ratio = 0.82 if is_square else 0.72
@@ -726,10 +858,14 @@ def draw_inside(display, transition: bool=False):
             W - side_pad,
             content_bottom,
         )
-        _draw_metric_rows(draw, metrics_rect, metrics,
-                          getattr(config, "FONT_INSIDE_LABEL", getattr(config, "FONT_DATE_SPORTS", None)),
-                          getattr(config, "FONT_INSIDE_VALUE", getattr(config, "FONT_DATE_SPORTS", None)),
-                          is_square)
+        _draw_metric_rows(
+            draw,
+            metrics_rect,
+            metrics,
+            getattr(config, "FONT_INSIDE_LABEL", getattr(config, "FONT_DATE_SPORTS", None)),
+            getattr(config, "FONT_INSIDE_VALUE", getattr(config, "FONT_DATE_SPORTS", None)),
+            is_square,
+        )
 
     if transition:
         return img
@@ -739,6 +875,113 @@ def draw_inside(display, transition: bool=False):
     display.show()
     time.sleep(5)
     return None
+
+def draw_inside(display, transition: bool=False):
+    provider, read_fn, _ = _probe_sensor()
+    if not read_fn:
+        logging.warning("draw_inside: sensor not available")
+        return None
+
+    try:
+        data = read_fn()
+        cleaned: Dict[str, Optional[float]] = {}
+        if isinstance(data, dict):
+            cleaned = {key: _clean_metric(value) for key, value in data.items()}
+        else:
+            logging.debug("draw_inside: unexpected data payload type %s", type(data))
+            cleaned = {}
+        temp_f = cleaned.get("temp_f")
+    except Exception as e:
+        logging.warning(f"draw_inside: sensor read failed: {e}")
+        return None
+
+    if temp_f is None:
+        logging.warning("draw_inside: temperature missing from sensor data")
+        return None
+
+    metrics = _build_metric_entries(cleaned)
+
+    subtitle = provider or ""
+
+    return _render_inside_screen(
+        display,
+        transition,
+        title="Inside",
+        subtitle=subtitle,
+        temp_f=temp_f,
+        descriptor="",
+        metrics=metrics,
+    )
+
+
+def draw_inside_sensors(display, transition: bool=False):
+    provider, read_fn, blob = _probe_sensor()
+    sensors = blob.get("sensors") if isinstance(blob, dict) else {}
+    if not sensors:
+        logging.warning("draw_inside_sensors: sensor not available")
+        return None
+
+    cleaned: Dict[str, Optional[float]] = {}
+    temp_f: Optional[float] = None
+    if read_fn:
+        try:
+            data = read_fn()
+            if isinstance(data, dict):
+                cleaned = {key: _clean_metric(value) for key, value in data.items()}
+                temp_f = cleaned.get("temp_f")
+            else:
+                logging.debug(
+                    "draw_inside_sensors: unexpected data payload type %s", type(data)
+                )
+        except Exception as e:
+            logging.warning(f"draw_inside_sensors: sensor read failed: {e}")
+
+    if temp_f is None:
+        env_primary = sensors.get("env_primary") if isinstance(sensors, dict) else None
+        t_c = _clean_metric(_extract_field(env_primary or {}, "temperature_c"))
+        if t_c is not None:
+            temp_f = t_c * 9.0 / 5.0 + 32.0
+
+    if temp_f is None:
+        logging.warning("draw_inside_sensors: temperature missing from sensor data")
+        return None
+
+    metrics = _build_supplemental_metric_entries(sensors)
+    if not metrics and cleaned:
+        metrics = _build_metric_entries(cleaned)
+    elif cleaned and len(metrics) < 3:
+        existing_labels = {entry["label"] for entry in metrics}
+        for entry in _build_metric_entries(cleaned):
+            if entry["label"] not in existing_labels:
+                metrics.append(entry)
+                existing_labels.add(entry["label"])
+
+    if not metrics:
+        logging.warning("draw_inside_sensors: no supplemental metrics available")
+        return None
+
+    subtitle_parts: List[str] = []
+    for key in ("env_primary", "ltr559", "lsm6ds"):
+        sensor_blob = sensors.get(key) if isinstance(sensors, dict) else None
+        if isinstance(sensor_blob, dict):
+            model = sensor_blob.get("sensor_model")
+            if model and model not in subtitle_parts:
+                subtitle_parts.append(model)
+    bus = blob.get("bus") if isinstance(blob, dict) else None
+    if bus is not None:
+        subtitle_parts.append(f"i2c-{bus}")
+
+    subtitle = " • ".join(subtitle_parts) or (provider or "")
+
+    return _render_inside_screen(
+        display,
+        transition,
+        title="Inside Sensors",
+        subtitle=subtitle,
+        temp_f=temp_f,
+        descriptor="",
+        metrics=metrics,
+    )
 
 
 if __name__ == "__main__":
