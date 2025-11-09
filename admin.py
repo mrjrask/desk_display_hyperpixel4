@@ -13,14 +13,21 @@ from typing import Dict, List, Optional
 from flask import Flask, jsonify, render_template
 
 from schedule import build_scheduler
+from paths import resolve_storage_paths
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
-SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
+
+_logger = logging.getLogger(__name__)
+_storage_paths = resolve_storage_paths(logger=_logger)
+SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
-app = Flask(__name__, static_folder="screenshots", static_url_path="/screenshots")
-_logger = logging.getLogger(__name__)
+app = Flask(
+    __name__,
+    static_folder=str(_storage_paths.screenshot_dir),
+    static_url_path="/screenshots",
+)
 _auto_render_lock = threading.Lock()
 _auto_render_done = False
 
