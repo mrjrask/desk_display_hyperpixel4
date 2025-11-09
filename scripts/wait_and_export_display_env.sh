@@ -58,6 +58,34 @@ detect_runtime_dir() {
     fi
   fi
 
+  # Fallback: scan the existing runtime directories for an active graphical session.
+  local candidate best_candidate
+  for candidate in /run/user/*; do
+    [ -d "${candidate}" ] || continue
+
+    # Avoid auto-selecting the root runtime dir if it does not already host sockets.
+    if [ "${candidate}" = "/run/user/0" ] && [ ! -e "${candidate}/bus" ] \
+      && ! compgen -G "${candidate}/wayland-*" >/dev/null 2>&1; then
+      continue
+    fi
+
+    if compgen -G "${candidate}/wayland-*" >/dev/null 2>&1; then
+      echo "${candidate}"
+      return 0
+    fi
+
+    if [ -S "${candidate}/bus" ]; then
+      best_candidate="${candidate}"
+    elif [ -z "${best_candidate:-}" ]; then
+      best_candidate="${candidate}"
+    fi
+  done
+
+  if [ -n "${best_candidate:-}" ]; then
+    echo "${best_candidate}"
+    return 0
+  fi
+
   echo "/run/user/${USER_ID}"
 }
 
@@ -76,7 +104,7 @@ if [ ! -d "${RUNTIME_DIR}" ]; then
 fi
 
 if [ ! -d "${RUNTIME_DIR}" ]; then
-  if [ "${RUNTIME_DIR}" = "/run/user/${USER_ID}" ]; then
+  if [ "${RUNTIME_DIR}" = "/run/user/${USER_ID}" ] && [ "${USER_ID}" -ne 0 ]; then
     log "Creating runtime dir for service user (${RUNTIME_DIR})."
     mkdir -p "${RUNTIME_DIR}"
     chmod 700 "${RUNTIME_DIR}"
