@@ -76,7 +76,11 @@ def _sanitize_filename_prefix(name: str) -> str:
 LOGO_SCREEN_HEIGHT = 370  # 80px base increased by 2.5x for team showcases
 
 
-def load_logo(filename: str, height: int = LOGO_SCREEN_HEIGHT) -> Optional[Image.Image]:
+def load_logo(
+    filename: str,
+    height: int = LOGO_SCREEN_HEIGHT,
+    width: Optional[int] = None,
+) -> Optional[Image.Image]:
     path = os.path.join(IMAGES_DIR, filename)
     try:
         with Image.open(path) as img:
@@ -86,8 +90,15 @@ def load_logo(filename: str, height: int = LOGO_SCREEN_HEIGHT) -> Optional[Image
             )
             target_mode = "RGBA" if has_transparency else "RGB"
             img = img.convert(target_mode)
-            ratio = height / img.height if img.height else 1
-            resized = img.resize((int(img.width * ratio), height), Image.ANTIALIAS)
+            if width is not None and img.width:
+                ratio = width / float(img.width)
+                target_w = max(1, int(round(img.width * ratio)))
+                target_h = max(1, int(round(img.height * ratio)))
+            else:
+                ratio = height / float(img.height) if img.height else 1
+                target_h = max(1, int(round(img.height * ratio))) if img.height else height
+                target_w = max(1, int(round(img.width * ratio))) if img.width else max(1, height)
+            resized = img.resize((target_w, target_h), Image.ANTIALIAS)
         return resized
     except Exception as exc:
         logging.warning("Logo load failed '%s': %s", filename, exc)
@@ -95,18 +106,26 @@ def load_logo(filename: str, height: int = LOGO_SCREEN_HEIGHT) -> Optional[Image
 
 
 def build_logo_map() -> Dict[str, Optional[Image.Image]]:
+    bears_logo = load_logo("bears.png")
+    team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
+
+    def _team_logo(path: str) -> Optional[Image.Image]:
+        if team_logo_width:
+            return load_logo(path, width=team_logo_width)
+        return load_logo(path)
+
     return {
         "weather logo": load_logo("weather.jpg"),
         "verano logo": load_logo("verano.jpg"),
-        "bears logo": load_logo("bears.png"),
+        "bears logo": bears_logo,
         "nfl logo": load_logo("nfl/nfl.png"),
-        "hawks logo": load_logo("hawks.jpg"),
+        "hawks logo": _team_logo("hawks.jpg"),
         "nhl logo": load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png"),
-        "cubs logo": load_logo("cubs.jpg"),
-        "sox logo": load_logo("sox.jpg"),
+        "cubs logo": _team_logo("cubs.jpg"),
+        "sox logo": _team_logo("sox.jpg"),
         "mlb logo": load_logo("mlb.jpg"),
         "nba logo": load_logo("nba/NBA.png"),
-        "bulls logo": load_logo("nba/CHI.png"),
+        "bulls logo": _team_logo("nba/CHI.png"),
     }
 
 

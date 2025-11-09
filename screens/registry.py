@@ -478,7 +478,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         lambda data=bulls.get("live"): draw_live_bulls_game(
             context.display, data, transition=True
         ),
-        available=True,
+        available=bool(bulls.get("live")),
     )
     register(
         "bulls next",

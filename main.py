@@ -78,6 +78,7 @@ from config import (
     WIDTH,
     HEIGHT,
     SCREEN_DELAY,
+    LOGO_SCREEN_DELAY,
     SCHEDULE_UPDATE_INTERVAL,
     FONT_DATE_SPORTS,
     ENABLE_SCREENSHOTS,
@@ -584,7 +585,7 @@ LOGO_SCREEN_HEIGHT = 148  # 80px base increased by ~85%
 DOUBLE_LOGO_SCREEN_HEIGHT = LOGO_SCREEN_HEIGHT * 2
 
 
-def load_logo(fn, height=LOGO_SCREEN_HEIGHT):
+def load_logo(fn, height=LOGO_SCREEN_HEIGHT, width: Optional[int] = None):
     path = os.path.join(IMAGES_DIR, fn)
     try:
         with Image.open(path) as img:
@@ -594,24 +595,38 @@ def load_logo(fn, height=LOGO_SCREEN_HEIGHT):
             )
             target_mode = "RGBA" if has_transparency else "RGB"
             img = img.convert(target_mode)
-            ratio = height / img.height if img.height else 1
-            resized = img.resize((int(img.width * ratio), height), Image.ANTIALIAS)
+            if width is not None and img.width:
+                ratio = width / float(img.width)
+                target_w = max(1, int(round(img.width * ratio)))
+                target_h = max(1, int(round(img.height * ratio)))
+            else:
+                ratio = height / float(img.height) if img.height else 1
+                target_h = max(1, int(round(img.height * ratio))) if img.height else height
+                target_w = max(1, int(round(img.width * ratio))) if img.width else max(1, height)
+            resized = img.resize((target_w, target_h), Image.ANTIALIAS)
         return resized
     except Exception as e:
         logging.warning(f"Logo load failed '{fn}': {e}")
         return None
 
-cubs_logo   = load_logo("cubs.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
-hawks_logo  = load_logo("hawks.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
-bulls_logo  = load_logo("nba/CHI.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
-sox_logo    = load_logo("sox.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+bears_logo  = load_logo("bears.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
+
+def _team_logo(fn: str) -> Optional[Image.Image]:
+    if team_logo_width:
+        return load_logo(fn, width=team_logo_width)
+    return load_logo(fn, height=DOUBLE_LOGO_SCREEN_HEIGHT)
+
+cubs_logo   = _team_logo("cubs.jpg")
+hawks_logo  = _team_logo("hawks.jpg")
+bulls_logo  = _team_logo("nba/CHI.png")
+sox_logo    = _team_logo("sox.jpg")
 weather_img = load_logo("weather.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 mlb_logo    = load_logo("mlb.jpg")
 nba_logo    = load_logo("nba/NBA.png")
 nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
 nfl_logo    = load_logo("nfl/nfl.png")
 verano_img  = load_logo("verano.jpg")
-bears_logo  = load_logo("bears.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 
 LOGOS = {
     "weather logo": weather_img,
@@ -843,7 +858,8 @@ def main_loop():
                     break
 
                 _last_screen_id = sid
-                skip_delay = _wait_with_button_checks(SCREEN_DELAY)
+                delay = LOGO_SCREEN_DELAY if "logo" in sid else SCREEN_DELAY
+                skip_delay = _wait_with_button_checks(delay)
 
             if _shutdown_event.is_set():
                 break

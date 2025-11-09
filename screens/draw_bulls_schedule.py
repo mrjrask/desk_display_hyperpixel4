@@ -171,6 +171,17 @@ def _center_wrapped_text(
     return total_height
 
 
+def _join_dateline_parts(*parts: Optional[str]) -> str:
+    pieces = []
+    for part in parts:
+        if not isinstance(part, str):
+            continue
+        text = part.strip()
+        if text:
+            pieces.append(text)
+    return " • ".join(pieces)
+
+
 def _draw_title_line(draw: ImageDraw.ImageDraw, y: int, text: str) -> int:
     if not text:
         return 0
@@ -388,8 +399,8 @@ def _draw_scoreboard(
 
     col1_w = min(WIDTH - 40, max(120, int(WIDTH * 0.7)))
     remaining = max(40, WIDTH - col1_w)
-    col2_w = max(64, int(round(remaining * 0.58)))
-    col3_w = max(48, WIDTH - col1_w - col2_w)
+    col2_w = max(48, int(round(remaining * 0.55)))
+    col3_w = max(32, WIDTH - col1_w - col2_w)
     if col1_w + col2_w + col3_w != WIDTH:
         col3_w = WIDTH - col1_w - col2_w
     x0, x1, x2, x3 = 0, col1_w, col1_w + col2_w, WIDTH
@@ -398,8 +409,8 @@ def _draw_scoreboard(
     base_row_height = max(96, int(round(HEIGHT * 0.28)))
 
     header_font = FONT_SMALL
-    header_h = _text_h(draw, header_font) + 6 if has_record else 0
-    available_for_rows = max(0, total_available - header_h)
+    header_h = 0
+    available_for_rows = total_available
 
     if available_for_rows > 0:
         row_h = max(available_for_rows // 2, base_row_height)
@@ -409,16 +420,36 @@ def _draw_scoreboard(
     if available_for_rows and row_h * 2 > available_for_rows:
         row_h = max(64, available_for_rows // 2)
 
-    def _font_sizes(row_height: int) -> Tuple[int, int, int]:
+    def _font_sizes(row_height: int) -> Tuple[int, int, int, int]:
         name_size = max(36, int(round(row_height * 0.45)))
-        score_size = max(48, int(round(row_height * 0.68)))
-        record_size = max(28, int(round(row_height * 0.4)))
-        return name_size, score_size, record_size
+        score_size = max(44, int(round(row_height * 0.65)))
+        record_size = max(32, int(round(row_height * 0.45)))
+        header_size = max(24, int(round(row_height * 0.30))) if has_record else 0
+        return name_size, score_size, record_size, header_size
 
-    name_size, score_size, record_size = _font_sizes(row_h)
+    name_size, score_size, record_size, header_size = _font_sizes(row_h)
+    if has_record and header_size:
+        header_font = _ts(header_size)
+        header_h = _text_h(draw, header_font) + 6
+        available_for_rows = max(0, total_available - header_h)
+    else:
+        available_for_rows = max(0, total_available)
+
+    if available_for_rows > 0:
+        row_h = max(available_for_rows // 2, row_h)
+        row_h = min(row_h, available_for_rows)
+    if available_for_rows and row_h * 2 > available_for_rows:
+        row_h = max(64, available_for_rows // 2)
+
+    name_size, score_size, record_size, header_size = _font_sizes(row_h)
     name_font = _ts(name_size)
     score_font = _ts(score_size)
     record_font = _ts(record_size)
+    if has_record and header_size:
+        header_font = _ts(header_size)
+        header_h = _text_h(draw, header_font) + 6
+    else:
+        header_h = 0
 
     table_top = top_y
     table_height = header_h + row_h * 2
@@ -518,7 +549,9 @@ def _draw_scoreboard(
 
         text_h = _text_h(draw, name_font)
         text_w = _text_w(draw, text, name_font)
-        tx = min(lx, x1 - text_w - 6)
+        tx = lx
+        max_tx = x1 - text_w - 6
+        tx = min(tx, max_tx)
         tx = max(tx, x0 + 6)
         ty = cy - text_h // 2
         draw.text((tx, ty), text, font=name_font, fill=TEXT_COLOR)
@@ -591,7 +624,7 @@ def _format_footer_next(game: Dict) -> str:
         time_fmt = "%-I:%M %p" if os.name != "nt" else "%#I:%M %p"
         date_part = start.strftime(date_fmt)
         time_part = start.strftime(time_fmt).replace(" 0", " ").lstrip("0")
-        return f"{date_part} · {time_part}"
+        return _join_dateline_parts(date_part, time_part)
 
     label = _relative_label(_get_official_date(game))
     return label
@@ -628,54 +661,78 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     bottom_y = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
     available_h = max(10, bottom_y - (y + 2))
-    logo_h = max(1, min(NEXT_GAME_LOGO_FONT_SIZE, available_h))
-
-    def _resize_logo(logo: Optional[Image.Image]) -> Optional[Image.Image]:
-        if logo is None:
-            return None
-        try:
-            w, h = logo.size
-            if h == logo_h:
-                return logo
-            r = logo_h / float(h)
-            return logo.resize((max(1, int(round(w * r))), logo_h), Image.LANCZOS)
-        except Exception:
-            return logo
-
-    away_logo = _resize_logo(away_logo)
-    home_logo = _resize_logo(home_logo)
+    max_logo_height = max(36, min(available_h, int(round(HEIGHT * 0.6))))
+    base_away_logo = _load_logo_cached(away.get("tri"), max_logo_height)
+    base_home_logo = _load_logo_cached(home.get("tri"), max_logo_height)
 
     at_txt = "@"
     at_w = _text_w(draw, at_txt, FONT_NEXT_OPP)
-    at_h = _text_h(draw, FONT_NEXT_OPP)
-    row_top = y + 2
-    row_height = logo_h
+    max_width = WIDTH - 24
+    spacing_ratio = 0.16
 
-    total_width = (away_logo.width if away_logo else 0) + (home_logo.width if home_logo else 0) + at_w + 24
-    start_x = max(0, (WIDTH - total_width) // 2)
+    def _scaled(logo: Optional[Image.Image], height: int) -> Optional[Image.Image]:
+        if logo is None:
+            return None
+        if logo.height == height:
+            return logo
+        ratio = height / float(logo.height)
+        return logo.resize((max(1, int(round(logo.width * ratio))), height), Image.LANCZOS)
 
-    cy = row_top + row_height // 2
+    def _text_width(text: str) -> int:
+        return _text_w(draw, text, FONT_NEXT_OPP)
 
-    if away_logo:
-        ay = cy - away_logo.height // 2
-        img.paste(away_logo, (start_x, ay), away_logo)
-        start_x += away_logo.width + 12
-    else:
-        tri = away.get("tri") or "AWY"
-        draw.text((start_x, cy - _text_h(draw, FONT_NEXT_OPP) // 2), tri, font=FONT_NEXT_OPP, fill=TEXT_COLOR)
-        start_x += _text_w(draw, tri, FONT_NEXT_OPP) + 12
+    min_height = 34
+    best_layout: Optional[tuple[int, int, Optional[Image.Image], Optional[Image.Image]]] = None
+    starting_height = min(max_logo_height, max(min_height, available_h))
+    for test_h in range(int(starting_height), min_height - 1, -2):
+        spacing = max(12, int(round(test_h * spacing_ratio)))
+        away_option = _scaled(base_away_logo, test_h)
+        home_option = _scaled(base_home_logo, test_h)
+        total = at_w + spacing * 2
+        total += away_option.width if away_option else _text_width(away.get("tri") or "AWY")
+        total += home_option.width if home_option else _text_width(home.get("tri") or "HOME")
+        if total <= max_width:
+            best_layout = (test_h, spacing, away_option, home_option)
+            break
 
-    at_x = start_x
-    at_y = cy - at_h // 2
-    draw.text((at_x, at_y), at_txt, font=FONT_NEXT_OPP, fill=TEXT_COLOR)
-    start_x += at_w + 12
+    if best_layout is None:
+        fallback_h = max(min_height, int(round(starting_height * 0.85)))
+        spacing = max(10, int(round(fallback_h * spacing_ratio)))
+        best_layout = (
+            fallback_h,
+            spacing,
+            _scaled(base_away_logo, fallback_h),
+            _scaled(base_home_logo, fallback_h),
+        )
 
-    if home_logo:
-        hy = cy - home_logo.height // 2
-        img.paste(home_logo, (start_x, hy), home_logo)
-    else:
-        tri = home.get("tri") or "HOME"
-        draw.text((start_x, cy - _text_h(draw, FONT_NEXT_OPP) // 2), tri, font=FONT_NEXT_OPP, fill=TEXT_COLOR)
+    logo_h, spacing, away_logo, home_logo = best_layout
+    block_h = logo_h
+    y_top = y + 2
+    available_space = max(0, bottom_y - y_top)
+    centered_top = y_top + max(0, (available_space - block_h) // 2)
+    row_y = min(max(y_top + 1, centered_top), max(y_top + 1, bottom_y - block_h - 1))
+
+    elements = [
+        away_logo if away_logo else (away.get("tri") or "AWY"),
+        at_txt,
+        home_logo if home_logo else (home.get("tri") or "HOME"),
+    ]
+    total_w = sum(
+        el.width if isinstance(el, Image.Image) else _text_width(str(el))
+        for el in elements
+    ) + spacing * (len(elements) - 1)
+    start_x = max(0, (WIDTH - total_w) // 2)
+
+    for el in elements:
+        if isinstance(el, Image.Image):
+            img.paste(el, (start_x, row_y), el)
+            start_x += el.width + spacing
+        else:
+            w_txt = _text_width(str(el))
+            h_txt = _text_h(draw, FONT_NEXT_OPP)
+            ty = row_y + (block_h - h_txt) // 2
+            draw.text((start_x, ty), str(el), font=FONT_NEXT_OPP, fill=TEXT_COLOR)
+            start_x += w_txt + spacing
 
     if bottom_text:
         by = HEIGHT - _text_h(draw, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
