@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw
 from config import (
     WIDTH,
     HEIGHT,
+    IS_SQUARE_DISPLAY,
     FONT_TITLE_SPORTS,
     FONT_TEAM_SPORTS,
     FONT_STATUS,
@@ -65,9 +66,13 @@ COL_X = [_COL_LEFT]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 75)
-STATUS_FONT             = clone_font(FONT_STATUS, 42)
-CENTER_FONT             = clone_font(FONT_STATUS, 54)
+_SCORE_PT = 75 - (4 if IS_SQUARE_DISPLAY else 0)
+_STATUS_PT = 42 - (4 if IS_SQUARE_DISPLAY else 0)
+_CENTER_PT = 54 - (4 if IS_SQUARE_DISPLAY else 0)
+
+SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, _SCORE_PT)
+STATUS_FONT             = clone_font(FONT_STATUS, max(8, _STATUS_PT))
+CENTER_FONT             = clone_font(FONT_STATUS, max(8, _CENTER_PT))
 TITLE_FONT              = FONT_TITLE_SPORTS
 LOGO_HEIGHT             = 150
 LOGO_DIR                = os.path.join(IMAGES_DIR, "nhl")
