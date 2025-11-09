@@ -30,9 +30,10 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 
 ## Requirements
 
-- Raspberry Pi (tested on Pi Zero/Zero 2 W)
+- Raspberry Pi (tested on Pi Zero/Zero 2 W, Pi 4, and Pi 5)
+- Raspberry Pi OS Bookworm or Trixie (64-bit) with Wayland enabled – legacy X11 sessions continue to work via the service gate
 - Pimoroni **HyperPixel 4.0 Square (720×720 LCD)** or **HyperPixel 4.0 (800×480 LCD)** wired to SPI0
-- Python 3.9+
+- Python 3.11+ (Bookworm ships 3.11; Trixie ships 3.12)
 - Packages (install via apt / pip):
   ```bash
   sudo apt-get update
@@ -41,7 +42,8 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
       build-essential libjpeg-dev libopenblas0 libopenblas-dev \
       libopenjp2-7-dev libtiff5-dev libcairo2-dev libpango1.0-dev \
       libgdk-pixbuf2.0-dev libffi-dev network-manager wireless-tools \
-      i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git
+      i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git \
+      libatlas-base-dev libegl1-mesa libgles2-mesa libdrm2
   ```
 
   Create and activate a virtual environment before installing the Python dependencies:
@@ -72,6 +74,14 @@ pip install -r requirements.txt
 ```
 
 The `venv` directory is ignored by Git. Re-run `source venv/bin/activate` whenever you start a new shell session to ensure the project uses the isolated Python environment.
+
+### Raspberry Pi OS Bookworm/Trixie quickstart (Pi 4 & Pi 5)
+
+1. Flash the 64-bit edition of Raspberry Pi OS **Bookworm** or **Trixie** and enable desktop autologin so a graphical session starts at boot.
+2. Run `sudo raspi-config`, enable **SPI**, **I²C**, and the **GL (Full KMS)** driver, then reboot.
+3. Install Pimoroni’s HyperPixel overlay (`curl https://get.pimoroni.com/hyperpixel4 | bash`) or manually add `dtoverlay=hyperpixel4` to `/boot/firmware/config.txt` and reboot.
+4. Install the apt packages listed above, clone this repository, and create the virtual environment (`python -m venv venv && source venv/bin/activate`).
+5. For Pi 5 systems running Wayland, no additional tweaks are required; the included service gate script auto-detects Wayland and X11 sessions. To force legacy X11, set `DESK_DISPLAY_FORCE_X11=1` in `/home/pi/desk_display/.env`.
 
 ---
 
@@ -332,23 +342,25 @@ Create `/etc/systemd/system/desk_display.service`:
 
 ```ini
 [Unit]
-Description=Desk Display Service - main
-After=network-online.target
+Description=Desk Display (user) - main
+After=graphical-session.target network-online.target
+Wants=graphical-session.target
 
 [Service]
+User=pi
 WorkingDirectory=/home/pi/desk_display
+Environment=DISPLAY_PROFILE=hyperpixel4_square
+EnvironmentFile=-/home/pi/desk_display/.env
+EnvironmentFile=-/run/user/%U/desk_display.env
+SupplementaryGroups=video render input gpio i2c spi
+ExecStartPre=/home/pi/desk_display/scripts/wait_and_export_display_env.sh
 ExecStart=/home/pi/desk_display/venv/bin/python /home/pi/desk_display/main.py
 ExecStop=/bin/bash -lc '/home/pi/desk_display/cleanup.sh'
 Restart=always
-User=pi
-# Uncomment the next line if you store secrets in /home/pi/desk_display/.env
-# (the leading dash keeps systemd happy when the file is missing during setup).
-#EnvironmentFile=-/home/pi/desk_display/.env
-# Uncomment the next line to use systemd's user runtime dir (recommended on Raspberry Pi OS)
-#Environment=XDG_RUNTIME_DIR=/run/user/%U
+RestartSec=3
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 ```
 
 Enable & start:
@@ -373,13 +385,9 @@ chmod +x /home/pi/desk_display/cleanup.sh
 into the archive folders. The service is marked `Restart=always`, so crashes or manual restarts via `systemctl restart` will
 trigger a fresh boot after cleanup completes.
 
-If the unit refuses to start, check the logs with `journalctl -u desk_display.service -b` or `systemctl status desk_display.service`.
-Systemd stops when a referenced `EnvironmentFile` is missing; either create the `.env` file or use the dashed form shown above so
-the service can boot without it.
+If the unit refuses to start, check the logs with `journalctl -u desk_display.service -b` or `systemctl status desk_display.service`. The `wait_and_export_display_env.sh` gate emits verbose logs showing which display backend (Wayland or X11) was selected, the `XDG_RUNTIME_DIR` it discovered, and any failures while probing DRM connectors. When running under X11, the gate now exports `XAUTHORITY` automatically so pygame can authenticate with the display server.
 
-The application now falls back to a private runtime directory under `/tmp` when `XDG_RUNTIME_DIR` is missing so SDL/pygame can
-start even when launched outside a login session. Setting the environment variable explicitly (see commented example above)
-restores the standard `/run/user/<uid>` path and avoids the fallback warning.
+Systemd stops when a referenced `EnvironmentFile` is missing; either create the `.env` file or keep the dashed form shown above so the service can boot without it. The dynamically generated `/run/user/%U/desk_display.env` file is produced by the gate script before every launch.
 
 ### Display HAT Mini controls
 
