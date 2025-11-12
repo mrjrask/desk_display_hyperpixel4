@@ -20,3 +20,7 @@ adafruit-circuitpython-bme280
 pimoroni-bme280
 -e ./vendor/bme68x
 pygame
+ltr559 
+pimoroni-bme280 
+lsm6dsox
+smbus2
