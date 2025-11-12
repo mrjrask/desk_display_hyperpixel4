@@ -46,14 +46,6 @@ def _ts(size: int) -> ImageFont.ImageFont:
             return ImageFont.load_default()
 
 
-_ABBR_BASE = 33 if HEIGHT > 64 else 30
-_SCORE_BASE = 30 if HEIGHT > 64 else 26
-
-_ABBR_FONT_SIZE = int(round(_ABBR_BASE * 1.3))
-_SCORE_FONT_SIZE = int(round(_SCORE_BASE * 1.45))
-
-FONT_ABBR = _ts(_ABBR_FONT_SIZE)
-FONT_SCORE = _ts(_SCORE_FONT_SIZE)
 FONT_SMALL = _ts(22 if HEIGHT > 64 else 19)
 
 FONT_TITLE = FONT_TITLE_SPORTS
@@ -295,12 +287,66 @@ def _record_text_from_entry(entry: Dict[str, Any]) -> str:
     return ""
 
 
+def _team_nickname(team_info: Dict[str, Any], *, fallback: str = "") -> str:
+    if not isinstance(team_info, dict):
+        return fallback
+
+    def _clean(value: Optional[str]) -> str:
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                return text
+        return ""
+
+    for key in ("teamName", "nickname", "shortDisplayName", "shortName"):
+        text = _clean(team_info.get(key))
+        if text:
+            return text
+
+    display = _clean(team_info.get("displayName"))
+    location = _clean(team_info.get("location")) or _clean(team_info.get("city")) or _clean(team_info.get("market"))
+    name = _clean(team_info.get("name"))
+
+    def _without_location(text: str) -> str:
+        if not text:
+            return ""
+        lowered = text.lower()
+        if location and lowered.startswith(location.lower()):
+            trimmed = text[len(location) :].strip(" -")
+            if trimmed:
+                return trimmed
+        return ""
+
+    trimmed_display = _without_location(display)
+    if trimmed_display:
+        return trimmed_display
+
+    trimmed_name = _without_location(name)
+    if trimmed_name:
+        return trimmed_name
+
+    if name:
+        parts = name.split()
+        if len(parts) > 1:
+            return " ".join(parts[1:]).strip()
+        return name
+
+    if display:
+        parts = display.split()
+        if len(parts) > 1:
+            return " ".join(parts[1:]).strip()
+        return display
+
+    return fallback
+
+
 def _team_entry(game: Dict, side: str) -> Dict[str, Optional[str]]:
     teams = game.get("teams") or {}
     entry = teams.get(side) or {}
     team_info = entry.get("team") if isinstance(entry.get("team"), dict) else {}
     tri = (team_info.get("triCode") or team_info.get("abbreviation") or "").upper()
     name = team_info.get("name") or ""
+    nickname = _team_nickname(team_info, fallback=name or tri)
     team_id = str(team_info.get("id") or "")
     score_raw = entry.get("score")
     try:
@@ -310,6 +356,7 @@ def _team_entry(game: Dict, side: str) -> Dict[str, Optional[str]]:
     return {
         "tri": tri,
         "name": name,
+        "nickname": nickname,
         "id": team_id,
         "score": score,
         "record": _record_text_from_entry(entry),
@@ -347,16 +394,6 @@ def _status_text(game: Dict) -> str:
     return str(status.get("detailedState") or status.get("abstractGameState") or "").strip()
 
 
-def _live_status(game: Dict) -> str:
-    linescore = game.get("linescore") or {}
-    clock = (linescore.get("currentPeriodTimeRemaining") or "").strip()
-    period = (linescore.get("currentPeriodOrdinal") or "").strip()
-    pieces = [piece for piece in (clock, period) if piece]
-    if not pieces:
-        return _status_text(game) or "Live"
-    return " • ".join(pieces)
-
-
 def _render_message(title: str, message: str) -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(img)
@@ -368,6 +405,9 @@ def _render_message(title: str, message: str) -> Image.Image:
 
 
 def _team_scoreboard_label(team: Dict[str, Optional[str]]) -> str:
+    label = (team.get("nickname") or "").strip()
+    if label:
+        return label
     name = (team.get("name") or "").strip()
     if name:
         return name
@@ -377,13 +417,19 @@ def _team_scoreboard_label(team: Dict[str, Optional[str]]) -> str:
     return "—"
 
 
-def _team_record_value(team: Dict[str, Optional[str]]) -> str:
-    record = team.get("record")
-    if isinstance(record, str):
-        text = record.strip()
-        if text:
-            return text
-    return "-"
+def _ellipsize_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    max_width: int,
+) -> str:
+    if _text_w(draw, text, font) <= max_width:
+        return text
+    ellipsis = "…"
+    trimmed = text
+    while trimmed and _text_w(draw, trimmed + ellipsis, font) > max_width:
+        trimmed = trimmed[:-1]
+    return (trimmed + ellipsis) if trimmed else ellipsis
 
 
 def _draw_scoreboard(
@@ -395,181 +441,106 @@ def _draw_scoreboard(
     *,
     bottom_reserved_px: int = 0,
 ) -> int:
-    has_record = any(isinstance(team.get("record"), str) and team.get("record") for team in (away, home))
+    padding_x = 18
+    row_gap = 8
+    bottom_limit = HEIGHT - bottom_reserved_px
+    available = max(0, bottom_limit - top_y)
 
-    col1_w = min(WIDTH - 40, max(120, int(WIDTH * 0.7)))
-    remaining = max(40, WIDTH - col1_w)
-    col2_w = max(48, int(round(remaining * 0.55)))
-    col3_w = max(32, WIDTH - col1_w - col2_w)
-    if col1_w + col2_w + col3_w != WIDTH:
-        col3_w = WIDTH - col1_w - col2_w
-    x0, x1, x2, x3 = 0, col1_w, col1_w + col2_w, WIDTH
-
-    total_available = max(0, HEIGHT - bottom_reserved_px - top_y)
-    base_row_height = max(96, int(round(HEIGHT * 0.28)))
-
-    header_font = FONT_SMALL
-    header_h = 0
-    available_for_rows = total_available
-
-    if available_for_rows > 0:
-        row_h = max(available_for_rows // 2, base_row_height)
-        row_h = min(row_h, available_for_rows)
-    else:
-        row_h = base_row_height
-    if available_for_rows and row_h * 2 > available_for_rows:
-        row_h = max(64, available_for_rows // 2)
-
-    def _font_sizes(row_height: int) -> Tuple[int, int, int, int]:
-        name_size = max(36, int(round(row_height * 0.45)))
-        score_size = max(44, int(round(row_height * 0.65)))
-        record_size = max(32, int(round(row_height * 0.45)))
-        header_size = max(24, int(round(row_height * 0.30))) if has_record else 0
-        return name_size, score_size, record_size, header_size
-
-    name_size, score_size, record_size, header_size = _font_sizes(row_h)
-    if has_record and header_size:
-        header_font = _ts(header_size)
-        header_h = _text_h(draw, header_font) + 6
-        available_for_rows = max(0, total_available - header_h)
-    else:
-        available_for_rows = max(0, total_available)
-
-    if available_for_rows > 0:
-        row_h = max(available_for_rows // 2, row_h)
-        row_h = min(row_h, available_for_rows)
-    if available_for_rows and row_h * 2 > available_for_rows:
-        row_h = max(64, available_for_rows // 2)
-
-    name_size, score_size, record_size, header_size = _font_sizes(row_h)
-    name_font = _ts(name_size)
-    score_font = _ts(score_size)
-    record_font = _ts(record_size)
-    if has_record and header_size:
-        header_font = _ts(header_size)
-        header_h = _text_h(draw, header_font) + 6
-    else:
-        header_h = 0
+    min_row_height = max(68, int(round(HEIGHT * 0.18)))
+    preferred_row_height = int(round(HEIGHT * 0.24))
+    row_h = max(min_row_height, preferred_row_height)
+    if available:
+        row_h = min(row_h, max(min_row_height, available // 2))
+    total_height = row_h * 2 + row_gap
+    if available and total_height > available:
+        row_h = max(min_row_height, (available - row_gap) // 2)
+        total_height = row_h * 2 + row_gap
 
     table_top = top_y
-    table_height = header_h + row_h * 2
-    if total_available:
-        table_height = min(table_height, total_available)
-    if table_height < header_h + 2:
-        table_height = header_h + 2
-    table_bottom = min(table_top + table_height, HEIGHT - bottom_reserved_px)
-    header_bottom = table_top + header_h
-    row_area_height = max(2, table_bottom - header_bottom)
-    row1_h = max(1, row_area_height // 2)
-    row2_h = max(1, row_area_height - row1_h)
+    if available and total_height < available:
+        table_top += (available - total_height) // 2
+    table_bottom = min(bottom_limit, table_top + total_height)
 
-    row1_top = header_bottom
-    row2_top = row1_top + row1_h
+    score_font_size = max(38, int(round(row_h * 0.6)))
+    name_font_size = max(26, int(round(row_h * 0.42)))
+    min_name_size = max(20, int(round(row_h * 0.32)))
+    abbr_font_size = max(24, int(round(row_h * 0.45)))
 
-    logo_target = max(48, int(round(max(row1_h, row2_h) * 0.85)))
+    score_font = _ts(score_font_size)
+    abbr_font = _ts(abbr_font_size)
 
-    def _prepare(info: Dict[str, Optional[str]], top: int, height: int) -> Dict[str, Any]:
-        tri = (info.get("tri") or "").upper()
-        score = info.get("score")
-        logo_height = max(1, min(height - 6, logo_target))
+    def _row_spec(team: Dict[str, Optional[str]], row_top: int) -> Dict[str, Any]:
+        tri = (team.get("tri") or "").upper()
+        logo_height = max(36, int(round(row_h * 0.7)))
         logo = _load_logo_cached(tri, logo_height)
-        label = _team_scoreboard_label(info)
-        logo_w = logo.width if logo else 0
-        text_start = x0 + 12 + (logo_w + 8 if logo else 0)
-        max_width = max(1, x1 - text_start - 6)
+        label = _team_scoreboard_label(team)
+        score = team.get("score")
         return {
             "tri": tri,
-            "score": score,
             "logo": logo,
             "label": label,
-            "record": _team_record_value(info),
-            "top": top,
-            "height": height,
-            "max_width": max_width,
+            "score": score,
+            "top": row_top,
         }
 
+    row1_top = table_top
+    row2_top = table_top + row_h + row_gap
     specs = [
-        _prepare(away, row1_top, row1_h),
-        _prepare(home, row2_top, row2_h),
+        _row_spec(away, row1_top),
+        _row_spec(home, row2_top),
     ]
 
-    def _fits(font: ImageFont.ImageFont) -> bool:
-        for spec in specs:
-            text = spec["label"]
-            if not text:
-                continue
-            if _text_w(draw, text, font) > spec["max_width"]:
-                return False
-        return True
-
-    if not _fits(name_font):
-        start_size = getattr(name_font, "size", name_size)
-        min_size = max(20, int(round(start_size * 0.5)))
-        chosen = None
-        for test_size in range(start_size - 1, min_size - 1, -1):
-            candidate = _ts(test_size)
-            if _fits(candidate):
-                chosen = candidate
-                break
-        if chosen is not None:
-            name_font = chosen
-
-    if has_record and header_h:
-        header_y = table_top + (header_h - _text_h(draw, header_font)) // 2
-        header_text = "REC"
-        hw = _text_w(draw, header_text, header_font)
-        draw.text(
-            (x2 + (col3_w - hw) // 2, header_y),
-            header_text,
-            font=header_font,
-            fill=TEXT_COLOR,
-        )
-
+    score_right = WIDTH - padding_x
     for spec in specs:
-        cy = spec["top"] + spec["height"] // 2
-        lx = x0 + 12
+        row_top = spec["top"]
+        cy = row_top + row_h // 2
+
         logo = spec["logo"]
+        text_x = padding_x
         if logo is not None:
             lw, lh = logo.size
             ly = cy - lh // 2
             try:
-                img.paste(logo, (lx, ly), logo)
+                img.paste(logo, (text_x, ly), logo)
             except Exception:
                 pass
-            lx += lw + 8
-
-        text = spec["label"] or "—"
-        max_width = spec["max_width"]
-        if _text_w(draw, text, name_font) > max_width:
-            ellipsis = "…"
-            trimmed = text
-            while trimmed and _text_w(draw, trimmed + ellipsis, name_font) > max_width:
-                trimmed = trimmed[:-1]
-            text = (trimmed + ellipsis) if trimmed else ellipsis
-
-        text_h = _text_h(draw, name_font)
-        text_w = _text_w(draw, text, name_font)
-        tx = lx
-        max_tx = x1 - text_w - 6
-        tx = min(tx, max_tx)
-        tx = max(tx, x0 + 6)
-        ty = cy - text_h // 2
-        draw.text((tx, ty), text, font=name_font, fill=TEXT_COLOR)
+            text_x += lw + 12
+        else:
+            abbr = spec["tri"] or "—"
+            abbr_w = _text_w(draw, abbr, abbr_font)
+            abbr_h = _text_h(draw, abbr_font)
+            ax = text_x
+            ay = cy - abbr_h // 2
+            draw.text((ax, ay), abbr, font=abbr_font, fill=TEXT_COLOR)
+            text_x += abbr_w + 12
 
         score = spec["score"]
         score_txt = "-" if score is None else str(score)
-        sw = _text_w(draw, score_txt, score_font)
-        sh = _text_h(draw, score_font)
-        sx = x1 + (col2_w - sw) // 2
-        sy = cy - sh // 2
-        draw.text((sx, sy), score_txt, font=score_font, fill=TEXT_COLOR)
+        score_w = _text_w(draw, score_txt, score_font)
+        score_h = _text_h(draw, score_font)
+        score_x = score_right - score_w
+        min_gap = 24
+        if score_x - text_x < min_gap:
+            score_x = text_x + min_gap
+            if score_x + score_w > score_right:
+                score_x = score_right - score_w
+        score_y = cy - score_h // 2
+        draw.text((score_x, score_y), score_txt, font=score_font, fill=TEXT_COLOR)
 
-        record_txt = spec["record"] or "-"
-        rw = _text_w(draw, record_txt, record_font)
-        rh = _text_h(draw, record_font)
-        rx = x2 + (col3_w - rw) // 2
-        ry = cy - rh // 2
-        draw.text((rx, ry), record_txt, font=record_font, fill=TEXT_COLOR)
+        label_max_w = max(0, score_x - 12 - text_x)
+        label_text = spec["label"] or "—"
+        if label_max_w > 0 and label_text:
+            current_size = name_font_size
+            label_font = _ts(current_size)
+            while current_size > min_name_size and _text_w(draw, label_text, label_font) > label_max_w:
+                current_size -= 1
+                label_font = _ts(current_size)
+            label_text = _ellipsize_text(draw, label_text, label_font, label_max_w)
+            label_w = _text_w(draw, label_text, label_font)
+            label_h = _text_h(draw, label_font)
+            label_x = text_x
+            label_y = cy - label_h // 2
+            draw.text((label_x, label_y), label_text, font=label_font, fill=TEXT_COLOR)
 
     return table_bottom
 
@@ -607,14 +578,9 @@ def _render_scoreboard(
 
 
 def _format_footer_last(game: Dict) -> str:
-    date_obj = _get_official_date(game)
-    label = _relative_label(date_obj)
-    if label:
-        return label
-    if isinstance(date_obj, dt.date):
-        fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
-        return date_obj.strftime(fmt)
-    return ""
+    date_text = _format_game_date(game)
+    status_text = _final_status_label(game)
+    return _join_dateline_parts(date_text, status_text)
 
 
 def _format_footer_next(game: Dict) -> str:
@@ -628,6 +594,63 @@ def _format_footer_next(game: Dict) -> str:
 
     label = _relative_label(_get_official_date(game))
     return label
+
+
+def _format_game_date(game: Dict) -> str:
+    date_obj = _get_official_date(game)
+    if isinstance(date_obj, dt.date):
+        fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
+        return date_obj.strftime(fmt)
+    return ""
+
+
+def _final_status_label(game: Dict) -> str:
+    status = game.get("status") or {}
+    status_type = status.get("type") if isinstance(status.get("type"), dict) else {}
+
+    text = _status_text(game)
+    if isinstance(status_type, dict):
+        for key in ("shortDetail", "detail", "description", "name"):
+            value = status_type.get(key)
+            if isinstance(value, str) and value.strip():
+                text = value.strip()
+                break
+
+    if isinstance(text, str):
+        upper = text.upper().strip()
+        if upper.startswith("FINAL"):
+            suffix = upper[5:].strip()
+            suffix = suffix.replace("OVERTIME", "OT")
+            suffix = suffix.replace(" ", "")
+            if suffix and not suffix.startswith("/"):
+                suffix = f"/{suffix}"
+            return f"F{suffix}" if suffix else "F"
+        if upper == "F" or upper.startswith("F/"):
+            return upper
+
+    linescore = game.get("linescore") or {}
+    final_period = linescore.get("finalPeriod") or linescore.get("currentPeriod")
+    try:
+        period_val = int(final_period)
+    except (TypeError, ValueError):
+        period_val = None
+    if isinstance(period_val, int) and period_val > 4:
+        ot = period_val - 4
+        if ot <= 1:
+            return "F/OT"
+        return f"F/{ot}OT"
+
+    return "F"
+
+
+def _format_footer_live(game: Dict) -> str:
+    linescore = game.get("linescore") or {}
+    period = (linescore.get("currentPeriodOrdinal") or "").strip()
+    clock = (linescore.get("currentPeriodTimeRemaining") or "").strip()
+    pieces = [piece for piece in (period, clock) if piece]
+    if pieces:
+        return " • ".join(pieces)
+    return _status_text(game)
 
 
 def _format_matchup_line(game: Dict) -> str:
@@ -785,8 +808,8 @@ def draw_live_bulls_game(display, game: Optional[Dict], transition: bool = False
         img = _render_message("Bulls Live:", "Not in progress")
         return _push(display, img, transition=transition)
 
-    footer = _relative_label(_get_official_date(game))
-    img = _render_scoreboard(game, title="Bulls Live:", footer=footer, inline_status=_live_status(game))
+    footer = _format_footer_live(game)
+    img = _render_scoreboard(game, title="Bulls Live:", footer=footer)
     return _push(display, img, transition=transition)
 
 
