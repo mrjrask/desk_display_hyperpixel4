@@ -21,13 +21,17 @@ from config import (
     NBA_TEAM_ID,
     NBA_TEAM_TRICODE,
     NEXT_GAME_LOGO_FONT_SIZE,
+    SCOREBOARD_NAME_FONT_MIN_SIZE,
+    SCOREBOARD_NAME_FONT_RATIO,
+    SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK,
+    SCOREBOARD_NAME_FONT_RATIO_FALLBACK,
     TIMES_SQUARE_FONT_PATH,
     WIDTH,
     HEIGHT,
     CENTRAL_TIME,
 )
 
-from utils import clear_display, load_team_logo
+from utils import clear_display, load_team_logo, draw_persistent_time
 
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NBA_DIR = NBA_IMAGES_DIR
@@ -401,6 +405,7 @@ def _render_message(title: str, message: str) -> Image.Image:
     y += _draw_title_line(draw, y, title)
     y += 4
     _center_wrapped_text(draw, y, message, FONT_BOTTOM, max_width=WIDTH - 8)
+    draw_persistent_time(img, draw)
     return img
 
 
@@ -462,8 +467,8 @@ def _draw_scoreboard(
     table_bottom = min(bottom_limit, table_top + total_height)
 
     score_font_size = max(38, int(round(row_h * 0.6)))
-    name_font_size = max(26, int(round(row_h * 0.42)))
-    min_name_size = max(20, int(round(row_h * 0.32)))
+    name_font_size = max(SCOREBOARD_NAME_FONT_MIN_SIZE, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO)))
+    min_name_size = max(SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK)))
     abbr_font_size = max(24, int(round(row_h * 0.45)))
 
     score_font = _ts(score_font_size)
@@ -574,6 +579,7 @@ def _render_scoreboard(
         by = HEIGHT - _text_h(draw, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
         _center_text(draw, by, bottom_text, FONT_BOTTOM)
 
+    draw_persistent_time(img, draw)
     return img
 
 
@@ -761,6 +767,7 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
         by = HEIGHT - _text_h(draw, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
         _center_text(draw, by, bottom_text, FONT_BOTTOM)
 
+    draw_persistent_time(img, draw)
     return img
 
 

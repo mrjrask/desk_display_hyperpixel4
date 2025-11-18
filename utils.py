@@ -642,6 +642,77 @@ def temperature_color(temp_f: float, lo: float = 50.0, hi: float = 80.0) -> tupl
         b = int(180 + (0 - 180) * alpha)
     return (r, g, b)
 
+
+def draw_persistent_time(img: Image.Image, draw: ImageDraw.ImageDraw) -> None:
+    """
+    Draw the current time in the upper left corner of the screen.
+    Time format: "3:23 PM" or "12:45 AM"
+    AM/PM font size is 60% of the time font size.
+    """
+    from config import (
+        PERSISTENT_TIME_ENABLED,
+        PERSISTENT_TIME_FONT_SIZE,
+        PERSISTENT_TIME_AMPM_SCALE,
+        PERSISTENT_TIME_X,
+        PERSISTENT_TIME_Y,
+        PERSISTENT_TIME_COLOR,
+        CENTRAL_TIME,
+    )
+
+    if not PERSISTENT_TIME_ENABLED:
+        return
+
+    try:
+        now = datetime.datetime.now(CENTRAL_TIME)
+        # Format time
+        hour = now.hour
+        minute = now.minute
+        am_pm = "AM" if hour < 12 else "PM"
+
+        # Convert to 12-hour format
+        if hour == 0:
+            hour = 12
+        elif hour > 12:
+            hour = hour - 12
+
+        time_str = f"{hour}:{minute:02d}"
+
+        # Load fonts
+        from config import FONTS_DIR
+        time_font_size = PERSISTENT_TIME_FONT_SIZE
+        ampm_font_size = max(1, int(round(time_font_size * PERSISTENT_TIME_AMPM_SCALE)))
+
+        time_font = ImageFont.truetype(os.path.join(FONTS_DIR, "DejaVuSans-Bold.ttf"), time_font_size)
+        ampm_font = ImageFont.truetype(os.path.join(FONTS_DIR, "DejaVuSans.ttf"), ampm_font_size)
+
+        # Get text sizes
+        try:
+            time_bbox = draw.textbbox((0, 0), time_str, font=time_font)
+            time_width = time_bbox[2] - time_bbox[0]
+            time_height = time_bbox[3] - time_bbox[1]
+            ampm_bbox = draw.textbbox((0, 0), am_pm, font=ampm_font)
+            ampm_width = ampm_bbox[2] - ampm_bbox[0]
+            ampm_height = ampm_bbox[3] - ampm_bbox[1]
+        except Exception:
+            time_width, time_height = draw.textsize(time_str, font=time_font)
+            ampm_width, ampm_height = draw.textsize(am_pm, font=ampm_font)
+
+        # Draw time
+        x = PERSISTENT_TIME_X
+        y = PERSISTENT_TIME_Y
+        draw.text((x, y), time_str, font=time_font, fill=PERSISTENT_TIME_COLOR)
+
+        # Draw AM/PM to the right of time
+        spacing = 4
+        ampm_x = x + time_width + spacing
+        ampm_y = y + (time_height - ampm_height) // 2  # Center vertically with time
+        draw.text((ampm_x, ampm_y), am_pm, font=ampm_font, fill=PERSISTENT_TIME_COLOR)
+
+    except Exception as exc:
+        # Silently fail if there's any issue drawing the time
+        logging.debug("Failed to draw persistent time: %s", exc)
+
+
 @log_call
 def animate_fade_in(
     display: Display,

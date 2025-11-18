@@ -53,6 +53,7 @@ from config import (
     HEIGHT,
 )
 from services.http_client import NHL_HEADERS, get_session, request_json
+from utils import draw_persistent_time
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NHL_DIR = NHL_IMAGES_DIR
 
@@ -1135,6 +1136,7 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     if bottom_text:
         _center_text(d, bottom_y, bottom_text, FONT_BOTTOM)
 
+    draw_persistent_time(img, d)
     return _push(display, img, transition=transition)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1193,6 +1195,7 @@ def draw_last_hawks_game(display, game, transition: bool=False):
         by = HEIGHT - _text_h(d, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
         _center_text(d, by, bottom_str, FONT_BOTTOM)
 
+    draw_persistent_time(img, d)
     return _push(display, img, transition=transition)
 
 def draw_live_hawks_game(display, game, transition: bool=False):
@@ -1254,6 +1257,7 @@ def draw_live_hawks_game(display, game, transition: bool=False):
         by = HEIGHT - _text_h(d, FONT_BOTTOM) - BOTTOM_LABEL_MARGIN
         _center_text(d, by, dateline, FONT_BOTTOM)
 
+    draw_persistent_time(img, d)
     return _push(display, img, transition=transition)
 
 def draw_sports_screen_hawks(display, game, transition: bool=False):

@@ -317,6 +317,20 @@ if DISPLAY_ROTATION not in {0, 90, 180, 270}:
 
 # ─── Scoreboard appearance ────────────────────────────────────────────────────
 
+# Scoreboard team name font sizing (used in schedule screens)
+SCOREBOARD_NAME_FONT_MIN_SIZE = 36
+SCOREBOARD_NAME_FONT_RATIO = 0.45
+SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK = 20
+SCOREBOARD_NAME_FONT_RATIO_FALLBACK = 0.32
+
+# Persistent time display (upper left corner)
+PERSISTENT_TIME_ENABLED = True
+PERSISTENT_TIME_FONT_SIZE = scale_font(24)
+PERSISTENT_TIME_AMPM_SCALE = 0.6  # AM/PM is 60% of time font size
+PERSISTENT_TIME_X = 8
+PERSISTENT_TIME_Y = 4
+PERSISTENT_TIME_COLOR = (200, 200, 200)
+
 
 def _coerce_color_component(env_name: str, default: int) -> int:
     """Return a color channel value from 0-255 with logging on invalid input."""
