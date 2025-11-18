@@ -28,7 +28,7 @@ from config import (
     SCOREBOARD_BACKGROUND_COLOR,
 )
 from services.http_client import get_session
-from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call
+from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call, draw_persistent_time
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE_NFC = "NFC Standings"
@@ -68,7 +68,7 @@ TITLE_MARGIN_BOTTOM = 12
 DIVISION_MARGIN_TOP = 6
 DIVISION_MARGIN_BOTTOM = 8
 COLUMN_GAP_BELOW = 6
-RECORD_COLUMN_SPACING = 8
+RECORD_COLUMN_SPACING = 4
 TEAM_COLUMN_PADDING = 10
 
 TITLE_FONT = FONT_TITLE_SPORTS
@@ -1102,6 +1102,7 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
 
         y = y_division_bottom
 
+    draw_persistent_time(img, draw)
     return img
 
 
@@ -1118,6 +1119,7 @@ def _overview_header_frame(title: str) -> Tuple[Image.Image, int]:
         tx = (WIDTH - tw) // 2
         ty = TITLE_MARGIN_TOP
     draw.text((tx, ty), title, font=TITLE_FONT, fill=WHITE)
+    draw_persistent_time(img, draw)
     content_top = TITLE_MARGIN_TOP + TITLE_TEXT_HEIGHT + TITLE_MARGIN_BOTTOM
     return img, content_top
 
@@ -1376,6 +1378,8 @@ def _render_overview_fallback(
         mx = (WIDTH - tw) // 2
         my = (HEIGHT - th) // 2
     draw.text((mx, my), message, font=ROW_FONT, fill=WHITE)
+
+    draw_persistent_time(img, draw)
 
     if transition:
         return ScreenImage(img, displayed=False)
