@@ -14,8 +14,9 @@ KNOWN_SCREENS: Set[str] = set(SCREEN_IDS)
 
 @dataclass
 class _AlternateSchedule:
-    screen_id: str
+    screen_ids: List[str]
     frequency: int
+    current_index: int = 0
 
 
 @dataclass
@@ -37,7 +38,8 @@ class ScreenScheduler:
         for entry in self._entries:
             requested.add(entry.screen_id)
             if entry.alternate is not None:
-                requested.add(entry.alternate.screen_id)
+                for screen_id in entry.alternate.screen_ids:
+                    requested.add(screen_id)
         self._requested = requested
 
     @property
@@ -76,7 +78,11 @@ class ScreenScheduler:
             candidate_id = entry.screen_id
             if entry.alternate and entry.alternate.frequency > 0:
                 if entry.play_count % entry.alternate.frequency == 0:
-                    alt_def = registry.get(entry.alternate.screen_id)
+                    # Get current alternate screen and cycle to next
+                    current_screen_id = entry.alternate.screen_ids[entry.alternate.current_index]
+                    entry.alternate.current_index = (entry.alternate.current_index + 1) % len(entry.alternate.screen_ids)
+
+                    alt_def = registry.get(current_screen_id)
                     if alt_def and alt_def.available:
                         return alt_def
 
@@ -129,14 +135,34 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
                     )
                 alt_screen = alt_spec.get("screen")
                 alt_frequency = alt_spec.get("frequency")
-                if not isinstance(alt_screen, str):
+
+                # Support both single string and list of strings
+                alt_screen_ids: List[str] = []
+                if isinstance(alt_screen, str):
+                    alt_screen_ids = [alt_screen]
+                elif isinstance(alt_screen, list):
+                    if not alt_screen:
+                        raise ValueError(
+                            f"Alternate screen list for '{screen_id}' cannot be empty"
+                        )
+                    for idx, screen in enumerate(alt_screen):
+                        if not isinstance(screen, str):
+                            raise ValueError(
+                                f"Alternate screen id at index {idx} for '{screen_id}' must be a string"
+                            )
+                        alt_screen_ids.append(screen)
+                else:
                     raise ValueError(
-                        f"Alternate screen id for '{screen_id}' must be a string"
+                        f"Alternate screen id for '{screen_id}' must be a string or list of strings"
                     )
-                if alt_screen not in KNOWN_SCREENS:
-                    raise ValueError(
-                        f"Unknown alternate screen id '{alt_screen}' for '{screen_id}'"
-                    )
+
+                # Validate all screen IDs
+                for alt_screen_id in alt_screen_ids:
+                    if alt_screen_id not in KNOWN_SCREENS:
+                        raise ValueError(
+                            f"Unknown alternate screen id '{alt_screen_id}' for '{screen_id}'"
+                        )
+
                 try:
                     alt_frequency_int = int(alt_frequency)
                 except (TypeError, ValueError) as exc:
@@ -147,7 +173,7 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
                     raise ValueError(
                         f"Alternate frequency for '{screen_id}' must be greater than zero"
                     )
-                alternate = _AlternateSchedule(alt_screen, alt_frequency_int)
+                alternate = _AlternateSchedule(alt_screen_ids, alt_frequency_int)
         else:
             try:
                 frequency = int(raw)
