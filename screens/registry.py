@@ -37,6 +37,7 @@ from screens.mlb_schedule import (
     draw_sports_screen,
 )
 from screens.mlb_scoreboard import draw_mlb_scoreboard
+from screens.mlb_scoreboard_v2 import draw_mlb_scoreboard_v2
 from screens.mlb_standings import (
     draw_AL_Central,
     draw_AL_East,
@@ -51,7 +52,9 @@ from screens.mlb_standings import (
 )
 from screens.mlb_team_standings import draw_standings_screen1, draw_standings_screen2
 from screens.nba_scoreboard import draw_nba_scoreboard
+from screens.nba_scoreboard_v2 import draw_nba_scoreboard_v2
 from screens.nfl_scoreboard import draw_nfl_scoreboard
+from screens.nfl_scoreboard_v2 import draw_nfl_scoreboard_v2
 from screens.nfl_standings import (
     draw_nfl_overview_afc,
     draw_nfl_overview_nfc,
@@ -59,6 +62,7 @@ from screens.nfl_standings import (
     draw_nfl_standings_nfc,
 )
 from screens.nhl_scoreboard import draw_nhl_scoreboard
+from screens.nhl_scoreboard_v2 import draw_nhl_scoreboard_v2
 from screens.nhl_standings import (
     draw_nhl_standings_east,
     draw_nhl_standings_overview,
@@ -240,6 +244,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
 
     register("bears next", lambda: show_bears_next_game(context.display, transition=True))
     register("NFL Scoreboard", lambda: draw_nfl_scoreboard(context.display, transition=True))
+    register("NFL Scoreboard v2", lambda: draw_nfl_scoreboard_v2(context.display, transition=True))
     register("NFL Overview NFC", lambda: draw_nfl_overview_nfc(context.display, transition=True))
     register("NFL Overview AFC", lambda: draw_nfl_overview_afc(context.display, transition=True))
     register("NFL Standings NFC", lambda: draw_nfl_standings_nfc(context.display, transition=True))
@@ -284,6 +289,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
 
         register_logo("nhl logo")
         register("NHL Scoreboard", lambda: draw_nhl_scoreboard(context.display, transition=True))
+        register("NHL Scoreboard v2", lambda: draw_nhl_scoreboard_v2(context.display, transition=True))
         register(
             "NHL Standings Overview",
             lambda: draw_nhl_standings_overview(context.display, transition=True),
@@ -445,7 +451,9 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             )
 
     register("MLB Scoreboard", lambda: draw_mlb_scoreboard(context.display, transition=True))
+    register("MLB Scoreboard v2", lambda: draw_mlb_scoreboard_v2(context.display, transition=True))
     register("NBA Scoreboard", lambda: draw_nba_scoreboard(context.display, transition=True))
+    register("NBA Scoreboard v2", lambda: draw_nba_scoreboard_v2(context.display, transition=True))
 
     register("NL Overview", lambda: draw_NL_Overview(context.display, transition=True))
     register("NL East", lambda: draw_NL_East(context.display, transition=True))
