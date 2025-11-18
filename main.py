@@ -741,7 +741,7 @@ def main_loop():
                 if not _wait_with_button_checks(SCREEN_DELAY):
                     for fn in (draw_date, draw_time):
                         img2 = fn(display, transition=True)
-                        animate_fade_in(display, img2, steps=8, delay=0.015)
+                        animate_fade_in(display, img2, steps=15, delay=0.02, easing=True)
                         if _shutdown_event.is_set():
                             break
                         if _wait_with_button_checks(SCREEN_DELAY):
@@ -842,7 +842,7 @@ def main_loop():
                             video_out.write(frame)
                     else:
                         if not already_displayed:
-                            animate_fade_in(display, img, steps=8, delay=0.015)
+                            animate_fade_in(display, img, steps=15, delay=0.02, easing=True)
                         if ENABLE_SCREENSHOTS:
                             _save_screenshot(sid, img)
                             maybe_archive_screenshots()
