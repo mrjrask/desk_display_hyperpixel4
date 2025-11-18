@@ -156,6 +156,8 @@ _BUTTON_NAMES = ("A", "B", "X", "Y")
 _BUTTON_STATE = {name: False for name in _BUTTON_NAMES}
 _manual_skip_event = threading.Event()
 _button_monitor_thread: Optional[threading.Thread] = None
+_touch_monitor_thread: Optional[threading.Thread] = None
+_touch_device = None
 
 
 def _load_scheduler_from_config() -> Optional[ScreenScheduler]:
@@ -356,12 +358,136 @@ def _monitor_control_buttons() -> None:
         logging.debug("Control button monitor thread exiting.")
 
 
+def _find_touchscreen_device():
+    """Find the touchscreen input device."""
+    try:
+        from evdev import InputDevice, ecodes, list_devices
+    except ImportError:
+        logging.debug("evdev not available; touchscreen support disabled")
+        return None
+
+    try:
+        for device_path in list_devices():
+            try:
+                device = InputDevice(device_path)
+                # Look for a device that supports absolute positioning (touchscreen)
+                caps = device.capabilities()
+                if ecodes.EV_ABS in caps and ecodes.EV_KEY in caps:
+                    # Check if it has touch capabilities
+                    abs_info = caps[ecodes.EV_ABS]
+                    has_x = any(code[0] == ecodes.ABS_X or code[0] == ecodes.ABS_MT_POSITION_X for code in abs_info)
+                    has_y = any(code[0] == ecodes.ABS_Y or code[0] == ecodes.ABS_MT_POSITION_Y for code in abs_info)
+                    if has_x and has_y:
+                        logging.info(f"🖱️  Found touchscreen: {device.name} at {device_path}")
+                        return device
+            except Exception as exc:
+                logging.debug(f"Could not check device {device_path}: {exc}")
+    except Exception as exc:
+        logging.debug(f"Failed to enumerate input devices: {exc}")
+
+    logging.debug("No touchscreen device found")
+    return None
+
+
+def _monitor_touchscreen() -> None:
+    """Background monitor for touchscreen taps on the right 1/3 of the screen."""
+    global _touch_device
+
+    try:
+        from evdev import InputDevice, ecodes, categorize
+    except ImportError:
+        logging.debug("evdev not available; touchscreen monitor exiting")
+        return
+
+    _touch_device = _find_touchscreen_device()
+    if _touch_device is None:
+        logging.debug("Touchscreen monitor exiting (no device found)")
+        return
+
+    logging.debug("Starting touchscreen monitor thread.")
+
+    # Get the touchscreen resolution
+    try:
+        caps = _touch_device.capabilities()
+        abs_info = caps.get(ecodes.EV_ABS, [])
+
+        # Find X axis info (try both single-touch and multi-touch)
+        x_max = WIDTH
+        for code_info in abs_info:
+            if code_info[0] in (ecodes.ABS_X, ecodes.ABS_MT_POSITION_X):
+                x_max = code_info[1].max
+                break
+
+        right_third_threshold = x_max * 2 // 3
+        logging.debug(f"Touchscreen X max: {x_max}, right 1/3 threshold: {right_third_threshold}")
+    except Exception as exc:
+        logging.warning(f"Could not determine touchscreen resolution: {exc}")
+        right_third_threshold = 480  # Default for 720px screen
+
+    try:
+        last_x = None
+        touch_active = False
+
+        while not _shutdown_event.is_set():
+            try:
+                # Set a timeout so we can check shutdown event periodically
+                event = _touch_device.read_one()
+                if event is None:
+                    time.sleep(0.01)
+                    continue
+
+                # Track touch position
+                if event.type == ecodes.EV_ABS:
+                    if event.code in (ecodes.ABS_X, ecodes.ABS_MT_POSITION_X):
+                        last_x = event.value
+                        touch_active = True
+                    elif event.code in (ecodes.ABS_MT_TRACKING_ID,):
+                        # Multi-touch tracking ID -1 means touch released
+                        if event.value == -1:
+                            touch_active = False
+                elif event.type == ecodes.EV_KEY:
+                    if event.code == ecodes.BTN_TOUCH:
+                        if event.value == 0:  # Touch released
+                            touch_active = False
+                            # Check if the touch was in the right 1/3
+                            if last_x is not None and last_x >= right_third_threshold:
+                                logging.info("👆 Right-side touch detected – skipping to next screen.")
+                                _manual_skip_event.set()
+                            last_x = None
+                        elif event.value == 1:  # Touch pressed
+                            touch_active = True
+
+            except Exception as exc:
+                if _shutdown_event.is_set():
+                    break
+                logging.debug("Touchscreen monitor loop error: %s", exc)
+                time.sleep(0.1)
+
+    except Exception as exc:
+        logging.warning("Touchscreen monitor failed: %s", exc)
+    finally:
+        if _touch_device:
+            try:
+                _touch_device.close()
+            except Exception:
+                pass
+            _touch_device = None
+        logging.debug("Touchscreen monitor thread exiting.")
+
+
 _button_monitor_thread = threading.Thread(
     target=_monitor_control_buttons,
     name="control-button-monitor",
     daemon=True,
 )
 _button_monitor_thread.start()
+
+_touch_monitor_thread = threading.Thread(
+    target=_monitor_touchscreen,
+    name="touchscreen-monitor",
+    daemon=True,
+)
+_touch_monitor_thread.start()
 
 
 def _next_screen_from_registry(
@@ -449,10 +575,14 @@ def _finalize_shutdown() -> None:
     if ENABLE_WIFI_MONITOR:
         wifi_utils.stop_monitor()
 
-    global _button_monitor_thread
+    global _button_monitor_thread, _touch_monitor_thread
     if _button_monitor_thread and _button_monitor_thread.is_alive():
         _button_monitor_thread.join(timeout=1.0)
         _button_monitor_thread = None
+
+    if _touch_monitor_thread and _touch_monitor_thread.is_alive():
+        _touch_monitor_thread.join(timeout=1.0)
+        _touch_monitor_thread = None
 
     _shutdown_complete.set()
     logging.info("👋 Shutdown cleanup finished.")

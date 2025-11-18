@@ -25,6 +25,7 @@ from config import (
     FONT_TITLE_SPORTS,
     FONT_TEAM_SPORTS,
     FONT_STATUS,
+    FONT_EMOJI,
     CENTRAL_TIME,
     IMAGES_DIR,
     SCOREBOARD_SCROLL_STEP,
@@ -152,7 +153,8 @@ def _get_possession_icon() -> Optional[Image.Image]:
 
     try:
         base_size = max(18, LOGO_HEIGHT // 4)
-        font = clone_font(FONT_STATUS, max(base_size, _POSSESSION_FONT_SIZE))
+        # Use the emoji font instead of the status font to properly display the football emoji
+        font = clone_font(FONT_EMOJI, max(base_size, _POSSESSION_FONT_SIZE))
         glyph = "🏈"
 
         # Measure the emoji in a generous temporary canvas to preserve its
