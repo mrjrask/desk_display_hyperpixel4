@@ -714,6 +714,17 @@ def draw_persistent_time(img: Image.Image, draw: ImageDraw.ImageDraw) -> None:
 
 
 @log_call
+def _ease_in_out_cubic(t: float) -> float:
+    """
+    Cubic easing function for smooth transitions.
+    Starts slow, speeds up in middle, slows down at end.
+    """
+    if t < 0.5:
+        return 4 * t * t * t
+    else:
+        return 1 - pow(-2 * t + 2, 3) / 2
+
+
 def animate_fade_in(
     display: Display,
     new_image: Image.Image,
@@ -721,9 +732,20 @@ def animate_fade_in(
     delay: float = 0.02,
     *,
     from_image: Image.Image | None = None,
+    easing: bool = True,
+    fade_through_black: bool = False,
 ):
     """
     Fade from the current display buffer (or ``from_image``) into ``new_image``.
+
+    Args:
+        display: The display device
+        new_image: The target image to fade to
+        steps: Number of animation steps (higher = smoother)
+        delay: Delay between frames in seconds
+        from_image: Optional source image (uses current display if None)
+        easing: Use cubic easing for smoother transitions
+        fade_through_black: Fade out to black, then fade in from black
     """
 
     if steps <= 0:
@@ -746,11 +768,34 @@ def animate_fade_in(
 
     target = new_image.convert("RGB")
 
-    for i in range(steps + 1):
-        alpha = i / steps
-        frame = Image.blend(base, target, alpha)
-        display.image(frame)
-        time.sleep(delay)
+    if fade_through_black:
+        # Fade out to black, then fade in from black
+        black = Image.new("RGB", new_image.size, (0, 0, 0))
+        half_steps = steps // 2
+
+        # Fade out to black
+        for i in range(half_steps + 1):
+            t = i / half_steps
+            alpha = _ease_in_out_cubic(t) if easing else t
+            frame = Image.blend(base, black, alpha)
+            display.image(frame)
+            time.sleep(delay)
+
+        # Fade in from black
+        for i in range(half_steps + 1):
+            t = i / half_steps
+            alpha = _ease_in_out_cubic(t) if easing else t
+            frame = Image.blend(black, target, alpha)
+            display.image(frame)
+            time.sleep(delay)
+    else:
+        # Direct cross-fade with optional easing
+        for i in range(steps + 1):
+            t = i / steps
+            alpha = _ease_in_out_cubic(t) if easing else t
+            frame = Image.blend(base, target, alpha)
+            display.image(frame)
+            time.sleep(delay)
 
 @log_call
 def animate_scroll(display: Display, image: Image.Image, speed=3, y_offset=None):
