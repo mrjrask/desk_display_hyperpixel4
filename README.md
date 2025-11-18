@@ -12,8 +12,138 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 
 ---
 
+## Features
+
+### Display & Hardware Support
+- **HyperPixel 4.0 Square (720×720)** and **HyperPixel 4.0 (800×480)** with portrait/landscape modes
+- **Wayland and X11** backend support with auto-detection
+- **Touch Navigation** - Tap right side of screen to skip to next screen
+- **Physical Button Controls** (Display HAT Mini):
+  - X Button: Skip to next screen
+  - Y Button: Restart display service
+  - A/B Buttons: Reserved for custom shortcuts
+- **Environmental Sensors** via I2C (auto-detected across 6 buses):
+  - BME280/BME680/BME688: Temperature, humidity, pressure, air quality
+  - SHT4x/SHT41: Temperature and humidity
+  - LTR559: Ambient light and proximity
+  - LSM6DS3: 6-axis IMU (accelerometer + gyroscope)
+- **RGB LED Status Indicator** for stock movements and GitHub updates
+- **Video Output** capability (H.264 MP4 at 30 FPS)
+
+### Sports Coverage
+- **MLB (Baseball)**:
+  - Cubs & White Sox: Last/Live/Next/Next Home games
+  - Division Standings: All 6 divisions (NL/AL East/Central/West)
+  - League Overviews: NL/AL complete standings
+  - Wild Card Standings: NL/AL wild card races
+  - Scoreboard: Live scores across all games
+  - **Animated W/L Flags**: WebP animations for Cubs results
+
+- **NHL (Hockey)**:
+  - Blackhawks: Last/Live/Next/Next Home games
+  - Division Standings: East/West with wild card
+  - League Overview: Complete NHL standings
+  - Scoreboard: Live scores across all games
+
+- **NBA (Basketball)**:
+  - Bulls: Last/Live/Next/Next Home games
+  - Scoreboard: Live scores across all games
+
+- **NFL (Football)**:
+  - Bears: Next game with opponent logos
+  - Conference Overviews: NFC/AFC complete standings
+  - Division Standings: All 8 divisions
+  - Scoreboard: Live scores across all games
+
+### Information Screens
+- **Date/Time Displays**:
+  - Standard date screen with weekday/month/day
+  - **Phone-style Clock** with persistent time in upper left corner
+  - Nixie tube retro digital clock display
+  - **GitHub Update Indicator**: Red dot when new commits available
+- **Weather** (OpenWeatherMap + Open-Meteo):
+  - Current conditions with temperature, wind, and emoji icons
+  - Daily forecasts with high/low and sunrise/sunset
+  - Rate-limit handling with automatic fallback
+- **Travel Time** (Google Maps):
+  - Real-time traffic-aware commute estimates
+  - Configurable to_home/to_work modes based on WiFi SSID
+  - Active time window scheduling (morning/evening commutes)
+  - Multi-route analysis with smart selection
+- **Indoor Sensors**:
+  - Temperature, humidity, pressure, air quality
+  - Multi-sensor display with automatic I2C detection
+  - Lux and proximity readings
+- **Stock Ticker** (VRNOF):
+  - Real-time price with change percentage
+  - All-time profit/loss calculations
+  - LED color indication (green/red)
+
+### Animations & Transitions
+- **Smooth Fade-In**: 15-step fade transitions with configurable easing
+- **Scrolling Animations**: Vertical scrolling for standings and long lists
+- **Logo Animations**: Team logo transitions and movements
+- **Drop-In Animation**: Standings overview with animated team drops
+- **LED Pulse**: Background thread animations for update indicators
+
+### Admin & Configuration
+- **Web Admin Interface** (Flask, port 5001):
+  - Real-time screenshot gallery
+  - Screen frequency configuration
+  - Auto-render on startup
+  - Drag-and-drop playlist editor
+- **Advanced Scheduling**:
+  - **Playlist-Centric Schema (v2)** with reusable definitions
+  - **Rule Types**: variants (random), cycle (sequential), every (frequency)
+  - **Conditional Scheduling**: days-of-week and time-of-day windows
+  - **Nested Playlists**: Modular playlist composition
+  - **Version History**: Rollback capability with SQLite ledger
+  - **Auto-Migration**: Legacy v1 to v2 config conversion
+- **Display Profiles**:
+  - Multiple preconfigured profiles (square, landscape, portrait)
+  - Custom dimensions via environment variables
+  - Rotation support (0°, 90°, 180°, 270°)
+- **Environment Variables**: API keys, travel addresses, feature toggles
+- **WiFi-Based Configuration**: Auto-detect location based on SSID
+
+### Data Management
+- **Smart Screenshot Archiving**:
+  - Auto-capture PNG screenshots of every screen
+  - Batch archiving when folder reaches 500 images
+  - Organized by `dated_folders/<screen>/YYYYMMDD/HHMMSS/`
+  - XDG Base Directory compliance
+- **Data Caching**:
+  - 10-minute background refresh for sports/weather data
+  - Resilient API retry logic with exponential backoff
+  - Shared requests.Session for connection pooling
+- **Video Recording**: Optional H.264 MP4 output (30 FPS)
+- **Monitoring**:
+  - Background Wi-Fi connection monitor
+  - Wi-Fi triage screens during outages
+  - Comprehensive logging with timestamps
+  - I2C bus scanning and sensor diagnostics
+
+### Customization
+- **Color Schemes**: Custom palettes per league/team
+- **Font Scaling**: Dynamic sizing via `FONT_SCALE_FACTOR` (1.15x default)
+- **Score Colors**: Different colors for in-progress, winning, and losing scores
+- **Emoji Support**: NotoColorEmoji with automatic Symbola fallback
+- **Team Logos**: Configurable MLB/NFL team logo directories
+- **Background Colors**: Customizable scoreboard backgrounds
+
+### System Integration
+- **systemd Service**: Auto-start on boot with restart capability
+- **Graceful Shutdown**: Cleanup script blanks display on exit
+- **SIGTERM Handling**: Clean shutdown on signals
+- **GPIO Permissions**: Proper group access for hardware (video, render, input, gpio, i2c, spi)
+- **X11/Wayland Auto-Detection**: Seamless backend selection with manual override
+- **Performance Optimizations**: Garbage collection, image caching, batch operations
+
+---
+
 ## Contents
 
+- [Features](#features)
 - [Requirements](#requirements)
 - [Install](#install)
 - [Project layout](#project-layout)
