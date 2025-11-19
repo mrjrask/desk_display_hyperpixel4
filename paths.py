@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
+import storage_overrides
+
 APP_DIR_NAME = "desk_display_hyperpixel4"
 
 
@@ -65,6 +67,10 @@ def _iter_candidate_screenshot_dirs() -> Iterable[Path]:
     env_override = os.environ.get("DESK_DISPLAY_SCREENSHOT_DIR")
     if env_override:
         yield _expand(env_override)
+
+    config_override = storage_overrides.SCREENSHOT_DIR
+    if config_override:
+        yield _expand(config_override)
 
     for root in _iter_candidate_roots():
         yield root / "screenshots"
