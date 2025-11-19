@@ -18,6 +18,11 @@ from typing import Iterable, Optional
 import requests
 from PIL import Image, ImageDraw
 
+try:
+    RESAMPLE = Image.ANTIALIAS
+except AttributeError:  # Pillow ≥11
+    RESAMPLE = Image.Resampling.LANCZOS
+
 from config import (
     WIDTH,
     HEIGHT,
@@ -63,7 +68,7 @@ COL_WIDTHS = [55, 85, 50, 85, 55]  # total = 330 (fits in 360)
 _TOTAL_COL_WIDTH = sum(COL_WIDTHS)
 _COL_LEFT = (GAME_WIDTH - _TOTAL_COL_WIDTH) // 2
 
-_SCORE_PT = 66 - (4 if IS_SQUARE_DISPLAY else 0)
+_SCORE_PT = 66 - (4 if IS_SQUARE_DISPLAY else 0) - 3
 _STATUS_PT = 42 - (4 if IS_SQUARE_DISPLAY else 0)
 _CENTER_PT = 54 - (4 if IS_SQUARE_DISPLAY else 0)
 
@@ -72,6 +77,7 @@ STATUS_FONT             = clone_font(FONT_STATUS, max(8, _STATUS_PT))
 CENTER_FONT             = clone_font(FONT_STATUS, max(8, _CENTER_PT))
 TITLE_FONT              = FONT_TITLE_SPORTS
 LOGO_HEIGHT             = 120
+LOGO_GAP_MARGIN         = 6
 LOGO_DIR                = os.path.join(IMAGES_DIR, "mlb")
 LEAGUE_LOGO_KEYS        = ("MLB", "mlb")
 LEAGUE_LOGO_GAP         = 10
@@ -323,6 +329,35 @@ def _center_text(draw: ImageDraw.ImageDraw, text: str, font, x: int, width: int,
     draw.text((tx, ty), text, font=font, fill=fill)
 
 
+def _measure_text(draw: ImageDraw.ImageDraw, text: str, font) -> tuple[int, int]:
+    if not text:
+        return 0, 0
+    try:
+        l, t, r, b = draw.textbbox((0, 0), text, font=font)
+        return r - l, b - t
+    except Exception:
+        return draw.textsize(text, font=font)
+
+
+def _logo_target_width(gap: int, column_width: int) -> int:
+    usable_gap = gap - LOGO_GAP_MARGIN
+    usable_column = column_width - LOGO_GAP_MARGIN
+    return max(0, min(usable_gap, usable_column))
+
+
+def _fit_logo_to_width(logo: Image.Image, max_width: int) -> Optional[Image.Image]:
+    if logo is None or max_width <= 0:
+        return None
+    if logo.width <= max_width:
+        return logo
+    scale = max_width / float(logo.width)
+    new_width = max(1, int(round(logo.width * scale)))
+    new_height = max(1, int(round(logo.height * scale)))
+    if new_width == logo.width:
+        return logo
+    return logo.resize((new_width, new_height), resample=RESAMPLE)
+
+
 def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict, x_offset: int, y_offset: int):
     """Draw a single game block at the specified offset for dual-game layout."""
     teams = (game or {}).get("teams", {})
@@ -342,6 +377,7 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         col_x.append(col_x[-1] + w)
 
     score_top = y_offset
+    text_bounds: dict[int, tuple[int, int]] = {}
     for idx, text in ((0, away_text), (2, "@"), (4, home_text)):
         font = SCORE_FONT if idx != 2 else CENTER_FONT
         if idx == 0:
@@ -350,7 +386,18 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
             fill = _score_fill("home", in_progress=in_progress, final=final, results=results)
         else:
             fill = (255, 255, 255)
+        text_width, _ = _measure_text(draw, text, font)
+        left = col_x[idx] + (COL_WIDTHS[idx] - text_width) // 2
+        text_bounds[idx] = (left, left + text_width)
         _center_text(draw, text, font, col_x[idx], COL_WIDTHS[idx], score_top, SCORE_ROW_H, fill=fill)
+
+    center_left, center_right = text_bounds.get(2, (0, 0))
+    away_right = text_bounds.get(0, (0, 0))[1]
+    home_left = text_bounds.get(4, (0, 0))[0]
+    max_logo_widths = {
+        1: _logo_target_width(center_left - away_right, COL_WIDTHS[1]),
+        3: _logo_target_width(home_left - center_right, COL_WIDTHS[3]),
+    }
 
     for idx, team_side, team_key in ((1, away, "away"), (3, home, "home")):
         team_obj = (team_side or {}).get("team", {})
@@ -358,9 +405,13 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         logo = _load_logo_cached(abbr) if abbr else None
         if not logo:
             continue
-        x0 = col_x[idx] + (COL_WIDTHS[idx] - logo.width) // 2
-        y0 = score_top + (SCORE_ROW_H - logo.height) // 2
-        canvas.paste(logo, (x0, y0), logo)
+        max_width = max_logo_widths.get(idx, COL_WIDTHS[idx] - LOGO_GAP_MARGIN)
+        fitted_logo = _fit_logo_to_width(logo, max_width)
+        if not fitted_logo:
+            continue
+        x0 = col_x[idx] + (COL_WIDTHS[idx] - fitted_logo.width) // 2
+        y0 = score_top + (SCORE_ROW_H - fitted_logo.height) // 2
+        canvas.paste(fitted_logo, (x0, y0), fitted_logo)
 
     status_top = score_top + SCORE_ROW_H
     status_text = _format_status(game)
