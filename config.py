@@ -3,6 +3,7 @@
 #!/usr/bin/env python3
 import datetime
 import glob
+import json
 import logging
 import os
 import subprocess
@@ -278,6 +279,79 @@ def scale_font(size: float) -> int:
     return max(1, int(round(size * SCALE * FONT_SCALE_FACTOR)))
 
 
+def _load_display_overrides(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.warning("Unable to load display overrides from %s: %s", path, exc)
+        return {}
+
+    if isinstance(data, dict):
+        return data
+
+    logging.warning("Display overrides in %s must be a JSON object", path)
+    return {}
+
+
+DISPLAY_OVERRIDES_PATH = os.environ.get(
+    "DISPLAY_OVERRIDES_PATH", os.path.join(SCRIPT_DIR, "display_overrides.json")
+)
+DISPLAY_OVERRIDES = _load_display_overrides(DISPLAY_OVERRIDES_PATH)
+
+
+def _get_font_override(screen_key: str, font_key: str) -> Optional[int]:
+    fonts = DISPLAY_OVERRIDES.get("fonts")
+    if not isinstance(fonts, dict):
+        return None
+
+    screen_fonts = fonts.get(screen_key)
+    if not isinstance(screen_fonts, dict):
+        return None
+
+    raw_value = screen_fonts.get(font_key)
+    if raw_value is None:
+        return None
+
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        logging.warning(
+            "Invalid font override for %s.%s: %r", screen_key, font_key, raw_value
+        )
+        return None
+
+    if value <= 0:
+        logging.warning(
+            "Font override for %s.%s must be greater than zero; ignoring %r",
+            screen_key,
+            font_key,
+            raw_value,
+        )
+        return None
+
+    return max(1, int(round(value)))
+
+
+def _font_pixels(screen_key: str, font_key: str, default_size: float) -> int:
+    override = _get_font_override(screen_key, font_key)
+    if override is not None:
+        return override
+    return scale_font(default_size)
+
+
+def _load_screen_font(
+    screen_key: str, font_key: str, font_name: str, default_size: float
+) -> ImageFont.ImageFont:
+    return _load_font(font_name, _font_pixels(screen_key, font_key, default_size))
+
+
+def _load_screen_emoji_font(screen_key: str, font_key: str, default_size: float):
+    return _load_emoji_font(_font_pixels(screen_key, font_key, default_size))
+
+
 DISPLAY_BACKEND = os.environ.get("DISPLAY_BACKEND", "auto").strip().lower() or "auto"
 DISPLAY_FULLSCREEN = os.environ.get("DISPLAY_FULLSCREEN", "1").strip().lower() not in {
     "0",
@@ -417,22 +491,24 @@ class _BitmapEmojiFont(ImageFont.ImageFont):
         return scaled.im
 
 
-FONT_DAY_DATE = _load_font("DejaVuSans-Bold.ttf", scale_font(39))
-FONT_DATE = _load_font("DejaVuSans.ttf", scale_font(22))
-FONT_TIME = _load_font("DejaVuSans-Bold.ttf", scale_font(59))
-FONT_AM_PM = _load_font("DejaVuSans.ttf", scale_font(20))
+FONT_DAY_DATE = _load_screen_font("date_time", "day_date", "DejaVuSans-Bold.ttf", 39)
+FONT_DATE = _load_screen_font("date_time", "date", "DejaVuSans.ttf", 22)
+FONT_TIME = _load_screen_font("date_time", "time", "DejaVuSans-Bold.ttf", 59)
+FONT_AM_PM = _load_screen_font("date_time", "am_pm", "DejaVuSans.ttf", 20)
 
-FONT_TEMP = _load_font("DejaVuSans-Bold.ttf", scale_font(44))
-FONT_CONDITION = _load_font("DejaVuSans-Bold.ttf", scale_font(20))
-FONT_WEATHER_DETAILS = _load_font("DejaVuSans.ttf", scale_font(22))
-FONT_WEATHER_DETAILS_BOLD = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
-FONT_WEATHER_LABEL = _load_font("DejaVuSans.ttf", scale_font(18))
+FONT_TEMP = _load_screen_font("weather", "temperature_value", "DejaVuSans-Bold.ttf", 44)
+FONT_CONDITION = _load_screen_font("weather", "condition", "DejaVuSans-Bold.ttf", 20)
+FONT_WEATHER_DETAILS = _load_screen_font("weather", "details", "DejaVuSans.ttf", 22)
+FONT_WEATHER_DETAILS_BOLD = _load_screen_font(
+    "weather", "details_bold", "DejaVuSans-Bold.ttf", 18
+)
+FONT_WEATHER_LABEL = _load_screen_font("weather", "label", "DejaVuSans.ttf", 18)
 
-FONT_TITLE_SPORTS = _load_font("TimesSquare-m105.ttf", scale_font(30))
-FONT_TEAM_SPORTS = _load_font("TimesSquare-m105.ttf", scale_font(37))
-FONT_DATE_SPORTS = _load_font("TimesSquare-m105.ttf", scale_font(30))
-FONT_SCORE = _load_font("TimesSquare-m105.ttf", scale_font(41))
-FONT_STATUS = _load_font("TimesSquare-m105.ttf", scale_font(30))
+FONT_TITLE_SPORTS = _load_screen_font("sports", "title", "TimesSquare-m105.ttf", 30)
+FONT_TEAM_SPORTS = _load_screen_font("sports", "team", "TimesSquare-m105.ttf", 37)
+FONT_DATE_SPORTS = _load_screen_font("sports", "date", "TimesSquare-m105.ttf", 30)
+FONT_SCORE = _load_screen_font("sports", "score", "TimesSquare-m105.ttf", 41)
+FONT_STATUS = _load_screen_font("sports", "status", "TimesSquare-m105.ttf", 30)
 
 # ─── Scoreboard appearance ────────────────────────────────────────────────────
 
@@ -444,7 +520,7 @@ SCOREBOARD_NAME_FONT_RATIO_FALLBACK = 0.32
 
 # Persistent time display (upper left corner)
 PERSISTENT_TIME_ENABLED = True
-PERSISTENT_TIME_FONT_SIZE = scale_font(12)  # Smaller, phone-style time
+PERSISTENT_TIME_FONT_SIZE = _font_pixels("shared", "persistent_time", 12)
 PERSISTENT_TIME_AMPM_SCALE = 0.6  # AM/PM is 60% of time font size
 PERSISTENT_TIME_X = 8
 PERSISTENT_TIME_Y = 4
@@ -523,39 +599,48 @@ CENTRAL_TIME = pytz.timezone("America/Chicago")
 # team schedule screens so logo heights can be tuned from a single location.
 NEXT_GAME_LOGO_FONT_SIZE = scale_y(60)
 
-FONT_INSIDE_LABEL       = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
-FONT_INSIDE_VALUE       = _load_font("DejaVuSans.ttf",      scale_font(17))
-FONT_TITLE_INSIDE       = _load_font("DejaVuSans-Bold.ttf", scale_font(17))
+FONT_INSIDE_LABEL = _load_screen_font("inside", "label", "DejaVuSans-Bold.ttf", 18)
+FONT_INSIDE_VALUE = _load_screen_font("inside", "value", "DejaVuSans.ttf", 17)
+FONT_TITLE_INSIDE = _load_screen_font("inside", "title", "DejaVuSans-Bold.ttf", 17)
+FONT_INSIDE_TEMP = _load_screen_font("inside", "temperature_value", "DejaVuSans-Bold.ttf", 44)
 
-FONT_TRAVEL_TITLE       = _load_font("TimesSquare-m105.ttf", scale_font(17))
-FONT_TRAVEL_HEADER      = _load_font("TimesSquare-m105.ttf", scale_font(17))
-FONT_TRAVEL_VALUE       = _load_font("HWYGNRRW.TTF",        scale_font(26))
+FONT_TRAVEL_TITLE = _load_screen_font("travel", "title", "TimesSquare-m105.ttf", 17)
+FONT_TRAVEL_HEADER = _load_screen_font("travel", "header", "TimesSquare-m105.ttf", 17)
+FONT_TRAVEL_VALUE = _load_screen_font("travel", "value", "HWYGNRRW.TTF", 26)
 
 FONT_IP_LABEL           = FONT_INSIDE_LABEL
 FONT_IP_VALUE           = FONT_INSIDE_VALUE
 
-FONT_STOCK_TITLE        = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
-FONT_STOCK_PRICE        = _load_font("DejaVuSans-Bold.ttf", scale_font(44))
-FONT_STOCK_CHANGE       = _load_font("DejaVuSans.ttf",      scale_font(22))
-FONT_STOCK_TEXT         = _load_font("DejaVuSans.ttf",      scale_font(17))
+FONT_STOCK_TITLE = _load_screen_font("vrnof", "title", "DejaVuSans-Bold.ttf", 18)
+FONT_STOCK_PRICE = _load_screen_font("vrnof", "price", "DejaVuSans-Bold.ttf", 44)
+FONT_STOCK_CHANGE = _load_screen_font("vrnof", "change", "DejaVuSans.ttf", 22)
+FONT_STOCK_TEXT = _load_screen_font("vrnof", "text", "DejaVuSans.ttf", 17)
 
 # Standings fonts...
-FONT_STAND1_WL          = _load_font("DejaVuSans-Bold.ttf", scale_font(34))
-FONT_STAND1_RANK        = _load_font("DejaVuSans.ttf",      scale_font(28))
-FONT_STAND1_GB_LABEL    = _load_font("DejaVuSans.ttf",      scale_font(22))
-FONT_STAND1_WCGB_LABEL  = _load_font("DejaVuSans.ttf",      scale_font(22))
-FONT_STAND1_GB_VALUE    = _load_font("DejaVuSans.ttf",      scale_font(22))
-FONT_STAND1_WCGB_VALUE  = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_STAND1_WL = _load_screen_font("mlb_standings", "stand1_wl", "DejaVuSans-Bold.ttf", 34)
+FONT_STAND1_RANK = _load_screen_font("mlb_standings", "stand1_rank", "DejaVuSans.ttf", 28)
+FONT_STAND1_GB_LABEL = _load_screen_font("mlb_standings", "stand1_gb_label", "DejaVuSans.ttf", 22)
+FONT_STAND1_WCGB_LABEL = _load_screen_font(
+    "mlb_standings", "stand1_wcgb_label", "DejaVuSans.ttf", 22
+)
+FONT_STAND1_GB_VALUE = _load_screen_font(
+    "mlb_standings", "stand1_gb_value", "DejaVuSans.ttf", 22
+)
+FONT_STAND1_WCGB_VALUE = _load_screen_font(
+    "mlb_standings", "stand1_wcgb_value", "DejaVuSans.ttf", 22
+)
 
-FONT_STAND2_RECORD      = _load_font("DejaVuSans.ttf",      scale_font(34))
-FONT_STAND2_LABEL       = _load_font("DejaVuSans.ttf",      scale_font(28))
-FONT_STAND2_VALUE       = _load_font("DejaVuSans.ttf",      scale_font(28))
+FONT_STAND2_RECORD = _load_screen_font(
+    "mlb_standings", "stand2_record", "DejaVuSans.ttf", 34
+)
+FONT_STAND2_LABEL = _load_screen_font("mlb_standings", "stand2_label", "DejaVuSans.ttf", 28)
+FONT_STAND2_VALUE = _load_screen_font("mlb_standings", "stand2_value", "DejaVuSans.ttf", 28)
 
-FONT_DIV_HEADER         = _load_font("DejaVuSans-Bold.ttf", scale_font(26))
-FONT_DIV_RECORD         = _load_font("DejaVuSans.ttf",      scale_font(28))
-FONT_DIV_GB             = _load_font("DejaVuSans.ttf",      scale_font(24))
-FONT_GB_VALUE           = _load_font("DejaVuSans.ttf",      scale_font(24))
-FONT_GB_LABEL           = _load_font("DejaVuSans.ttf",      scale_font(20))
+FONT_DIV_HEADER = _load_screen_font("mlb_standings", "div_header", "DejaVuSans-Bold.ttf", 26)
+FONT_DIV_RECORD = _load_screen_font("mlb_standings", "div_record", "DejaVuSans.ttf", 28)
+FONT_DIV_GB = _load_screen_font("mlb_standings", "div_gb", "DejaVuSans.ttf", 24)
+FONT_GB_VALUE = _load_screen_font("mlb_standings", "div_gb_value", "DejaVuSans.ttf", 24)
+FONT_GB_LABEL = _load_screen_font("mlb_standings", "div_gb_label", "DejaVuSans.ttf", 20)
 
 def _load_emoji_font(size: int) -> ImageFont.ImageFont:
     noto = _try_load_font("NotoColorEmoji.ttf", size)
@@ -588,7 +673,7 @@ def _load_emoji_font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-FONT_EMOJI = _load_emoji_font(scale_font(30))
+FONT_EMOJI = _load_screen_emoji_font("shared", "emoji", 30)
 
 # ─── Screen-specific configuration ─────────────────────────────────────────────
 
