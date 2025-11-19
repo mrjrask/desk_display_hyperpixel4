@@ -36,8 +36,8 @@ from config import (
     HEIGHT,
     WIDTH,
     FONT_INSIDE_LABEL,
+    FONT_INSIDE_TEMP,
     FONT_INSIDE_VALUE,
-    FONT_TEMP,
     FONT_TITLE_INSIDE,
     INSIDE_SENSOR_I2C_BUS,
 )
@@ -505,8 +505,13 @@ def draw_inside(display, transition=False):
     light_value = _format_light(readings.get("light_lux"))
 
     temp_text = temp_value or "--"
-    temp_w, temp_h = draw.textsize(temp_text, font=FONT_TEMP)
-    draw.text(((WIDTH - temp_w) // 2, 80), temp_text, font=FONT_TEMP, fill=(255, 255, 255))
+    temp_w, temp_h = draw.textsize(temp_text, font=FONT_INSIDE_TEMP)
+    draw.text(
+        ((WIDTH - temp_w) // 2, 80),
+        temp_text,
+        font=FONT_INSIDE_TEMP,
+        fill=(255, 255, 255),
+    )
 
     metrics: List[Tuple[str, str]] = []
     if humidity_value and _has_sensor_source(readings, "humidity_pct"):
