@@ -87,6 +87,7 @@ from config import (
     ENABLE_WIFI_MONITOR,
     CENTRAL_TIME,
     TRAVEL_ACTIVE_WINDOW,
+    DISPLAY_PROFILE,
 )
 from utils import (
     Display,
@@ -109,6 +110,11 @@ from screens.draw_travel_time import (
 )
 from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
 from schedule import ScreenScheduler, build_scheduler, load_schedule_config
+from screen_overrides import (
+    ResolvedScreenOverride,
+    load_overrides as load_screen_overrides,
+    resolve_overrides_for_profile,
+)
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -126,6 +132,7 @@ for _message in _startup_warnings:
 # ─── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
+SCREEN_OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger("storage"))
 SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
@@ -141,6 +148,8 @@ ALLOWED_SCREEN_EXTS      = (".png", ".jpg", ".jpeg")  # images only
 _screen_config_mtime: Optional[float] = None
 screen_scheduler: Optional[ScreenScheduler] = None
 _requested_screen_ids: Set[str] = set()
+_screen_override_mtime: Optional[float] = None
+_resolved_override_cache: Dict[str, ResolvedScreenOverride] = {}
 
 _skip_request_pending = False
 _last_screen_id: Optional[str] = None
@@ -198,6 +207,22 @@ def refresh_schedule_if_needed(force: bool = False) -> None:
     _last_screen_id = None
     _skip_request_pending = False
     logging.info("🔁 Loaded schedule configuration with %d node(s).", scheduler.node_count)
+
+
+def _resolved_screen_overrides(force: bool = False) -> Dict[str, ResolvedScreenOverride]:
+    global _screen_override_mtime, _resolved_override_cache
+    try:
+        mtime = os.path.getmtime(SCREEN_OVERRIDES_PATH)
+    except OSError:
+        mtime = None
+    if not force and _screen_override_mtime == mtime:
+        return _resolved_override_cache
+    overrides = load_screen_overrides(SCREEN_OVERRIDES_PATH)
+    _resolved_override_cache = resolve_overrides_for_profile(
+        DISPLAY_PROFILE, overrides=overrides
+    )
+    _screen_override_mtime = mtime
+    return _resolved_override_cache
 
 # ─── Display & Wi-Fi monitor ─────────────────────────────────────────────────
 display = Display()
@@ -892,6 +917,7 @@ def main_loop():
                 continue
 
             travel_requested = "travel" in _requested_screen_ids
+            resolved_overrides = _resolved_screen_overrides()
             context = ScreenContext(
                 display=display,
                 cache=cache,
@@ -902,6 +928,7 @@ def main_loop():
                 travel_window=get_travel_active_window(),
                 previous_travel_state=_travel_schedule_state,
                 now=datetime.datetime.now(CENTRAL_TIME),
+                overrides=resolved_overrides,
             )
             registry, metadata = build_screen_registry(context)
             _travel_schedule_state = metadata.get("travel_state", _travel_schedule_state)

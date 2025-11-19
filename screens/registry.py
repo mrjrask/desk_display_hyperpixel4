@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from PIL import Image
 
 from utils import ScreenImage, animate_scroll
+from screen_overrides import ResolvedScreenOverride
 from screens.draw_bears_schedule import show_bears_next_game
 from screens.draw_bulls_schedule import (
     draw_bulls_next_home_game,
@@ -99,6 +100,7 @@ class ScreenContext:
     travel_window: Optional[Tuple[Optional[_dt.time], Optional[_dt.time]]]
     previous_travel_state: Optional[str]
     now: _dt.datetime
+    overrides: Dict[str, ResolvedScreenOverride] = field(default_factory=dict)
 
 
 def _show_logo(display, image: Image.Image) -> Image.Image:
@@ -158,11 +160,15 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
     metadata: Dict[str, Any] = {}
 
     def register(screen_id: str, func: RenderCallable, available: bool = True, **extra):
+        metadata = dict(extra)
+        override = context.overrides.get(screen_id)
+        if override:
+            metadata.setdefault("override", override)
         registry[screen_id] = ScreenDefinition(
             id=screen_id,
             render=func,
             available=available,
-            metadata=extra,
+            metadata=metadata,
         )
 
     register("date", lambda: draw_date(context.display, transition=False))

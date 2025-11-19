@@ -138,6 +138,32 @@
       font-size: 0.85rem;
       color: #94a3b8;
     }
+    .override-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .override-group {
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 16px;
+      padding: 1rem;
+      background: rgba(15, 23, 42, 0.5);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .override-group h3 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #f8fafc;
+    }
+    .override-group p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      margin: 0;
+    }
     label {
       display: flex;
       flex-direction: column;
@@ -196,46 +222,95 @@
           {% else %}
             <div class="screenshot screenshot--empty">No screenshot captured yet</div>
           {% endif %}
-          <label>
-            Font scale multiplier
-            <input
-              type="number"
-              min="0.25"
-              max="5"
-              step="0.05"
-              inputmode="decimal"
-              placeholder="Inherit global"
-              class="override-input"
-              data-field="font_scale"
-              value="{{ '%.4g'|format(screen.overrides.font_scale) if screen.overrides.font_scale is defined else '' }}"
-            >
-            <small>Leave blank to use the display default.</small>
-          </label>
-          <label>
-            Image scale multiplier
-            <input
-              type="number"
-              min="0.25"
-              max="3"
-              step="0.05"
-              inputmode="decimal"
-              placeholder="Inherit global"
-              class="override-input"
-              data-field="image_scale"
-              value="{{ '%.4g'|format(screen.overrides.image_scale) if screen.overrides.image_scale is defined else '' }}"
-            >
-            <small>Dial in logos or maps without touching the base layout.</small>
-          </label>
-          <label>
-            Device profile override
-            <select class="override-input" data-field="device_profile">
-              <option value="" {% if screen.overrides.device_profile is not defined %}selected{% endif %}>Use global profile</option>
-              {% for value, label in device_profiles %}
-                <option value="{{ value }}" {% if screen.overrides.device_profile == value %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-            <small>Force a specific HyperPixel layout when testing.</small>
-          </label>
+          <div class="override-groups">
+            {% set defaults = screen.overrides.defaults %}
+            <section class="override-group" data-profile="defaults">
+              <h3>Shared defaults</h3>
+              <p>Applied to every display profile unless a targeted override is defined.</p>
+              <label>
+                Font scale multiplier
+                <input
+                  type="number"
+                  min="0.25"
+                  max="5"
+                  step="0.05"
+                  inputmode="decimal"
+                  placeholder="Inherit global"
+                  class="override-input"
+                  data-field="font_scale"
+                  data-profile="defaults"
+                  value="{{ '%.4g'|format(defaults.font_scale) if defaults.font_scale is defined else '' }}"
+                >
+                <small>Leave blank to use the display default.</small>
+              </label>
+              <label>
+                Image scale multiplier
+                <input
+                  type="number"
+                  min="0.25"
+                  max="3"
+                  step="0.05"
+                  inputmode="decimal"
+                  placeholder="Inherit global"
+                  class="override-input"
+                  data-field="image_scale"
+                  data-profile="defaults"
+                  value="{{ '%.4g'|format(defaults.image_scale) if defaults.image_scale is defined else '' }}"
+                >
+                <small>Dial in logos or maps without touching the base layout.</small>
+              </label>
+              <label>
+                Device profile override
+                <select class="override-input" data-field="device_profile" data-profile="defaults">
+                  <option value="" {% if defaults.device_profile is not defined %}selected{% endif %}>Use global profile</option>
+                  {% for value, label in device_profiles %}
+                    <option value="{{ value }}" {% if defaults.device_profile == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <small>Force a specific HyperPixel layout when testing.</small>
+              </label>
+            </section>
+            {% set profile_overrides = screen.overrides.profiles %}
+            {% for value, label in device_profiles %}
+              {% set entry = profile_overrides.get(value, {}) %}
+              <section class="override-group" data-profile="{{ value }}">
+                <h3>{{ label }}</h3>
+                <p>Only applied when the display reports the <code>{{ value }}</code> profile.</p>
+                <label>
+                  Font scale multiplier
+                  <input
+                    type="number"
+                    min="0.25"
+                    max="5"
+                    step="0.05"
+                    inputmode="decimal"
+                    placeholder="Inherit shared"
+                    class="override-input"
+                    data-field="font_scale"
+                    data-profile="{{ value }}"
+                    value="{{ '%.4g'|format(entry.font_scale) if entry.font_scale is defined else '' }}"
+                  >
+                  <small>Leave blank to inherit the shared defaults.</small>
+                </label>
+                <label>
+                  Image scale multiplier
+                  <input
+                    type="number"
+                    min="0.25"
+                    max="3"
+                    step="0.05"
+                    inputmode="decimal"
+                    placeholder="Inherit shared"
+                    class="override-input"
+                    data-field="image_scale"
+                    data-profile="{{ value }}"
+                    value="{{ '%.4g'|format(entry.image_scale) if entry.image_scale is defined else '' }}"
+                  >
+                  <small>Use when a hardware revision needs extra breathing room.</small>
+                </label>
+              </section>
+            {% endfor %}
+          </div>
         </article>
       {% endfor %}
     </section>
@@ -247,9 +322,23 @@
       const saveBtn = document.getElementById('save-all');
       const statusEl = document.getElementById('status');
 
-      function getInitial(screenId, field) {
-        return (initial[screenId] && Object.prototype.hasOwnProperty.call(initial[screenId], field))
-          ? initial[screenId][field]
+      function getInitial(screenId, profileKey, field) {
+        const screen = initial[screenId];
+        if (!screen) {
+          return null;
+        }
+        if (profileKey === 'defaults') {
+          return (screen.defaults && Object.prototype.hasOwnProperty.call(screen.defaults, field))
+            ? screen.defaults[field]
+            : null;
+        }
+        const profiles = screen.profiles || {};
+        if (!Object.prototype.hasOwnProperty.call(profiles, profileKey)) {
+          return null;
+        }
+        const profileEntry = profiles[profileKey];
+        return Object.prototype.hasOwnProperty.call(profileEntry, field)
+          ? profileEntry[field]
           : null;
       }
 
@@ -303,19 +392,57 @@
         return input.value || null;
       }
 
-      function updatePending(screenId, field, value) {
+      function ensurePending(screenId) {
         if (!pending[screenId]) {
-          pending[screenId] = {};
+          pending[screenId] = { defaults: {}, profiles: {} };
         }
-        pending[screenId][field] = value;
-        if (valuesEqual(value, getInitial(screenId, field))) {
-          delete pending[screenId][field];
+        const entry = pending[screenId];
+        if (!entry.defaults) {
+          entry.defaults = {};
         }
-        if (Object.keys(pending[screenId]).length === 0) {
+        if (!entry.profiles) {
+          entry.profiles = {};
+        }
+        return entry;
+      }
+
+      function cleanupPending(screenId) {
+        const entry = pending[screenId];
+        if (!entry) {
+          return;
+        }
+        if (entry.defaults && Object.keys(entry.defaults).length === 0) {
+          delete entry.defaults;
+        }
+        if (entry.profiles) {
+          Object.keys(entry.profiles).forEach((profile) => {
+            if (Object.keys(entry.profiles[profile]).length === 0) {
+              delete entry.profiles[profile];
+            }
+          });
+          if (Object.keys(entry.profiles).length === 0) {
+            delete entry.profiles;
+          }
+        }
+        if (!entry.defaults && !entry.profiles) {
           delete pending[screenId];
-          cardFor(screenId)?.classList.remove('screen-card--dirty');
-        } else {
+        }
+      }
+
+      function updatePending(screenId, profileKey, field, value) {
+        const entry = ensurePending(screenId);
+        const target = profileKey === 'defaults'
+          ? (entry.defaults || (entry.defaults = {}))
+          : ((entry.profiles[profileKey] = entry.profiles[profileKey] || {}));
+        target[field] = value;
+        if (valuesEqual(value, getInitial(screenId, profileKey, field))) {
+          delete target[field];
+        }
+        cleanupPending(screenId);
+        if (pending[screenId]) {
           cardFor(screenId)?.classList.add('screen-card--dirty');
+        } else {
+          cardFor(screenId)?.classList.remove('screen-card--dirty');
         }
         saveBtn.disabled = Object.keys(pending).length === 0;
       }
@@ -334,7 +461,8 @@
         }
         const screenId = card.dataset.screenId;
         const field = input.dataset.field;
-        updatePending(screenId, field, normaliseValue(input));
+        const profileKey = input.dataset.profile || 'defaults';
+        updatePending(screenId, profileKey, field, normaliseValue(input));
       }
 
       document.querySelectorAll('.override-input').forEach((input) => {
@@ -345,7 +473,24 @@
       function serializePending() {
         const payload = {};
         for (const [screenId, fields] of Object.entries(pending)) {
-          payload[screenId] = { ...fields };
+          const entry = {};
+          if (fields.defaults && Object.keys(fields.defaults).length > 0) {
+            entry.defaults = { ...fields.defaults };
+          }
+          if (fields.profiles) {
+            for (const [profile, values] of Object.entries(fields.profiles)) {
+              if (Object.keys(values).length === 0) {
+                continue;
+              }
+              if (!entry.profiles) {
+                entry.profiles = {};
+              }
+              entry.profiles[profile] = { ...values };
+            }
+          }
+          if (Object.keys(entry).length > 0) {
+            payload[screenId] = entry;
+          }
         }
         return payload;
       }
@@ -355,7 +500,8 @@
           const screenId = card.dataset.screenId;
           card.querySelectorAll('.override-input').forEach((input) => {
             const field = input.dataset.field;
-            const value = getInitial(screenId, field);
+            const profileKey = input.dataset.profile || 'defaults';
+            const value = getInitial(screenId, profileKey, field);
             if (input.type === 'number') {
               input.value = value == null ? '' : value;
             } else if (input.tagName === 'SELECT') {

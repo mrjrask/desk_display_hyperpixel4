@@ -14,12 +14,13 @@ from typing import Dict, Iterable, Optional, Tuple
 from PIL import Image
 
 import data_fetch
-from config import CENTRAL_TIME, HEIGHT, WIDTH
+from config import CENTRAL_TIME, HEIGHT, WIDTH, DISPLAY_PROFILE
 from screens.draw_travel_time import get_travel_active_window, is_travel_screen_active
 from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
 from schedule import build_scheduler, load_schedule_config
 from utils import ScreenImage
 from paths import resolve_storage_paths
+from screen_overrides import resolve_overrides_for_profile
 
 try:
     import utils
@@ -303,6 +304,7 @@ def render_all_screens(
             travel_requested = "travel" in requested_ids if requested_ids else True
 
         now = _dt.datetime.now(CENTRAL_TIME)
+        resolved_overrides = resolve_overrides_for_profile(DISPLAY_PROFILE)
         context = ScreenContext(
             display=display,
             cache=cache,
@@ -313,6 +315,7 @@ def render_all_screens(
             travel_window=get_travel_active_window(),
             previous_travel_state=None,
             now=now,
+            overrides=resolved_overrides,
         )
 
         registry, _metadata = build_screen_registry(context)
