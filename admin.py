@@ -14,6 +14,7 @@ from flask import Flask, jsonify, render_template, request
 
 from schedule import build_scheduler
 from paths import resolve_storage_paths
+from screen_overrides import load_overrides as load_screen_overrides, save_overrides as save_screen_overrides
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
@@ -98,41 +99,12 @@ def _load_config() -> Dict[str, Dict[str, int]]:
     return {"screens": screens}
 
 
-def _load_overrides() -> Dict[str, Dict[str, Any]]:
-    try:
-        with open(OVERRIDES_PATH, "r", encoding="utf-8") as fh:
-            payload = json.load(fh)
-    except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError) as exc:
-        _logger.warning("Could not read screen overrides: %s", exc)
-        return {}
-
-    screens = payload.get("screens")
-    if not isinstance(screens, dict):
-        return {}
-
-    result: Dict[str, Dict[str, Any]] = {}
-    for screen_id, raw in screens.items():
-        if not isinstance(screen_id, str) or not isinstance(raw, dict):
-            continue
-        filtered = {
-            key: raw[key]
-            for key in ("font_scale", "image_scale", "device_profile")
-            if key in raw
-        }
-        if filtered:
-            result[screen_id] = filtered
-    return result
+def _load_overrides() -> Dict[str, Dict[str, Dict[str, Any]]]:
+    return load_screen_overrides(OVERRIDES_PATH)
 
 
-def _save_overrides(overrides: Dict[str, Dict[str, Any]]) -> None:
-    os.makedirs(os.path.dirname(OVERRIDES_PATH), exist_ok=True)
-    tmp_path = OVERRIDES_PATH + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as fh:
-        json.dump({"screens": overrides}, fh, indent=2, sort_keys=True)
-        fh.write("\n")
-    os.replace(tmp_path, OVERRIDES_PATH)
+def _save_overrides(overrides: Dict[str, Dict[str, Dict[str, Any]]]) -> None:
+    save_screen_overrides(overrides, OVERRIDES_PATH)
 
 
 def _normalise_optional_float(
@@ -172,51 +144,116 @@ def _normalise_device_profile(value: Any) -> Optional[str]:
     raise ValueError("Device profile override must be a string or null")
 
 
+def _empty_override_entry() -> Dict[str, Dict[str, Any]]:
+    return {"defaults": {}, "profiles": {}}
+
+
+def _normalise_override_entry(entry: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    defaults = dict((entry or {}).get("defaults") or {})
+    profiles = {
+        profile: dict(values)
+        for profile, values in ((entry or {}).get("profiles") or {}).items()
+        if isinstance(profile, str) and isinstance(values, dict)
+    }
+    return {"defaults": defaults, "profiles": profiles}
+
+
+def _apply_numeric_fields(target: Dict[str, Any], payload: Dict[str, Any]) -> None:
+    for field_name, params in (
+        ("font_scale", {"minimum": 0.25, "maximum": 5.0}),
+        ("image_scale", {"minimum": 0.25, "maximum": 3.0}),
+    ):
+        if field_name not in payload:
+            continue
+        value = _normalise_optional_float(
+            payload[field_name],
+            field_name="Font scale" if field_name == "font_scale" else "Image scale",
+            minimum=params["minimum"],
+            maximum=params["maximum"],
+        )
+        if value is None:
+            target.pop(field_name, None)
+        else:
+            target[field_name] = value
+
+
+def _apply_device_profile(target: Dict[str, Any], payload: Dict[str, Any]) -> None:
+    if "device_profile" not in payload:
+        return
+    profile = _normalise_device_profile(payload["device_profile"])
+    if profile is None:
+        target.pop("device_profile", None)
+    else:
+        target["device_profile"] = profile
+
+
 def _merge_override_updates(
     updates: Dict[str, Dict[str, Any]]
-) -> Dict[str, Dict[str, Any]]:
-    current = {key: dict(value) for key, value in _load_overrides().items()}
+) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    current = {
+        screen_id: _normalise_override_entry(entry)
+        for screen_id, entry in _load_overrides().items()
+    }
+
     for screen_id, raw in updates.items():
         if not isinstance(screen_id, str):
             raise ValueError("Screen identifiers must be strings")
         if not isinstance(raw, dict):
             raise ValueError("Override values must be objects")
 
-        entry = dict(current.get(screen_id, {}))
-        for field_name, params in (
-            ("font_scale", {"minimum": 0.25, "maximum": 5.0}),
-            ("image_scale", {"minimum": 0.25, "maximum": 3.0}),
-        ):
-            if field_name not in raw:
-                continue
-            value = _normalise_optional_float(
-                raw[field_name],
-                field_name="Font scale" if field_name == "font_scale" else "Image scale",
-                minimum=params["minimum"],
-                maximum=params["maximum"],
-            )
-            if value is None:
-                entry.pop(field_name, None)
-            else:
-                entry[field_name] = value
+        entry = current.setdefault(screen_id, _empty_override_entry())
+        defaults = entry.setdefault("defaults", {})
+        profiles = entry.setdefault("profiles", {})
 
-        if "device_profile" in raw:
-            profile = _normalise_device_profile(raw["device_profile"])
-            if profile is None:
-                entry.pop("device_profile", None)
-            else:
-                entry["device_profile"] = profile
+        inline_fields = {
+            key: raw[key]
+            for key in ("font_scale", "image_scale", "device_profile")
+            if key in raw
+        }
+        if inline_fields:
+            _apply_numeric_fields(defaults, inline_fields)
+            _apply_device_profile(defaults, inline_fields)
 
-        if entry:
-            current[screen_id] = entry
-        else:
+        if "defaults" in raw:
+            block = raw["defaults"]
+            if block is None:
+                defaults.clear()
+            elif isinstance(block, dict):
+                _apply_numeric_fields(defaults, block)
+                _apply_device_profile(defaults, block)
+            else:
+                raise ValueError("Defaults override must be an object or null")
+
+        profile_payloads = raw.get("profiles")
+        if profile_payloads is not None:
+            if not isinstance(profile_payloads, dict):
+                raise ValueError("Profile overrides must be provided as an object")
+            for profile_name, profile_block in profile_payloads.items():
+                if not isinstance(profile_name, str):
+                    raise ValueError("Profile names must be strings")
+                if profile_block is None:
+                    profiles.pop(profile_name, None)
+                    continue
+                if not isinstance(profile_block, dict):
+                    raise ValueError("Profile overrides must be objects or null")
+                target = profiles.setdefault(profile_name, {})
+                _apply_numeric_fields(target, profile_block)
+                _apply_device_profile(target, profile_block)
+                if not target:
+                    profiles.pop(profile_name, None)
+
+        if not defaults:
+            entry.pop("defaults", None)
+        if not profiles:
+            entry.pop("profiles", None)
+        if not entry:
             current.pop(screen_id, None)
 
     return current
 
 
 def _collect_screen_info(
-    *, overrides: Optional[Dict[str, Dict[str, Any]]] = None
+    *, overrides: Optional[Dict[str, Dict[str, Dict[str, Any]]]] = None
 ) -> List[ScreenInfo]:
     config = _load_config()
     # Validate the configuration by attempting to build a scheduler.
@@ -231,7 +268,7 @@ def _collect_screen_info(
         except (TypeError, ValueError):
             frequency = 0
         latest = _latest_screenshot(screen_id)
-        screen_overrides = overrides.get(screen_id, {})
+        screen_overrides = _normalise_override_entry(overrides.get(screen_id))
         if latest is None:
             screens.append(
                 ScreenInfo(screen_id, frequency, None, None, screen_overrides)

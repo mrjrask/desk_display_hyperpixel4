@@ -371,6 +371,31 @@ This writes a playlist-aware config and validates it using the scheduler parser.
 - Set `metadata.ui.playlist_admin_enabled` to `false` (or append `?legacy=1` to the URL) to fall back to the JSON editor.
 - Every save records an audit entry (actor, summary, diff summary) and prunes historical versions beyond the configured retention window.
 
+#### Screen tuning overrides
+
+The admin UI also exposes per-screen tuning controls backed by `screen_overrides.json`. The file accepts a `screens` mapping whose values combine shared defaults with optional profile-specific overrides:
+
+```json
+{
+  "screens": {
+    "travel": {
+      "defaults": {
+        "font_scale": 1.1,
+        "image_scale": 0.95
+      },
+      "profiles": {
+        "hyperpixel4": {"image_scale": 0.9},
+        "hyperpixel4_square": {"font_scale": 1.2}
+      }
+    }
+  }
+}
+```
+
+- The **shared defaults** block applies to every display profile unless a targeted override is provided.
+- A profile entry replaces only the specified keys when the display reports that profile; any missing values fall back to the shared defaults.
+- The runtime resolves overrides through `screen_overrides.py`, so both the live service and the batch renderer automatically pick the correct values for the active `DISPLAY_PROFILE`.
+
 ### Default playlist reference
 
 The repository ships with a ready-to-run `screens_config.json` that exposes the **Default loop** playlist shown in the admin UI. The playlist executes the following steps in order (rules are evaluated on each pass through the loop):
