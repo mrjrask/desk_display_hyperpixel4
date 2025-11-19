@@ -37,6 +37,30 @@ def _iter_candidate_roots() -> Iterable[Path]:
     yield Path.home() / APP_DIR_NAME
 
 
+_SHARED_HINT_PATH = Path(tempfile.gettempdir()) / f"{APP_DIR_NAME}_screenshot_dir.txt"
+
+
+def _read_shared_hint(logger: Optional[logging.Logger]) -> Optional[Path]:
+    try:
+        raw = _SHARED_HINT_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    candidate = Path(raw)
+    if _ensure_writable(candidate, logger):
+        return candidate
+    return None
+
+
+def _write_shared_hint(path: Path, logger: Optional[logging.Logger]) -> None:
+    try:
+        _SHARED_HINT_PATH.write_text(str(path), encoding="utf-8")
+    except OSError as exc:
+        if logger:
+            logger.debug("Could not record screenshot hint %s: %s", _SHARED_HINT_PATH, exc)
+
+
 def _iter_candidate_screenshot_dirs() -> Iterable[Path]:
     env_override = os.environ.get("DESK_DISPLAY_SCREENSHOT_DIR")
     if env_override:
@@ -73,8 +97,13 @@ def _ensure_writable(path: Path, logger: Optional[logging.Logger]) -> bool:
 
 
 def _select_screenshot_dir(logger: Optional[logging.Logger]) -> Path:
+    shared_hint = _read_shared_hint(logger)
+    if shared_hint is not None:
+        return shared_hint
+
     for candidate in _iter_candidate_screenshot_dirs():
         if _ensure_writable(candidate, logger):
+            _write_shared_hint(candidate, logger)
             return candidate
 
     fallback = Path(__file__).resolve().parent / "screenshots"
@@ -84,6 +113,7 @@ def _select_screenshot_dir(logger: Optional[logging.Logger]) -> Path:
             fallback,
         )
     fallback.mkdir(parents=True, exist_ok=True)
+    _write_shared_hint(fallback, logger)
     return fallback
 
 
