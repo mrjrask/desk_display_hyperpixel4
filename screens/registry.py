@@ -11,6 +11,7 @@ from PIL import Image
 
 from utils import ScreenImage, animate_scroll
 from screen_overrides import ResolvedScreenOverride
+from screen_runtime_overrides import apply_override_to_result
 from screens.draw_bears_schedule import show_bears_next_game
 from screens.draw_bulls_schedule import (
     draw_bulls_next_home_game,
@@ -164,9 +165,19 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         override = context.overrides.get(screen_id)
         if override:
             metadata.setdefault("override", override)
+            original_func = func
+
+            def func_with_override(func=original_func, override=override):
+                result = func()
+                return apply_override_to_result(result, override)
+
+            render_callable = func_with_override
+        else:
+            render_callable = func
+
         registry[screen_id] = ScreenDefinition(
             id=screen_id,
-            render=func,
+            render=render_callable,
             available=available,
             metadata=metadata,
         )
