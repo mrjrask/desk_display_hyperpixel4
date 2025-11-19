@@ -6,22 +6,31 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 from schedule import build_scheduler
 from paths import resolve_storage_paths
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
+OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 
 _logger = logging.getLogger(__name__)
 _storage_paths = resolve_storage_paths(logger=_logger)
 SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+
+DEVICE_PROFILE_CHOICES = [
+    ("hyperpixel4_square", "HyperPixel 4.0 Square (720×720)"),
+    ("hyperpixel4_square_portrait", "HyperPixel 4.0 Square – Portrait"),
+    ("hyperpixel4", "HyperPixel 4.0 Landscape (800×480)"),
+    ("hyperpixel4_portrait", "HyperPixel 4.0 Portrait (480×800)"),
+]
+_DEVICE_PROFILE_IDS = {choice[0] for choice in DEVICE_PROFILE_CHOICES}
 
 app = Flask(
     __name__,
@@ -38,6 +47,7 @@ class ScreenInfo:
     frequency: int
     last_screenshot: Optional[str]
     last_captured: Optional[str]
+    overrides: Dict[str, Any] = field(default_factory=dict)
 
 
 def _sanitize_directory_name(name: str) -> str:
@@ -88,10 +98,131 @@ def _load_config() -> Dict[str, Dict[str, int]]:
     return {"screens": screens}
 
 
-def _collect_screen_info() -> List[ScreenInfo]:
+def _load_overrides() -> Dict[str, Dict[str, Any]]:
+    try:
+        with open(OVERRIDES_PATH, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        _logger.warning("Could not read screen overrides: %s", exc)
+        return {}
+
+    screens = payload.get("screens")
+    if not isinstance(screens, dict):
+        return {}
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for screen_id, raw in screens.items():
+        if not isinstance(screen_id, str) or not isinstance(raw, dict):
+            continue
+        filtered = {
+            key: raw[key]
+            for key in ("font_scale", "image_scale", "device_profile")
+            if key in raw
+        }
+        if filtered:
+            result[screen_id] = filtered
+    return result
+
+
+def _save_overrides(overrides: Dict[str, Dict[str, Any]]) -> None:
+    os.makedirs(os.path.dirname(OVERRIDES_PATH), exist_ok=True)
+    tmp_path = OVERRIDES_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump({"screens": overrides}, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp_path, OVERRIDES_PATH)
+
+
+def _normalise_optional_float(
+    value: Any,
+    *,
+    field_name: str,
+    minimum: float,
+    maximum: float,
+) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a number") from exc
+    if number < minimum or number > maximum:
+        raise ValueError(
+            f"{field_name} must be between {minimum:g} and {maximum:g}"
+        )
+    return round(number, 4)
+
+
+def _normalise_device_profile(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return None
+        if candidate not in _DEVICE_PROFILE_IDS:
+            raise ValueError("Unknown device profile override")
+        return candidate
+    raise ValueError("Device profile override must be a string or null")
+
+
+def _merge_override_updates(
+    updates: Dict[str, Dict[str, Any]]
+) -> Dict[str, Dict[str, Any]]:
+    current = {key: dict(value) for key, value in _load_overrides().items()}
+    for screen_id, raw in updates.items():
+        if not isinstance(screen_id, str):
+            raise ValueError("Screen identifiers must be strings")
+        if not isinstance(raw, dict):
+            raise ValueError("Override values must be objects")
+
+        entry = dict(current.get(screen_id, {}))
+        for field_name, params in (
+            ("font_scale", {"minimum": 0.25, "maximum": 5.0}),
+            ("image_scale", {"minimum": 0.25, "maximum": 3.0}),
+        ):
+            if field_name not in raw:
+                continue
+            value = _normalise_optional_float(
+                raw[field_name],
+                field_name="Font scale" if field_name == "font_scale" else "Image scale",
+                minimum=params["minimum"],
+                maximum=params["maximum"],
+            )
+            if value is None:
+                entry.pop(field_name, None)
+            else:
+                entry[field_name] = value
+
+        if "device_profile" in raw:
+            profile = _normalise_device_profile(raw["device_profile"])
+            if profile is None:
+                entry.pop("device_profile", None)
+            else:
+                entry["device_profile"] = profile
+
+        if entry:
+            current[screen_id] = entry
+        else:
+            current.pop(screen_id, None)
+
+    return current
+
+
+def _collect_screen_info(
+    *, overrides: Optional[Dict[str, Dict[str, Any]]] = None
+) -> List[ScreenInfo]:
     config = _load_config()
     # Validate the configuration by attempting to build a scheduler.
     build_scheduler(config)
+
+    overrides = overrides or _load_overrides()
 
     screens: List[ScreenInfo] = []
     for screen_id, freq in config["screens"].items():
@@ -100,8 +231,11 @@ def _collect_screen_info() -> List[ScreenInfo]:
         except (TypeError, ValueError):
             frequency = 0
         latest = _latest_screenshot(screen_id)
+        screen_overrides = overrides.get(screen_id, {})
         if latest is None:
-            screens.append(ScreenInfo(screen_id, frequency, None, None))
+            screens.append(
+                ScreenInfo(screen_id, frequency, None, None, screen_overrides)
+            )
         else:
             rel_path, captured = latest
             screens.append(
@@ -110,6 +244,7 @@ def _collect_screen_info() -> List[ScreenInfo]:
                     frequency,
                     rel_path,
                     captured.isoformat(timespec="seconds"),
+                    screen_overrides,
                 )
             )
     return screens
@@ -156,13 +291,20 @@ def _prime_screenshots() -> None:
 
 @app.route("/")
 def index() -> str:
+    overrides = _load_overrides()
     try:
-        screens = _collect_screen_info()
+        screens = _collect_screen_info(overrides=overrides)
         error = None
     except ValueError as exc:
         screens = []
         error = str(exc)
-    return render_template("admin.html", screens=screens, error=error)
+    return render_template(
+        "admin.html",
+        screens=screens,
+        error=error,
+        overrides=overrides,
+        device_profiles=DEVICE_PROFILE_CHOICES,
+    )
 
 
 @app.route("/api/screens")
@@ -181,6 +323,38 @@ def api_config():
         return jsonify(status="ok", config=config)
     except ValueError as exc:
         return jsonify(status="error", message=str(exc)), 500
+
+
+@app.route("/api/overrides", methods=["GET", "POST"])
+def api_overrides():
+    if request.method == "GET":
+        return jsonify(status="ok", overrides=_load_overrides())
+
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        payload = None
+
+    if not isinstance(payload, dict):
+        return (
+            jsonify(status="error", message="Payload must be a JSON object"),
+            400,
+        )
+
+    screens = payload.get("screens")
+    if not isinstance(screens, dict):
+        return (
+            jsonify(status="error", message="Payload must contain a 'screens' object"),
+            400,
+        )
+
+    try:
+        merged = _merge_override_updates(screens)
+    except ValueError as exc:
+        return jsonify(status="error", message=str(exc)), 400
+
+    _save_overrides(merged)
+    return jsonify(status="ok", overrides=merged)
 
 
 if __name__ == "__main__":  # pragma: no cover
