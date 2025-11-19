@@ -15,6 +15,7 @@
     "nfl logo": 0,
     "NFL Scoreboard": 1,
     "NFL Scoreboard v2": 1,
+    "NFL Scoreboard v3": 1,
     "NFL Overview NFC": {
       "frequency": 1,
       "alt": {
@@ -44,6 +45,7 @@
     "nhl logo": 0,
     "NHL Scoreboard": 1,
     "NHL Scoreboard v2": 1,
+    "NHL Scoreboard v3": 1,
     "NHL Standings Overview": {
       "frequency": 1,
       "alt": {
@@ -71,6 +73,7 @@
     "mlb logo": 0,
     "MLB Scoreboard": 0,
     "MLB Scoreboard v2": 0,
+    "MLB Scoreboard v3": 0,
     "NL Overview": 0,
     "NL East": 0,
     "NL Central": 0,
@@ -83,6 +86,7 @@
     "AL Wild Card": 0,
     "nba logo": 0,
     "NBA Scoreboard": 1,
-    "NBA Scoreboard v2": 1
+    "NBA Scoreboard v2": 1,
+    "NBA Scoreboard v3": 1
   }
 }
