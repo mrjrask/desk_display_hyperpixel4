@@ -8,7 +8,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 # ─── Environment helpers ───────────────────────────────────────────────────────
 
@@ -277,6 +277,13 @@ def scale_y(value: float) -> int:
 
 def scale_font(size: float) -> int:
     return max(1, int(round(size * SCALE * FONT_SCALE_FACTOR)))
+
+
+def get_display_geometry(profile: str) -> Optional[Tuple[int, int]]:
+    """Return the (width, height) tuple for ``profile`` if it is known."""
+
+    canonical = _DISPLAY_PROFILE_ALIASES.get(profile, profile)
+    return _DISPLAY_PROFILES.get(canonical)
 
 
 def _load_display_overrides(path: str) -> dict:
