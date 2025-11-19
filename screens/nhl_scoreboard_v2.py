@@ -74,7 +74,7 @@ COL_WIDTHS = [55, 85, 50, 85, 55]  # total = 330 (fits in 360)
 _TOTAL_COL_WIDTH = sum(COL_WIDTHS)
 _COL_LEFT = (GAME_WIDTH - _TOTAL_COL_WIDTH) // 2
 
-_SCORE_PT = 75 - (4 if IS_SQUARE_DISPLAY else 0) - 3
+_SCORE_PT = 75 - (4 if IS_SQUARE_DISPLAY else 0) - 5
 _STATUS_PT = 42 - (4 if IS_SQUARE_DISPLAY else 0)
 _CENTER_PT = 54 - (4 if IS_SQUARE_DISPLAY else 0)
 
@@ -82,7 +82,7 @@ SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, _SCORE_PT)
 STATUS_FONT             = clone_font(FONT_STATUS, max(8, _STATUS_PT))
 CENTER_FONT             = clone_font(FONT_STATUS, max(8, _CENTER_PT))
 TITLE_FONT              = FONT_TITLE_SPORTS
-LOGO_HEIGHT             = 120
+LOGO_HEIGHT             = 114
 LOGO_GAP_MARGIN         = 6
 LOGO_DIR                = os.path.join(IMAGES_DIR, "nhl")
 LEAGUE_LOGO_KEYS        = ("NHL", "nhl")
@@ -93,6 +93,7 @@ IN_PROGRESS_STATUS_COLOR = IN_PROGRESS_SCORE_COLOR
 FINAL_WINNING_SCORE_COLOR = SCOREBOARD_FINAL_WINNING_SCORE_COLOR
 FINAL_LOSING_SCORE_COLOR = SCOREBOARD_FINAL_LOSING_SCORE_COLOR
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
+STATUS_TEXT_NUDGE = -12
 
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _LEAGUE_LOGO: Optional[Image.Image] = None
@@ -434,7 +435,7 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         y0 = score_top + (SCORE_ROW_H - fitted_logo.height) // 2
         canvas.paste(fitted_logo, (x0, y0), fitted_logo)
 
-    status_top = score_top + SCORE_ROW_H
+    status_top = score_top + SCORE_ROW_H + STATUS_TEXT_NUDGE
     status_text = _format_status(game)
     status_fill = IN_PROGRESS_STATUS_COLOR if in_progress else (255, 255, 255)
     _center_text(draw, status_text, STATUS_FONT, col_x[2], COL_WIDTHS[2], status_top, STATUS_ROW_H, fill=status_fill)
