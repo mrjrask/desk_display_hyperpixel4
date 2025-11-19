@@ -17,7 +17,7 @@ Supported sensors & default addresses:
 
 Dependencies (install if missing):
     sudo apt-get install -y python3-smbus
-    pip3 install smbus2 ltr559 pimoroni-bme280 lsm6dsox
+    pip3 install smbus2 ltr559 pimoroni-bme280 adafruit-circuitpython-lsm6ds
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ except Exception:
     ltr559 = None
 
 try:
-    from lsm6dsox import LSM6DSOX  # similar API to LSM6DS3 variant; used for presence check fallback
+    from adafruit_lsm6ds.lsm6dsox import LSM6DSOX  # optional IMU presence check
 except Exception:
     LSM6DSOX = None
 

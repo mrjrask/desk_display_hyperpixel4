@@ -9,6 +9,7 @@ adafruit-blinka
 adafruit-extended-bus
 adafruit-circuitpython-bme680
 adafruit-circuitpython-sht4x
+adafruit-circuitpython-lsm6ds
 spidev
 smbus
 lgpio
@@ -20,7 +21,6 @@ adafruit-circuitpython-bme280
 pimoroni-bme280
 -e ./vendor/bme68x
 pygame
-ltr559 
-pimoroni-bme280 
-lsm6dsox
+ltr559
+pimoroni-bme280
 smbus2
