@@ -60,9 +60,7 @@ BOTTOM_LABEL_MARGIN = 8
 BACKGROUND_COLOR = (0, 0, 0)
 TEXT_COLOR = (255, 255, 255)
 
-SCOREBOARD_LOGO_RATIO = 0.84
-SCOREBOARD_NAME_RATIO_BOOST = 1.12
-SCOREBOARD_NAME_RATIO_FALLBACK_BOOST = 1.05
+SCOREBOARD_LOGO_RATIO = 0.85
 
 _LOGO_CACHE: Dict[Tuple[str, int], Optional[Image.Image]] = {}
 
@@ -453,16 +451,20 @@ def _draw_scoreboard(
     padding_x = 18
     row_gap = 8
     bottom_limit = HEIGHT - bottom_reserved_px
-    available = max(0, bottom_limit - top_y)
+    total_available = max(0, bottom_limit - top_y)
 
-    min_row_height = max(68, int(round(HEIGHT * 0.18)))
-    preferred_row_height = int(round(HEIGHT * 0.24))
-    row_h = max(min_row_height, preferred_row_height)
-    if available:
-        row_h = min(row_h, max(min_row_height, available // 2))
+    base_row_height = max(96, int(round(HEIGHT * 0.28)))
+    row_h = base_row_height
+    if total_available > 0:
+        row_h = max(base_row_height, total_available // 2)
+        row_h = min(row_h, total_available)
+    if total_available and row_h * 2 > total_available:
+        row_h = max(64, total_available // 2)
+
+    available = total_available
     total_height = row_h * 2 + row_gap
     if available and total_height > available:
-        row_h = max(min_row_height, (available - row_gap) // 2)
+        row_h = max(64, (available - row_gap) // 2)
         total_height = row_h * 2 + row_gap
 
     table_top = top_y
@@ -470,16 +472,16 @@ def _draw_scoreboard(
         table_top += (available - total_height) // 2
     table_bottom = min(bottom_limit, table_top + total_height)
 
-    score_font_size = max(38, int(round(row_h * 0.6)))
+    score_font_size = max(44, int(round(row_h * 0.65)))
     name_font_size = max(
         SCOREBOARD_NAME_FONT_MIN_SIZE,
-        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO * SCOREBOARD_NAME_RATIO_BOOST)),
+        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO)),
     )
     min_name_size = max(
         SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK,
-        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK * SCOREBOARD_NAME_RATIO_FALLBACK_BOOST)),
+        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK)),
     )
-    abbr_font_size = max(24, int(round(row_h * 0.45)))
+    abbr_font_size = max(24, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO)))
 
     score_font = _ts(score_font_size)
     abbr_font = _ts(abbr_font_size)
