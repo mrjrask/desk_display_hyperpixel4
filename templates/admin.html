@@ -3,103 +3,423 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Screen overview</title>
+  <title>Screen tuning</title>
   <style>
     :root {
       color-scheme: light dark;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f172a;
+      background: #020617;
       color: #e2e8f0;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 2rem;
-      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
       min-height: 100vh;
+      background: radial-gradient(circle at top, rgba(59,130,246,0.25), transparent 55%), #020617;
+      padding: clamp(1rem, 3vw, 2.5rem);
+    }
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .page__header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
     }
     h1 {
-      margin-bottom: 1.5rem;
-      font-size: clamp(2rem, 5vw, 3rem);
-      text-align: center;
-      letter-spacing: 0.03em;
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      letter-spacing: 0.02em;
     }
+    p {
+      margin: 0.35rem 0 0;
+      color: #94a3b8;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, #22d3ee, #6366f1);
+      color: #020617;
+      box-shadow: 0 10px 30px rgba(79, 70, 229, 0.4);
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    button:not(:disabled):active {
+      transform: translateY(2px);
+    }
+    .status {
+      min-height: 1.5rem;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .status[data-tone="success"] { color: #86efac; }
+    .status[data-tone="error"] { color: #fca5a5; }
+    .status[data-tone="info"] { color: #93c5fd; }
     .error {
-      max-width: 960px;
-      margin: 0 auto 2rem auto;
-      padding: 1rem 1.5rem;
-      border-radius: 12px;
-      background: rgba(220, 38, 38, 0.15);
-      border: 1px solid rgba(220, 38, 38, 0.4);
+      border: 1px solid rgba(248,113,113,0.6);
+      background: rgba(248,113,113,0.08);
+      padding: 0.75rem 1rem;
+      border-radius: 16px;
       color: #fecaca;
       font-weight: 600;
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 1.5rem;
-      max-width: 1200px;
-      margin: 0 auto;
     }
-    .card {
+    .screen-card {
+      position: relative;
       background: rgba(15, 23, 42, 0.85);
-      border-radius: 16px;
-      padding: 1.25rem;
-      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.45);
-      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 20px;
+      padding: 1.5rem;
+      border: 1px solid rgba(148, 163, 184, 0.25);
       backdrop-filter: blur(10px);
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 1rem;
+      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
     }
-    .card h2 {
+    .screen-card--dirty::after {
+      content: "Unsaved";
+      position: absolute;
+      top: 0.75rem;
+      right: 1rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #fcd34d;
+    }
+    .screen-card__title {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .screen-card__title h2 {
       margin: 0;
       font-size: 1.1rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
-    .frequency {
-      font-size: 0.9rem;
+    .screen-card__title span {
       color: #94a3b8;
+      font-size: 0.9rem;
+    }
+    .screenshot {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(30, 41, 59, 0.6);
+      object-fit: cover;
+    }
+    .screenshot--empty {
+      display: grid;
+      place-items: center;
+      font-style: italic;
+      color: #94a3b8;
+      font-size: 0.9rem;
     }
     .timestamp {
       font-size: 0.85rem;
       color: #94a3b8;
     }
-    .screenshot {
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      object-fit: cover;
-      border-radius: 12px;
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      background: rgba(30, 41, 59, 0.6);
-    }
-    .empty {
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
       font-size: 0.9rem;
-      color: #94a3b8;
-      font-style: italic;
+      color: #cbd5f5;
+    }
+    input[type="number"], select {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.6);
+      color: inherit;
+      font-size: 1rem;
+      padding: 0.5rem 0.75rem;
+      outline: none;
+      transition: border-color 120ms ease;
+    }
+    input[type="number"]:focus, select:focus {
+      border-color: #38bdf8;
+    }
+    input.invalid {
+      border-color: #f87171;
+    }
+    small {
+      color: #64748b;
+      font-size: 0.8rem;
     }
   </style>
 </head>
 <body>
-  <h1>Display rotation overview</h1>
-  {% if error %}
-    <div class="error">{{ error }}</div>
-  {% endif %}
-  <div class="grid">
-    {% for screen in screens %}
-      <div class="card">
-        <h2>{{ screen.id }}</h2>
-        <div class="frequency">Frequency: every {{ screen.frequency }} loop{{ '' if screen.frequency == 1 else 's' }}</div>
-        {% if screen.last_screenshot %}
-          <img class="screenshot" src="{{ url_for('static', filename=screen.last_screenshot) }}" alt="Latest screenshot for {{ screen.id }}">
-          {% if screen.last_captured %}
-            <div class="timestamp">Captured {{ screen.last_captured }}</div>
-          {% endif %}
-        {% else %}
-          <div class="empty">No screenshot captured yet.</div>
-        {% endif %}
+  <main class="page">
+    <header class="page__header">
+      <div>
+        <h1>Screen tuning</h1>
+        <p>Adjust font sizes, image scale, and device profiles for each scheduled screen.</p>
       </div>
-    {% endfor %}
-  </div>
+      <button id="save-all" type="button" disabled>Save changes</button>
+    </header>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <div class="status" id="status" aria-live="polite"></div>
+    <section class="grid">
+      {% for screen in screens %}
+        <article class="screen-card" data-screen-id="{{ screen.id }}">
+          <div class="screen-card__title">
+            <h2>{{ screen.id }}</h2>
+            <span>Every {{ screen.frequency }} loop{{ '' if screen.frequency == 1 else 's' }}</span>
+          </div>
+          {% if screen.last_screenshot %}
+            <img class="screenshot" src="{{ url_for('static', filename=screen.last_screenshot) }}" alt="Latest screenshot for {{ screen.id }}">
+            {% if screen.last_captured %}
+              <div class="timestamp">Captured {{ screen.last_captured }}</div>
+            {% endif %}
+          {% else %}
+            <div class="screenshot screenshot--empty">No screenshot captured yet</div>
+          {% endif %}
+          <label>
+            Font scale multiplier
+            <input
+              type="number"
+              min="0.25"
+              max="5"
+              step="0.05"
+              inputmode="decimal"
+              placeholder="Inherit global"
+              class="override-input"
+              data-field="font_scale"
+              value="{{ '%.4g'|format(screen.overrides.font_scale) if screen.overrides.font_scale is defined else '' }}"
+            >
+            <small>Leave blank to use the display default.</small>
+          </label>
+          <label>
+            Image scale multiplier
+            <input
+              type="number"
+              min="0.25"
+              max="3"
+              step="0.05"
+              inputmode="decimal"
+              placeholder="Inherit global"
+              class="override-input"
+              data-field="image_scale"
+              value="{{ '%.4g'|format(screen.overrides.image_scale) if screen.overrides.image_scale is defined else '' }}"
+            >
+            <small>Dial in logos or maps without touching the base layout.</small>
+          </label>
+          <label>
+            Device profile override
+            <select class="override-input" data-field="device_profile">
+              <option value="" {% if screen.overrides.device_profile is not defined %}selected{% endif %}>Use global profile</option>
+              {% for value, label in device_profiles %}
+                <option value="{{ value }}" {% if screen.overrides.device_profile == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <small>Force a specific HyperPixel layout when testing.</small>
+          </label>
+        </article>
+      {% endfor %}
+    </section>
+  </main>
+  <script>
+    (() => {
+      const initial = {{ overrides | tojson }};
+      const pending = Object.create(null);
+      const saveBtn = document.getElementById('save-all');
+      const statusEl = document.getElementById('status');
+
+      function getInitial(screenId, field) {
+        return (initial[screenId] && Object.prototype.hasOwnProperty.call(initial[screenId], field))
+          ? initial[screenId][field]
+          : null;
+      }
+
+      function valuesEqual(a, b) {
+        if (a == null && b == null) {
+          return true;
+        }
+        if (typeof a === 'number' && typeof b === 'number') {
+          return Math.abs(a - b) < 0.0001;
+        }
+        return a === b;
+      }
+
+      function cardFor(screenId) {
+        return document.querySelector(`.screen-card[data-screen-id="${CSS.escape(screenId)}"]`);
+      }
+
+      function setStatus(message, tone = 'info') {
+        statusEl.textContent = message;
+        statusEl.dataset.tone = tone;
+      }
+
+      function validateInput(input) {
+        if (input.type === 'number') {
+          if (!input.value) {
+            input.classList.remove('invalid');
+            input.setCustomValidity('');
+            return true;
+          }
+          const value = Number(input.value);
+          const min = Number(input.min);
+          const max = Number(input.max);
+          if (Number.isNaN(value) || value < min || value > max) {
+            input.classList.add('invalid');
+            input.setCustomValidity(`Enter a value between ${min} and ${max}.`);
+            return false;
+          }
+        }
+        input.classList.remove('invalid');
+        input.setCustomValidity('');
+        return true;
+      }
+
+      function normaliseValue(input) {
+        if (input.type === 'number') {
+          return input.value ? Number(input.value) : null;
+        }
+        if (input.tagName === 'SELECT') {
+          return input.value || null;
+        }
+        return input.value || null;
+      }
+
+      function updatePending(screenId, field, value) {
+        if (!pending[screenId]) {
+          pending[screenId] = {};
+        }
+        pending[screenId][field] = value;
+        if (valuesEqual(value, getInitial(screenId, field))) {
+          delete pending[screenId][field];
+        }
+        if (Object.keys(pending[screenId]).length === 0) {
+          delete pending[screenId];
+          cardFor(screenId)?.classList.remove('screen-card--dirty');
+        } else {
+          cardFor(screenId)?.classList.add('screen-card--dirty');
+        }
+        saveBtn.disabled = Object.keys(pending).length === 0;
+      }
+
+      function handleInput(event) {
+        const input = event.target;
+        if (!input.classList.contains('override-input')) {
+          return;
+        }
+        if (!validateInput(input)) {
+          return;
+        }
+        const card = input.closest('.screen-card');
+        if (!card) {
+          return;
+        }
+        const screenId = card.dataset.screenId;
+        const field = input.dataset.field;
+        updatePending(screenId, field, normaliseValue(input));
+      }
+
+      document.querySelectorAll('.override-input').forEach((input) => {
+        input.addEventListener('input', handleInput);
+        input.addEventListener('change', handleInput);
+      });
+
+      function serializePending() {
+        const payload = {};
+        for (const [screenId, fields] of Object.entries(pending)) {
+          payload[screenId] = { ...fields };
+        }
+        return payload;
+      }
+
+      function refreshInputs() {
+        document.querySelectorAll('.screen-card').forEach((card) => {
+          const screenId = card.dataset.screenId;
+          card.querySelectorAll('.override-input').forEach((input) => {
+            const field = input.dataset.field;
+            const value = getInitial(screenId, field);
+            if (input.type === 'number') {
+              input.value = value == null ? '' : value;
+            } else if (input.tagName === 'SELECT') {
+              input.value = value || '';
+            }
+          });
+        });
+      }
+
+      saveBtn.addEventListener('click', async () => {
+        if (saveBtn.disabled) {
+          return;
+        }
+        const inputs = Array.from(document.querySelectorAll('.override-input'));
+        for (const input of inputs) {
+          if (!validateInput(input)) {
+            input.reportValidity();
+            setStatus('Fix invalid values before saving.', 'error');
+            return;
+          }
+        }
+
+        const updates = serializePending();
+        if (Object.keys(updates).length === 0) {
+          setStatus('No changes to save.', 'info');
+          return;
+        }
+
+        saveBtn.disabled = true;
+        const originalLabel = saveBtn.textContent;
+        saveBtn.textContent = 'Saving…';
+        setStatus('Saving overrides…', 'info');
+        try {
+          const resp = await fetch('/api/overrides', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ screens: updates }),
+          });
+          const payload = await resp.json();
+          if (!resp.ok || payload.status !== 'ok') {
+            throw new Error(payload.message || 'Unable to save overrides');
+          }
+          for (const key of Object.keys(initial)) {
+            if (!(key in payload.overrides)) {
+              delete initial[key];
+            }
+          }
+          Object.entries(payload.overrides).forEach(([key, value]) => {
+            initial[key] = value;
+          });
+          Object.keys(pending).forEach((key) => {
+            delete pending[key];
+            cardFor(key)?.classList.remove('screen-card--dirty');
+          });
+          refreshInputs();
+          setStatus('Overrides saved.', 'success');
+        } catch (err) {
+          setStatus(err.message || 'Save failed', 'error');
+        } finally {
+          saveBtn.textContent = originalLabel;
+          saveBtn.disabled = Object.keys(pending).length === 0;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

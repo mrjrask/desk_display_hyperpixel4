@@ -16,17 +16,20 @@ def app_client(tmp_path, monkeypatch):
     screenshot_dir = tmp_path / "screenshots"
     screenshot_dir.mkdir()
 
+    overrides_path = tmp_path / "screen_overrides.json"
+
     monkeypatch.setattr(admin, "CONFIG_PATH", str(config_path))
     monkeypatch.setattr(admin, "SCREENSHOT_DIR", str(screenshot_dir))
+    monkeypatch.setattr(admin, "OVERRIDES_PATH", str(overrides_path))
     admin.app.static_folder = str(screenshot_dir)
 
     admin.app.config.update(TESTING=True)
     with admin.app.test_client() as client:
-        yield client, screenshot_dir, config_path
+        yield client, screenshot_dir, config_path, overrides_path
 
 
 def test_index_lists_screens(app_client):
-    client, screenshot_dir, _ = app_client
+    client, screenshot_dir, _, _ = app_client
 
     folder = screenshot_dir / admin._sanitize_directory_name("date")
     folder.mkdir()
@@ -37,11 +40,11 @@ def test_index_lists_screens(app_client):
     body = resp.get_data(as_text=True)
     assert "date" in body
     assert "travel" in body
-    assert "Frequency" in body
+    assert "Font scale multiplier" in body
 
 
 def test_api_screens_reports_latest_file(app_client):
-    client, screenshot_dir, _ = app_client
+    client, screenshot_dir, _, overrides_path = app_client
 
     folder = screenshot_dir / admin._sanitize_directory_name("date")
     folder.mkdir(exist_ok=True)
@@ -52,6 +55,8 @@ def test_api_screens_reports_latest_file(app_client):
     os.utime(first, (1, 1))
     os.utime(second, (2, 2))
 
+    overrides_path.write_text(json.dumps({"screens": {"travel": {"font_scale": 1.5}}}))
+
     resp = client.get("/api/screens")
     payload = resp.get_json()
     assert resp.status_code == 200
@@ -60,16 +65,59 @@ def test_api_screens_reports_latest_file(app_client):
     screens = {entry["id"]: entry for entry in payload["screens"]}
     assert screens["date"]["last_screenshot"].endswith("date_2.png")
     assert screens["travel"]["last_screenshot"] is None
+    assert screens["travel"]["overrides"]["font_scale"] == 1.5
 
 
 def test_api_config_returns_current_config(app_client):
-    client, _, config_path = app_client
+    client, _, config_path, _ = app_client
     resp = client.get("/api/config")
     payload = resp.get_json()
     assert resp.status_code == 200
     assert payload["status"] == "ok"
     assert payload["config"]["screens"]["travel"] == 2
     assert json.loads(Path(config_path).read_text())["screens"]["date"] == 0
+
+
+def test_api_overrides_round_trip(app_client):
+    client, _, _, overrides_path = app_client
+    resp = client.post(
+        "/api/overrides",
+        json={
+            "screens": {
+                "date": {
+                    "font_scale": 1.5,
+                    "image_scale": 0.9,
+                    "device_profile": "hyperpixel4",
+                }
+            }
+        },
+    )
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload["status"] == "ok"
+    assert payload["overrides"]["date"]["device_profile"] == "hyperpixel4"
+    on_disk = json.loads(overrides_path.read_text())
+    assert on_disk["screens"]["date"]["font_scale"] == 1.5
+
+
+def test_api_overrides_rejects_invalid_payload(app_client):
+    client, _, _, overrides_path = app_client
+    resp = client.post(
+        "/api/overrides",
+        json={"screens": {"travel": {"font_scale": 0.1}}},
+    )
+    assert resp.status_code == 400
+    assert not overrides_path.exists()
+
+
+def test_api_overrides_get_returns_current_file(app_client):
+    client, _, _, overrides_path = app_client
+    overrides_path.write_text(json.dumps({"screens": {"travel": {"image_scale": 1.2}}}))
+
+    resp = client.get("/api/overrides")
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload["overrides"]["travel"]["image_scale"] == 1.2
 
 
 def test_startup_renderer_runs_when_enabled(monkeypatch):
