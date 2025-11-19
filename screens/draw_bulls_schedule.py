@@ -60,6 +60,10 @@ BOTTOM_LABEL_MARGIN = 8
 BACKGROUND_COLOR = (0, 0, 0)
 TEXT_COLOR = (255, 255, 255)
 
+SCOREBOARD_LOGO_RATIO = 0.84
+SCOREBOARD_NAME_RATIO_BOOST = 1.12
+SCOREBOARD_NAME_RATIO_FALLBACK_BOOST = 1.05
+
 _LOGO_CACHE: Dict[Tuple[str, int], Optional[Image.Image]] = {}
 
 
@@ -467,8 +471,14 @@ def _draw_scoreboard(
     table_bottom = min(bottom_limit, table_top + total_height)
 
     score_font_size = max(38, int(round(row_h * 0.6)))
-    name_font_size = max(SCOREBOARD_NAME_FONT_MIN_SIZE, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO)))
-    min_name_size = max(SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK)))
+    name_font_size = max(
+        SCOREBOARD_NAME_FONT_MIN_SIZE,
+        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO * SCOREBOARD_NAME_RATIO_BOOST)),
+    )
+    min_name_size = max(
+        SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK,
+        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK * SCOREBOARD_NAME_RATIO_FALLBACK_BOOST)),
+    )
     abbr_font_size = max(24, int(round(row_h * 0.45)))
 
     score_font = _ts(score_font_size)
@@ -476,7 +486,7 @@ def _draw_scoreboard(
 
     def _row_spec(team: Dict[str, Optional[str]], row_top: int) -> Dict[str, Any]:
         tri = (team.get("tri") or "").upper()
-        logo_height = max(36, int(round(row_h * 0.7)))
+        logo_height = max(40, int(round(row_h * SCOREBOARD_LOGO_RATIO)))
         logo = _load_logo_cached(tri, logo_height)
         label = _team_scoreboard_label(team)
         score = team.get("score")

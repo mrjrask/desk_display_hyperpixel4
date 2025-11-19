@@ -420,6 +420,13 @@ def _compute_dewpoint(temp_c: Optional[float], humidity: Optional[float]) -> Opt
     return f"{dew_f:.1f}°F"
 
 
+def _has_sensor_source(readings: Dict[str, Any], metric_key: str) -> bool:
+    sources = readings.get("_sources")
+    if not isinstance(sources, dict):
+        return False
+    return metric_key in sources
+
+
 def _format_age(timestamp: Optional[float]) -> Optional[str]:
     if timestamp is None:
         return None
@@ -467,7 +474,6 @@ def draw_inside(display, transition=False):
     temp_value = _format_temperature(readings.get("temperature_c"))
     humidity_value = _format_humidity(readings.get("humidity_pct"))
     pressure_value = _format_pressure(readings.get("pressure_hpa"))
-    dew_point_value = _compute_dewpoint(readings.get("temperature_c"), readings.get("humidity_pct"))
     light_value = _format_light(readings.get("light_lux"))
 
     temp_text = temp_value or "--"
@@ -475,13 +481,11 @@ def draw_inside(display, transition=False):
     draw.text(((WIDTH - temp_w) // 2, 80), temp_text, font=FONT_TEMP, fill=(255, 255, 255))
 
     metrics: List[Tuple[str, str]] = []
-    if humidity_value:
+    if humidity_value and _has_sensor_source(readings, "humidity_pct"):
         metrics.append(("Humidity", humidity_value))
-    if dew_point_value:
-        metrics.append(("Dew Point", dew_point_value))
-    if pressure_value:
+    if pressure_value and _has_sensor_source(readings, "pressure_hpa"):
         metrics.append(("Pressure", pressure_value))
-    if light_value:
+    if light_value and _has_sensor_source(readings, "light_lux"):
         metrics.append(("Light", light_value))
 
     if not metrics:
@@ -543,13 +547,13 @@ def draw_inside_sensors(display, transition=False):
     humidity_value = _format_humidity(readings.get("humidity_pct"))
     pressure_value = _format_pressure(readings.get("pressure_hpa"))
     light_value = _format_light(readings.get("light_lux"))
-    if temp_value:
+    if temp_value and _has_sensor_source(readings, "temperature_c"):
         metrics.append(("Temperature", temp_value))
-    if humidity_value:
+    if humidity_value and _has_sensor_source(readings, "humidity_pct"):
         metrics.append(("Humidity", humidity_value))
-    if pressure_value:
+    if pressure_value and _has_sensor_source(readings, "pressure_hpa"):
         metrics.append(("Pressure", pressure_value))
-    if light_value:
+    if light_value and _has_sensor_source(readings, "light_lux"):
         metrics.append(("Light", light_value))
 
     y = 80
