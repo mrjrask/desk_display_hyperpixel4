@@ -39,6 +39,7 @@ from config import (
     FONT_INSIDE_VALUE,
     FONT_TEMP,
     FONT_TITLE_INSIDE,
+    INSIDE_SENSOR_I2C_BUS,
 )
 from utils import clear_display, log_call
 
@@ -64,7 +65,36 @@ ADDR_BME280 = [0x76, 0x77]
 ADDR_LTR559 = [0x23]
 ADDR_LSM6  = [0x6A, 0x6B]
 
-# ---- Utils ----
+# HyperPixel hats expose their sensors on predictable I2C buses. We encode the
+# priority explicitly so rectangular (13/14) and square (15) panels are tested
+# before the generic Raspberry Pi buses.
+_HYPERPIXEL_BUS_PRIORITY = (15, 13, 14, 1)
+
+
+def _preferred_bus_order(buses: List[int]) -> List[int]:
+    """Return ``buses`` sorted with HyperPixel priorities and any override."""
+
+    deduped: List[int] = []
+    for bus in buses:
+        if bus not in deduped:
+            deduped.append(bus)
+
+    def _priority_value(bus: int) -> Tuple[int, int]:
+        try:
+            idx = _HYPERPIXEL_BUS_PRIORITY.index(bus)
+        except ValueError:
+            idx = len(_HYPERPIXEL_BUS_PRIORITY)
+        return (idx, bus)
+
+    ordered = sorted(deduped, key=_priority_value)
+
+    if INSIDE_SENSOR_I2C_BUS is not None:
+        override = int(INSIDE_SENSOR_I2C_BUS)
+        ordered = [override] + [b for b in ordered if b != override]
+
+    return ordered
+
+
 def list_i2c_buses() -> List[int]:
     buses: List[int] = []
     for path in glob.glob("/dev/i2c-*"):
@@ -72,9 +102,7 @@ def list_i2c_buses() -> List[int]:
             buses.append(int(path.split("-")[-1]))
         except Exception:
             pass
-    # Ensure stable order: prefer the HyperPixel buses if present
-    buses = sorted(set(buses), key=lambda x: (x not in (13,14,15,1), x))
-    return buses
+    return _preferred_bus_order(buses)
 
 def safe_probe(busnum: int, addr: int, timeout: float = 0.02) -> bool:
     try:
