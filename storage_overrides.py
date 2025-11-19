@@ -7,4 +7,4 @@ from typing import Optional
 # Set this to an absolute path (e.g. "/home/pi/desk_display_hyperpixel4/screenshots")
 # to force the application to write screenshots there. Leave it as ``None`` to
 # let the auto-detection logic choose a writable location.
-SCREENSHOT_DIR: Optional[str] = None
+SCREENSHOT_DIR: Optional[str] = /home/pi/desk_display_hyperpixel4/screenshots
