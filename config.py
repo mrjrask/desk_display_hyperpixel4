@@ -315,97 +315,13 @@ if DISPLAY_ROTATION not in {0, 90, 180, 270}:
     )
     DISPLAY_ROTATION = DEFAULT_DISPLAY_ROTATION
 
-# ─── Scoreboard appearance ────────────────────────────────────────────────────
-
-# Scoreboard team name font sizing (used in schedule screens)
-SCOREBOARD_NAME_FONT_MIN_SIZE = 36
-SCOREBOARD_NAME_FONT_RATIO = 0.45
-SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK = 20
-SCOREBOARD_NAME_FONT_RATIO_FALLBACK = 0.32
-
-# Persistent time display (upper left corner)
-PERSISTENT_TIME_ENABLED = True
-PERSISTENT_TIME_FONT_SIZE = scale_font(12)  # Smaller, phone-style time
-PERSISTENT_TIME_AMPM_SCALE = 0.6  # AM/PM is 60% of time font size
-PERSISTENT_TIME_X = 8
-PERSISTENT_TIME_Y = 4
-PERSISTENT_TIME_COLOR = (200, 200, 200)
-
-
-def _coerce_color_component(env_name: str, default: int) -> int:
-    """Return a color channel value from 0-255 with logging on invalid input."""
-
-    raw_value = os.environ.get(env_name)
-    if raw_value is None:
-        return default
-
-    try:
-        value = int(raw_value)
-    except (TypeError, ValueError):
-        logging.warning(
-            "Invalid %s value %r; using default %d", env_name, raw_value, default
-        )
-        return default
-
-    if not 0 <= value <= 255:
-        logging.warning(
-            "%s must be between 0 and 255; clamping %d to valid range", env_name, value
-        )
-        return max(0, min(255, value))
-
-    return value
-
-
-# Default background color for scoreboards and standings screens. Use an RGB
-# tuple so callers can request either RGB or RGBA colors as needed.
-SCOREBOARD_BACKGROUND_COLOR = (
-    _coerce_color_component("SCOREBOARD_BACKGROUND_R", 80),
-    _coerce_color_component("SCOREBOARD_BACKGROUND_G", 80),
-    _coerce_color_component("SCOREBOARD_BACKGROUND_B", 80),
-)
-
-# Score colors shared across scoreboard implementations.
-SCOREBOARD_IN_PROGRESS_SCORE_COLOR = (255, 210, 66)
-SCOREBOARD_FINAL_WINNING_SCORE_COLOR = (255, 255, 255)
-SCOREBOARD_FINAL_LOSING_SCORE_COLOR = (200, 200, 200)
-
-# ─── Scoreboard scrolling configuration ───────────────────────────────────────
-SCOREBOARD_SCROLL_STEP         = 1
-SCOREBOARD_SCROLL_DELAY        = 0.02
-SCOREBOARD_SCROLL_PAUSE_TOP    = 0.75
-SCOREBOARD_SCROLL_PAUSE_BOTTOM = 0.5
-
-# ─── API endpoints ────────────────────────────────────────────────────────────
-ONE_CALL_URL      = "https://api.openweathermap.org/data/3.0/onecall"
-OPEN_METEO_URL    = "https://api.open-meteo.com/v1/forecast"
-OPEN_METEO_PARAMS = {
-    "latitude":        LATITUDE,
-    "longitude":       LONGITUDE,
-    "current_weather": True,
-    "timezone":        "America/Chicago",
-    "temperature_unit":"fahrenheit",
-    "windspeed_unit":  "mph",
-    "daily":           "temperature_2m_max,temperature_2m_min,sunrise,sunset"
-}
-
-NHL_API_URL        = "https://api-web.nhle.com/v1/club-schedule-season/CHI/20252026"
-MLB_API_URL        = "https://statsapi.mlb.com/api/v1/schedule"
-MLB_CUBS_TEAM_ID   = "112"
-MLB_SOX_TEAM_ID    = "145"
-
-NBA_TEAM_ID        = "1610612741"
-NBA_TEAM_TRICODE   = "CHI"
-NBA_IMAGES_DIR     = os.path.join(IMAGES_DIR, "nba")
-NBA_FALLBACK_LOGO  = os.path.join(NBA_IMAGES_DIR, "NBA.png")
-
-CENTRAL_TIME = pytz.timezone("America/Chicago")
-
-# ─── Fonts ────────────────────────────────────────────────────────────────────
+# ─── Font resources ───────────────────────────────────────────────────────────
 # Drop your TimesSquare-m105.ttf, DejaVuSans.ttf, DejaVuSans-Bold.ttf and
-# NotoColorEmoji.ttf into a new folder named `fonts` alongside this file.
+# NotoColorEmoji.ttf into a folder named `fonts` alongside this file.
 FONTS_DIR = os.path.join(SCRIPT_DIR, "fonts")
 
-def _load_font(name, size):
+
+def _load_font(name: str, size: int) -> ImageFont.FreeTypeFont:
     path = os.path.join(FONTS_DIR, name)
     return ImageFont.truetype(path, size)
 
@@ -500,23 +416,108 @@ class _BitmapEmojiFont(ImageFont.ImageFont):
             return rgba.im
         return scaled.im
 
-FONT_DAY_DATE           = _load_font("DejaVuSans-Bold.ttf", scale_font(39))
-FONT_DATE               = _load_font("DejaVuSans.ttf",      scale_font(22))
-FONT_TIME               = _load_font("DejaVuSans-Bold.ttf", scale_font(59))
-FONT_AM_PM              = _load_font("DejaVuSans.ttf",      scale_font(20))
 
-FONT_TEMP               = _load_font("DejaVuSans-Bold.ttf", scale_font(44))
-FONT_CONDITION          = _load_font("DejaVuSans-Bold.ttf", scale_font(20))
-FONT_WEATHER_DETAILS    = _load_font("DejaVuSans.ttf",      scale_font(22))
+FONT_DAY_DATE = _load_font("DejaVuSans-Bold.ttf", scale_font(39))
+FONT_DATE = _load_font("DejaVuSans.ttf", scale_font(22))
+FONT_TIME = _load_font("DejaVuSans-Bold.ttf", scale_font(59))
+FONT_AM_PM = _load_font("DejaVuSans.ttf", scale_font(20))
+
+FONT_TEMP = _load_font("DejaVuSans-Bold.ttf", scale_font(44))
+FONT_CONDITION = _load_font("DejaVuSans-Bold.ttf", scale_font(20))
+FONT_WEATHER_DETAILS = _load_font("DejaVuSans.ttf", scale_font(22))
 FONT_WEATHER_DETAILS_BOLD = _load_font("DejaVuSans-Bold.ttf", scale_font(18))
-FONT_WEATHER_LABEL      = _load_font("DejaVuSans.ttf",      scale_font(18))
+FONT_WEATHER_LABEL = _load_font("DejaVuSans.ttf", scale_font(18))
 
-FONT_TITLE_SPORTS       = _load_font("TimesSquare-m105.ttf", scale_font(30))
-FONT_TEAM_SPORTS        = _load_font("TimesSquare-m105.ttf", scale_font(37))
-FONT_DATE_SPORTS        = _load_font("TimesSquare-m105.ttf", scale_font(30))
-FONT_TEAM_SPORTS_SMALL  = _load_font("TimesSquare-m105.ttf", scale_font(33))
-FONT_SCORE              = _load_font("TimesSquare-m105.ttf", scale_font(41))
-FONT_STATUS             = _load_font("TimesSquare-m105.ttf", scale_font(30))
+FONT_TITLE_SPORTS = _load_font("TimesSquare-m105.ttf", scale_font(30))
+FONT_TEAM_SPORTS = _load_font("TimesSquare-m105.ttf", scale_font(37))
+FONT_DATE_SPORTS = _load_font("TimesSquare-m105.ttf", scale_font(30))
+FONT_SCORE = _load_font("TimesSquare-m105.ttf", scale_font(41))
+FONT_STATUS = _load_font("TimesSquare-m105.ttf", scale_font(30))
+
+# ─── Scoreboard appearance ────────────────────────────────────────────────────
+
+# Scoreboard team name font sizing (used in schedule screens)
+SCOREBOARD_NAME_FONT_MIN_SIZE = 36
+SCOREBOARD_NAME_FONT_RATIO = 0.45
+SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK = 20
+SCOREBOARD_NAME_FONT_RATIO_FALLBACK = 0.32
+
+# Persistent time display (upper left corner)
+PERSISTENT_TIME_ENABLED = True
+PERSISTENT_TIME_FONT_SIZE = scale_font(12)  # Smaller, phone-style time
+PERSISTENT_TIME_AMPM_SCALE = 0.6  # AM/PM is 60% of time font size
+PERSISTENT_TIME_X = 8
+PERSISTENT_TIME_Y = 4
+PERSISTENT_TIME_COLOR = (200, 200, 200)
+
+
+def _coerce_color_component(env_name: str, default: int) -> int:
+    """Return a color channel value from 0-255 with logging on invalid input."""
+
+    raw_value = os.environ.get(env_name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        logging.warning(
+            "Invalid %s value %r; using default %d", env_name, raw_value, default
+        )
+        return default
+
+    if not 0 <= value <= 255:
+        logging.warning(
+            "%s must be between 0 and 255; clamping %d to valid range", env_name, value
+        )
+        return max(0, min(255, value))
+
+    return value
+
+
+# Default background color for scoreboards and standings screens. Use an RGB
+# tuple so callers can request either RGB or RGBA colors as needed.
+SCOREBOARD_BACKGROUND_COLOR = (
+    _coerce_color_component("SCOREBOARD_BACKGROUND_R", 80),
+    _coerce_color_component("SCOREBOARD_BACKGROUND_G", 80),
+    _coerce_color_component("SCOREBOARD_BACKGROUND_B", 80),
+)
+
+# Score colors shared across scoreboard implementations.
+SCOREBOARD_IN_PROGRESS_SCORE_COLOR = (255, 210, 66)
+SCOREBOARD_FINAL_WINNING_SCORE_COLOR = (255, 255, 255)
+SCOREBOARD_FINAL_LOSING_SCORE_COLOR = (200, 200, 200)
+
+# ─── Scoreboard scrolling configuration ───────────────────────────────────────
+SCOREBOARD_SCROLL_STEP         = 1
+SCOREBOARD_SCROLL_DELAY        = 0.02
+SCOREBOARD_SCROLL_PAUSE_TOP    = 0.75
+SCOREBOARD_SCROLL_PAUSE_BOTTOM = 0.5
+
+# ─── API endpoints ────────────────────────────────────────────────────────────
+ONE_CALL_URL      = "https://api.openweathermap.org/data/3.0/onecall"
+OPEN_METEO_URL    = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_PARAMS = {
+    "latitude":        LATITUDE,
+    "longitude":       LONGITUDE,
+    "current_weather": True,
+    "timezone":        "America/Chicago",
+    "temperature_unit":"fahrenheit",
+    "windspeed_unit":  "mph",
+    "daily":           "temperature_2m_max,temperature_2m_min,sunrise,sunset"
+}
+
+NHL_API_URL        = "https://api-web.nhle.com/v1/club-schedule-season/CHI/20252026"
+MLB_API_URL        = "https://statsapi.mlb.com/api/v1/schedule"
+MLB_CUBS_TEAM_ID   = "112"
+MLB_SOX_TEAM_ID    = "145"
+
+NBA_TEAM_ID        = "1610612741"
+NBA_TEAM_TRICODE   = "CHI"
+NBA_IMAGES_DIR     = os.path.join(IMAGES_DIR, "nba")
+NBA_FALLBACK_LOGO  = os.path.join(NBA_IMAGES_DIR, "NBA.png")
+
+CENTRAL_TIME = pytz.timezone("America/Chicago")
 
 # Shared sports logo row sizing. This value replaces ad-hoc calculations in the
 # team schedule screens so logo heights can be tuned from a single location.
@@ -600,7 +601,7 @@ DATE_TIME_GH_ICON_INVERT = True
 DATE_TIME_GH_ICON_SIZE   = scale(33)
 DATE_TIME_GH_ICON_PATHS  = [
     os.path.join(IMAGES_DIR, "gh.png"),
-    os.path.join(SCRIPT_DIR, "image", "gh.png"),
+    os.path.join(SCRIPT_DIR, "images", "gh.png"),
 ]
 
 # Indoor sensor screen colors
