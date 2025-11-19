@@ -483,6 +483,7 @@ WorkingDirectory=/home/pi/desk_display
 Environment=DISPLAY_PROFILE=hyperpixel4_square
 EnvironmentFile=-/home/pi/desk_display/.env
 EnvironmentFile=-/run/user/%U/desk_display.env
+Environment=INSIDE_SENSOR_I2C_BUS=15
 SupplementaryGroups=video render input gpio i2c spi
 ExecStartPre=/home/pi/desk_display/scripts/wait_and_export_display_env.sh
 ExecStart=/home/pi/desk_display/venv/bin/python /home/pi/desk_display/main.py
@@ -511,6 +512,12 @@ python -m venv /home/pi/desk_display/venv
 /home/pi/desk_display/venv/bin/pip install -r /home/pi/desk_display/requirements.txt
 chmod +x /home/pi/desk_display/cleanup.sh
 ```
+
+`INSIDE_SENSOR_I2C_BUS` is optional; set it to match the `/dev/i2c-*` bus number
+that your hardware exposes. HyperPixel 4.0 Square hats usually use bus `15`, while
+the standard rectangular HyperPixel boards commonly appear on bus `13`. If you
+omit the variable entirely the app will scan every detected bus but still prefer
+the HyperPixel candidates first.
 
 `ExecStop` runs `cleanup.sh` on every shutdown so the LCD blanks immediately and any lingering screenshots or videos are swept
 into the archive folders. The service is marked `Restart=always`, so crashes or manual restarts via `systemctl restart` will
