@@ -161,9 +161,10 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 ## Requirements
 
 - Raspberry Pi (tested on Pi Zero/Zero 2 W, Pi 4, and Pi 5)
-- Raspberry Pi OS Bookworm or Trixie (64-bit) with Wayland enabled – legacy X11 sessions continue to work via the service gate
+- Raspberry Pi OS **Bookworm** (64-bit) with Wayland enabled – legacy X11 sessions continue to work via the service gate.
+  - Raspberry Pi OS **Trixie** currently runs into multiple issues; stick with Bookworm for now and watch this space for a future Trixie-ready update.
 - Pimoroni **HyperPixel 4.0 Square (720×720 LCD)** or **HyperPixel 4.0 (800×480 LCD)** wired to SPI0
-- Python 3.11+ (Bookworm ships 3.11; Trixie ships 3.12)
+- Python 3.11+ (Bookworm ships 3.11)
 - Packages (install via apt / pip):
   ```bash
   sudo apt-get update
@@ -205,9 +206,9 @@ pip install -r requirements.txt
 
 The `venv` directory is ignored by Git. Re-run `source venv/bin/activate` whenever you start a new shell session to ensure the project uses the isolated Python environment.
 
-### Raspberry Pi OS Bookworm/Trixie quickstart (Pi 4 & Pi 5)
+### Raspberry Pi OS Bookworm quickstart (Pi 4 & Pi 5)
 
-1. Flash the 64-bit edition of Raspberry Pi OS **Bookworm** or **Trixie** and enable desktop autologin so a graphical session starts at boot.
+1. Flash the 64-bit edition of Raspberry Pi OS **Bookworm** and enable desktop autologin so a graphical session starts at boot.
 2. Run `sudo raspi-config`, enable **SPI**, **I²C**, and the **GL (Full KMS)** driver, then reboot.
 3. Install Pimoroni’s HyperPixel overlay (`curl https://get.pimoroni.com/hyperpixel4 | bash`) or manually add `dtoverlay=hyperpixel4` to `/boot/firmware/config.txt` and reboot.
 4. Install the apt packages listed above, clone this repository, and create the virtual environment (`python -m venv venv && source venv/bin/activate`).
