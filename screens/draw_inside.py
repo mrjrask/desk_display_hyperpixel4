@@ -95,6 +95,25 @@ def _preferred_bus_order(buses: List[int]) -> List[int]:
     return ordered
 
 
+def _classify_orientation(ax: float, ay: float, az: float) -> str:
+    """Approximate orientation based on accelerometer readings."""
+
+    magnitude = math.sqrt(ax * ax + ay * ay + az * az) or 1e-9
+    nx, ny, nz = ax / magnitude, ay / magnitude, az / magnitude
+
+    if abs(nz) > 0.75:
+        return "Face up 🙃" if nz > 0 else "Face down 🙃"
+    if abs(nx) > abs(ny):
+        return "Right edge down" if nx > 0 else "Left edge down"
+    return "Top edge down" if ny > 0 else "Bottom edge down"
+
+
+def _pitch_roll_degrees(ax: float, ay: float, az: float) -> Tuple[float, float]:
+    pitch = math.degrees(math.atan2(ax, math.sqrt(ay * ay + az * az)))
+    roll = math.degrees(math.atan2(ay, math.sqrt(ax * ax + az * az)))
+    return pitch, roll
+
+
 def list_i2c_buses() -> List[int]:
     buses: List[int] = []
     for path in glob.glob("/dev/i2c-*"):
@@ -255,7 +274,9 @@ class SensorHub:
     def get_readings(self) -> Dict[str, float]:
         """
         Returns a dictionary with any available metrics.
-        Keys: temperature_c, humidity_pct, pressure_hpa, light_lux
+        Keys: temperature_c, humidity_pct, pressure_hpa, light_lux,
+        proximity, accel_ms2 (tuple), gyro_rads (tuple), pitch_deg, roll_deg,
+        orientation_label
         Plus a "sources" dict indicating which sensor supplied each metric.
         """
         out: Dict[str, float] = {}
@@ -304,6 +325,45 @@ class SensorHub:
                 out["light_lux"] = lux
                 b, a = self.bus_for_ltr559
                 sources["light_lux"] = f"LTR559@{b}:{hex(a)}"
+            except Exception:
+                pass
+
+            try:
+                proximity = int(self._ltr.get_proximity())
+                out["proximity"] = proximity
+                b, a = self.bus_for_ltr559
+                sources.setdefault("proximity", f"LTR559@{b}:{hex(a)}")
+            except Exception:
+                pass
+
+        # IMU (LSM6DSOX) - orientation + raw accel/gyro
+        if self._imu is not None:
+            try:
+                accel = getattr(self._imu, "acceleration", None)
+                if accel:
+                    ax, ay, az = accel
+                    out["accel_ms2"] = accel
+                    pitch, roll = _pitch_roll_degrees(ax, ay, az)
+                    out["pitch_deg"] = pitch
+                    out["roll_deg"] = roll
+                    out["orientation_label"] = _classify_orientation(ax, ay, az)
+                    b, a = self.bus_for_lsm6
+                    label = f"LSM6@{b}:{hex(a)}"
+                    sources.setdefault("accel_ms2", label)
+                    sources.setdefault("orientation_label", label)
+                    sources.setdefault("pitch_deg", label)
+                    sources.setdefault("roll_deg", label)
+            except Exception:
+                pass
+
+            try:
+                gyro = getattr(self._imu, "gyro", None)
+                if gyro is None:
+                    gyro = getattr(self._imu, "gyroscope", None)
+                if gyro:
+                    out["gyro_rads"] = gyro
+                    b, a = self.bus_for_lsm6
+                    sources.setdefault("gyro_rads", f"LSM6@{b}:{hex(a)}")
             except Exception:
                 pass
 
@@ -431,6 +491,50 @@ def _format_light(light_lux: Optional[float]) -> Optional[str]:
     return f"{lux:.0f} lx"
 
 
+def _format_proximity(proximity: Optional[float]) -> Optional[str]:
+    if proximity is None:
+        return None
+    try:
+        return f"{int(proximity)}"
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_temp_dual(temp_c: Optional[float]) -> Optional[str]:
+    if temp_c is None:
+        return None
+    try:
+        temp_c_val = float(temp_c)
+        temp_f = _c_to_f(temp_c_val)
+        return f"{temp_c_val:.1f}°C / {temp_f:.1f}°F"
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_pitch_roll(pitch: Optional[float], roll: Optional[float]) -> Optional[str]:
+    try:
+        if pitch is None or roll is None:
+            return None
+        return f"{float(pitch):5.1f}° / {float(roll):5.1f}°"
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_vector(values: Any, unit: str) -> Optional[str]:
+    try:
+        if not isinstance(values, (list, tuple)) or len(values) != 3:
+            return None
+        if all(isinstance(v, int) for v in values):
+            ax, ay, az = [int(v) for v in values]
+            return f"ax={ax:7d} ay={ay:7d} az={az:7d}"
+
+        ax, ay, az = [float(v) for v in values]
+    except (TypeError, ValueError):
+        return None
+
+    return f"ax={ax:6.2f} ay={ay:6.2f} az={az:6.2f} {unit}"
+
+
 def _compute_dewpoint(temp_c: Optional[float], humidity: Optional[float]) -> Optional[str]:
     if temp_c is None or humidity is None:
         return None
@@ -540,7 +644,7 @@ def draw_inside(display, transition=False):
 def draw_inside_sensors(display, transition=False):
     """Render a diagnostic view showing detected sensors and data sources."""
 
-    readings, timestamp = _fetch_readings()
+    readings, timestamp = _fetch_readings(force_refresh=True)
     hub = _ensure_sensor_hub()
     clear_display(display)
 
@@ -551,9 +655,9 @@ def draw_inside_sensors(display, transition=False):
     title_w, title_h = draw.textsize(title, font=FONT_TITLE_INSIDE)
     draw.text(((WIDTH - title_w) // 2, 28), title, font=FONT_TITLE_INSIDE, fill=(173, 216, 230))
 
-    lines: List[str] = []
+    sensor_lines: List[str] = []
     if hub is None:
-        lines.append("Sensor hub not initialised")
+        sensor_lines.append("Sensor hub not initialised")
     else:
         mapping = [
             ("SHT4x", hub.bus_for_sht4x),
@@ -563,40 +667,63 @@ def draw_inside_sensors(display, transition=False):
         ]
         for label, info in mapping:
             if info is None:
-                lines.append(f"{label}: not detected")
+                sensor_lines.append(f"{label}: not detected")
             else:
                 bus, addr = info
-                lines.append(f"{label}: bus {bus} addr {hex(addr)}")
+                sensor_lines.append(f"{label}: bus {bus} addr {hex(addr)}")
 
     sources = readings.get("_sources") if isinstance(readings.get("_sources"), dict) else {}
     if sources:
-        lines.append("")
-        lines.append("Sources:")
+        sensor_lines.append("")
+        sensor_lines.append("Sources:")
         for metric, source in sorted(sources.items()):
-            lines.append(f"  {metric}: {source}")
+            sensor_lines.append(f"  {metric}: {source}")
 
     metrics: List[Tuple[str, str]] = []
-    temp_value = _format_temperature(readings.get("temperature_c"))
+    temp_value = _format_temp_dual(readings.get("temperature_c"))
     humidity_value = _format_humidity(readings.get("humidity_pct"))
     pressure_value = _format_pressure(readings.get("pressure_hpa"))
     light_value = _format_light(readings.get("light_lux"))
+    proximity_value = _format_proximity(readings.get("proximity"))
     if temp_value and _has_sensor_source(readings, "temperature_c"):
-        metrics.append(("Temperature", temp_value))
+        metrics.append(("🌞 Temperature", temp_value))
     if humidity_value and _has_sensor_source(readings, "humidity_pct"):
-        metrics.append(("Humidity", humidity_value))
+        metrics.append(("💧 Humidity", humidity_value))
     if pressure_value and _has_sensor_source(readings, "pressure_hpa"):
-        metrics.append(("Pressure", pressure_value))
+        metrics.append(("☔ Pressure", pressure_value))
     if light_value and _has_sensor_source(readings, "light_lux"):
-        metrics.append(("Light", light_value))
+        metrics.append(("💡 Light", light_value))
+    if proximity_value and _has_sensor_source(readings, "proximity"):
+        metrics.append(("📡 Proximity", proximity_value))
 
     y = 80
     if metrics:
-        y = _render_metrics(draw, metrics, start_y=y) + 12
+        y = _render_metrics(draw, metrics, start_y=y) + 16
     else:
         y += 10
 
+    imu_rows: List[Tuple[str, str]] = []
+    orientation_label = readings.get("orientation_label")
+    if isinstance(orientation_label, str):
+        imu_rows.append(("🙃 Orientation", orientation_label))
+
+    pitch_roll = _format_pitch_roll(readings.get("pitch_deg"), readings.get("roll_deg"))
+    if pitch_roll:
+        imu_rows.append(("🎯 Pitch/Roll", pitch_roll))
+
+    accel_text = _format_vector(readings.get("accel_ms2"), "m/s²")
+    if accel_text:
+        imu_rows.append(("🧭 Accel", accel_text))
+
+    gyro_text = _format_vector(readings.get("gyro_rads"), "rad/s")
+    if gyro_text:
+        imu_rows.append(("🌀 Gyro", gyro_text))
+
     text_y = y
-    for line in lines:
+    if imu_rows:
+        text_y = _render_metrics(draw, imu_rows, start_y=text_y) + 12
+
+    for line in sensor_lines:
         if not line:
             text_y += FONT_INSIDE_VALUE.size // 2
             continue
