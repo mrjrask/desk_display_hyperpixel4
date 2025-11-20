@@ -28,6 +28,7 @@ from config import (
     TIMES_SQUARE_FONT_PATH,
     WIDTH,
     HEIGHT,
+    IS_SQUARE_DISPLAY,
     CENTRAL_TIME,
 )
 
@@ -472,23 +473,25 @@ def _draw_scoreboard(
         table_top += (available - total_height) // 2
     table_bottom = min(bottom_limit, table_top + total_height)
 
-    score_font_size = max(44, int(round(row_h * 0.65)))
+    size_scale = 0.6 if IS_SQUARE_DISPLAY else 1.0
+
+    score_font_size = max(44, int(round(row_h * 0.65 * size_scale)))
     name_font_size = max(
-        SCOREBOARD_NAME_FONT_MIN_SIZE,
-        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO)),
+        int(round(SCOREBOARD_NAME_FONT_MIN_SIZE * size_scale)),
+        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO * size_scale)),
     )
     min_name_size = max(
-        SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK,
-        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK)),
+        int(round(SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK * size_scale)),
+        int(round(row_h * SCOREBOARD_NAME_FONT_RATIO_FALLBACK * size_scale)),
     )
-    abbr_font_size = max(24, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO)))
+    abbr_font_size = max(24, int(round(row_h * SCOREBOARD_NAME_FONT_RATIO * size_scale)))
 
     score_font = _ts(score_font_size)
     abbr_font = _ts(abbr_font_size)
 
     def _row_spec(team: Dict[str, Optional[str]], row_top: int) -> Dict[str, Any]:
         tri = (team.get("tri") or "").upper()
-        logo_height = max(40, int(round(row_h * SCOREBOARD_LOGO_RATIO)))
+        logo_height = max(40, int(round(row_h * SCOREBOARD_LOGO_RATIO * size_scale)))
         logo = _load_logo_cached(tri, logo_height)
         label = _team_scoreboard_label(team)
         score = team.get("score")

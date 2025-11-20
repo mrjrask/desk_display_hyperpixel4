@@ -527,7 +527,7 @@ SCOREBOARD_NAME_FONT_RATIO_FALLBACK = 0.32
 
 # Persistent time display (upper left corner)
 PERSISTENT_TIME_ENABLED = True
-PERSISTENT_TIME_FONT_SIZE = _font_pixels("shared", "persistent_time", 12)
+PERSISTENT_TIME_FONT_SIZE = _font_pixels("shared", "persistent_time", 6)
 PERSISTENT_TIME_AMPM_SCALE = 0.6  # AM/PM is 60% of time font size
 PERSISTENT_TIME_X = 8
 PERSISTENT_TIME_Y = 4
