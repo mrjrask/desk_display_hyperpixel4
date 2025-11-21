@@ -30,7 +30,7 @@ import signal
 import shutil
 import subprocess
 from contextlib import nullcontext
-from typing import Dict, Optional, Set
+from typing import Callable, Dict, Optional, Set
 
 gc = __import__('gc')
 
@@ -104,6 +104,7 @@ from services import wifi_utils
 from paths import resolve_storage_paths
 
 from screens.draw_date_time import draw_date, draw_time
+from screens.draw_nixie import nixie_frame
 from screens.draw_travel_time import (
     get_travel_active_window,
     is_travel_screen_active,
@@ -329,10 +330,11 @@ def _check_control_buttons() -> bool:
     return False
 
 
-def _wait_with_button_checks(duration: float) -> bool:
+def _wait_with_button_checks(duration: float, on_tick: Optional[Callable[[], None]] = None) -> bool:
     """Sleep for *duration* seconds while checking for control button presses.
 
-    Returns True if the caller should skip the rest of the current screen.
+    If provided, *on_tick* will be invoked once per poll cycle. Returns True if
+    the caller should skip the rest of the current screen.
     """
 
     if _manual_skip_event.is_set() or _skip_request_pending:
@@ -348,6 +350,12 @@ def _wait_with_button_checks(duration: float) -> bool:
         if _check_control_buttons():
             _manual_skip_event.clear()
             return True
+
+        if on_tick:
+            try:
+                on_tick()
+            except Exception as exc:
+                logging.debug("Background tick failed: %s", exc)
 
         remaining = end - time.monotonic()
         if remaining <= 0:
@@ -1016,7 +1024,26 @@ def main_loop():
 
                 _last_screen_id = sid
                 delay = LOGO_SCREEN_DELAY if "logo" in sid else SCREEN_DELAY
-                skip_delay = _wait_with_button_checks(delay)
+                nixie_refresh_after = 0.0
+
+                def _refresh_nixie_clock() -> None:
+                    nonlocal nixie_refresh_after
+
+                    now_monotonic = time.monotonic()
+                    if now_monotonic < nixie_refresh_after:
+                        return
+
+                    frame = nixie_frame()
+                    try:
+                        display.image(frame)
+                        if hasattr(display, "show"):
+                            display.show()
+                    except Exception as exc:
+                        logging.debug("Nixie refresh failed: %s", exc)
+                    nixie_refresh_after = now_monotonic + 0.5
+
+                on_tick = _refresh_nixie_clock if sid == "nixie" else None
+                skip_delay = _wait_with_button_checks(delay, on_tick=on_tick)
 
             if _shutdown_event.is_set():
                 break

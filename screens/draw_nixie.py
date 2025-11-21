@@ -337,6 +337,12 @@ def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
     return frame
 
 
+def nixie_frame(now: dt.datetime | None = None) -> Image.Image:
+    """Compose a Nixie clock frame for the provided time (or now)."""
+
+    return _compose_frame(now)
+
+
 def _play_flicker(display, base: Image.Image) -> None:
     enhancer = ImageEnhance.Brightness(base)
     for factor in (0.94, 1.06, 1.0):
