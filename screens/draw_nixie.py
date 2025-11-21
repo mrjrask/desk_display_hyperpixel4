@@ -16,8 +16,6 @@ from config import HEIGHT, WIDTH, TIMES_SQUARE_FONT_PATH
 from utils import ScreenImage, clear_display, log_call
 
 BACKGROUND_COLOR = (3, 3, 8)
-TUBE_COLOR = (24, 10, 6, 235)
-TUBE_OUTLINE = (186, 120, 72, 255)
 TUBE_HIGHLIGHT = (255, 214, 170, 90)
 DIGIT_COLOR = (255, 232, 179, 255)
 DIGIT_EDGE_COLOR = (255, 180, 90, 255)
@@ -294,26 +292,6 @@ def _colon_image(height: int) -> Image.Image:
     return combined
 
 
-def _tube_rectangles(draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height: int) -> None:
-    pad_x = max(10, int(round(height * 0.22)))
-    pad_y = max(12, int(round(height * 0.28)))
-    radius = max(12, int(round(height * 0.24)))
-    outline_width = max(2, int(round(height * 0.05)))
-
-    rect = (x - pad_x, y - pad_y, x + width + pad_x, y + height + pad_y)
-    draw.rounded_rectangle(rect, fill=TUBE_COLOR, outline=TUBE_OUTLINE, width=outline_width, radius=radius)
-
-    # Inner glow inside the tube
-    inner_margin = max(4, int(round(height * 0.08)))
-    inner_rect = (
-        rect[0] + inner_margin,
-        rect[1] + inner_margin,
-        rect[2] - inner_margin,
-        rect[3] - inner_margin,
-    )
-    draw.rounded_rectangle(inner_rect, outline=TUBE_HIGHLIGHT, width=max(1, outline_width - 1), radius=max(4, radius - inner_margin))
-
-
 def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
     now = now or dt.datetime.now()
     time_digits = now.strftime("%H%M%S")
@@ -347,10 +325,8 @@ def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
     y = max(V_MARGIN, (HEIGHT - target_height) // 2)
 
     frame = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
-    draw = ImageDraw.Draw(frame, "RGBA")
 
     for item, width_px in zip(elements, element_widths):
-        _tube_rectangles(draw, x, y, width_px, target_height)
         if item == ":":
             frame.paste(colon_img, (x, y), colon_img)
         else:
