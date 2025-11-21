@@ -8,7 +8,7 @@ import logging
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable, Optional, Sequence
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
@@ -38,12 +38,9 @@ def _candidate_asset_directories() -> Iterable[Path]:
     repo_root = Path(__file__).resolve().parents[1]
     images_dir = repo_root / "images"
     candidates = [
-        images_dir / "nixie-digits" / "large",
         images_dir / "nixie-digits",
-        images_dir / "nixie_digits" / "large",
         images_dir / "nixie_digits",
         images_dir / "nixie",
-        images_dir / "nixie_clock" / "large",
         images_dir / "nixie_clock",
     ]
     for path in candidates:
@@ -51,35 +48,87 @@ def _candidate_asset_directories() -> Iterable[Path]:
             yield path
 
 
-def _detect_asset_digits() -> Optional[Path]:
-    for directory in _candidate_asset_directories():
+def _directories_with_digits(base_directories: Iterable[Path]) -> Sequence[Path]:
+    """Return all directories under ``base_directories`` containing 0-9 assets."""
+
+    found: list[Path] = []
+    seen: set[Path] = set()
+
+    def _maybe_add(directory: Path) -> None:
+        if directory in seen:
+            return
         if all((directory / f"{digit}.png").exists() for digit in "0123456789"):
-            return directory
-    return None
+            found.append(directory)
+            seen.add(directory)
+
+    for root in base_directories:
+        _maybe_add(root)
+        for child in root.iterdir():
+            if child.is_dir():
+                _maybe_add(child)
+
+    return tuple(found)
 
 
-ASSET_DIGIT_DIR = _detect_asset_digits()
+ASSET_DIGIT_DIRECTORIES = _directories_with_digits(_candidate_asset_directories())
 
 
-def _detect_colon_asset() -> Optional[Path]:
-    if not ASSET_DIGIT_DIR:
+def _sample_digit_height(directory: Path) -> Optional[int]:
+    try:
+        with Image.open(directory / "0.png") as img:
+            return img.height
+    except Exception:  # pragma: no cover - defensive guard for malformed assets
+        LOGGER.exception("Failed to read sample digit height from %s", directory)
         return None
 
-    for name in ("colon.png", "dot.png", "colon.gif"):
-        candidate = ASSET_DIGIT_DIR / name
-        if candidate.exists():
-            return candidate
 
-    parent = ASSET_DIGIT_DIR.parent
-    if parent != ASSET_DIGIT_DIR:
+@lru_cache(maxsize=32)
+def _preferred_digit_directory(height: int) -> Optional[Path]:
+    """Choose the asset directory whose digits best match ``height``."""
+
+    choices: list[tuple[Path, int]] = []
+    for directory in ASSET_DIGIT_DIRECTORIES:
+        sample_height = _sample_digit_height(directory)
+        if sample_height:
+            choices.append((directory, sample_height))
+
+    if not choices:
+        return None
+
+    larger_or_equal = [item for item in choices if item[1] >= height]
+    if larger_or_equal:
+        directory, _ = min(larger_or_equal, key=lambda item: (item[1], abs(item[1] - height)))
+        return directory
+
+    # No large-enough asset; pick the highest resolution available.
+    directory, _ = max(choices, key=lambda item: item[1])
+    return directory
+
+
+def _detect_colon_asset(preferred: Optional[Path] = None) -> Optional[Path]:
+    def _search(directory: Path) -> Optional[Path]:
         for name in ("colon.png", "dot.png", "colon.gif"):
-            candidate = parent / name
+            candidate = directory / name
             if candidate.exists():
                 return candidate
+        parent = directory.parent
+        if parent != directory:
+            for name in ("colon.png", "dot.png", "colon.gif"):
+                candidate = parent / name
+                if candidate.exists():
+                    return candidate
+        return None
+
+    if preferred:
+        path = _search(preferred)
+        if path:
+            return path
+
+    for directory in ASSET_DIGIT_DIRECTORIES:
+        path = _search(directory)
+        if path:
+            return path
     return None
-
-
-ASSET_COLON_PATH = _detect_colon_asset()
 
 
 def _load_and_scale(path: Path, height: int) -> Image.Image:
@@ -166,10 +215,11 @@ def _generate_digit_image(height: int, value: str) -> Image.Image:
 
 @lru_cache(maxsize=128)
 def _asset_digit_image(height: int, value: str) -> Optional[Image.Image]:
-    if not ASSET_DIGIT_DIR:
+    asset_dir = _preferred_digit_directory(height)
+    if not asset_dir:
         return None
 
-    path = ASSET_DIGIT_DIR / f"{value}.png"
+    path = asset_dir / f"{value}.png"
     if not path.exists():
         LOGGER.warning("Nixie asset missing for digit %s at %s", value, path)
         return None
@@ -196,15 +246,16 @@ def _digits_for_height(height: int) -> Dict[str, Image.Image]:
 
 @lru_cache(maxsize=32)
 def _colon_image(height: int) -> Image.Image:
-    if ASSET_COLON_PATH:
-        if ASSET_COLON_PATH.parent == ASSET_DIGIT_DIR:
-            asset = _asset_digit_image(height, ASSET_COLON_PATH.stem)
+    asset_colon_path = _detect_colon_asset(_preferred_digit_directory(height))
+    if asset_colon_path:
+        if asset_colon_path.parent in ASSET_DIGIT_DIRECTORIES:
+            asset = _asset_digit_image(height, asset_colon_path.stem)
             if asset is not None:
                 return asset
         try:
-            return _load_and_scale(ASSET_COLON_PATH, max(12, height))
+            return _load_and_scale(asset_colon_path, max(12, height))
         except Exception:  # pragma: no cover - fallback to procedural colon
-            LOGGER.exception("Failed to load Nixie colon asset: %s", ASSET_COLON_PATH)
+            LOGGER.exception("Failed to load Nixie colon asset: %s", asset_colon_path)
 
     height = max(12, height)
     width = max(12, int(round(height * COLON_RATIO)))
