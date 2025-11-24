@@ -25,7 +25,7 @@ from config import (
     SCOREBOARD_BACKGROUND_COLOR,
 )
 from services.http_client import NHL_HEADERS, get_session
-from utils import ScreenImage, clear_display, clone_font, log_call
+from utils import ScreenImage, clear_display, clone_font, log_call, fit_font
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE_WEST = "Western Conference"
@@ -859,13 +859,14 @@ def _draw_division(
             logo_y = row_top + (ROW_HEIGHT - logo.height) // 2
             img.paste(logo, (LEFT_MARGIN, logo_y), logo)
         team_label = _coerce_text(team.get("name")) or abbr
-        team_label = _truncate_text_to_width(
-            team_label, TEAM_NAME_FONT, team_name_max_width
-        )
+
+        # Dynamically resize font to fit instead of truncating
+        fitted_font = fit_font(draw, team_label, TEAM_NAME_FONT, team_name_max_width, TEAM_TEXT_HEIGHT)
+
         _draw_text(
             draw,
             team_label,
-            TEAM_NAME_FONT,
+            fitted_font,
             column_layout.get("team", LEFT_MARGIN + LOGO_HEIGHT + TEAM_COLUMN_GAP),
             row_top,
             ROW_HEIGHT,

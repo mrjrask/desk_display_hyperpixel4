@@ -28,7 +28,7 @@ from config import (
     SCOREBOARD_BACKGROUND_COLOR,
 )
 from services.http_client import get_session
-from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call, draw_persistent_time
+from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call, draw_persistent_time, fit_font
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE_NFC = "NFC Standings"
@@ -1064,16 +1064,27 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
             losses = str(team.get("losses", 0))
             ties = str(team.get("ties", 0))
 
-            # Team name
+            # Team name - dynamically resize font to fit
             row_center = row_y + ROW_HEIGHT / 2
+            team_x = column_layout["team"]
+            # Calculate max width for team name (from team column position to first stat column)
+            first_stat_key = next((key for key in ["wins", "losses", "ties"] if key in column_layout), None)
+            if first_stat_key:
+                max_team_width = column_layout[first_stat_key] - team_x - 8  # 8px gap
+            else:
+                max_team_width = WIDTH - RIGHT_MARGIN - team_x - 8
+
+            # Fit the font to the available width
+            fitted_font = fit_font(draw, display_text, TEAM_NAME_FONT, max_team_width, TEAM_TEXT_HEIGHT)
+
             try:
-                l, t, r, b = draw.textbbox((0, 0), display_text, font=TEAM_NAME_FONT)
+                l, t, r, b = draw.textbbox((0, 0), display_text, font=fitted_font)
                 tw, th = r - l, b - t
-                tx = column_layout["team"] - l
+                tx = team_x - l
                 ty = int(round(row_center - th / 2 - t))
             except Exception:  # pragma: no cover - PIL fallback
-                tw, th = draw.textsize(display_text, font=TEAM_NAME_FONT)
-                tx = column_layout["team"]
+                tw, th = draw.textsize(display_text, font=fitted_font)
+                tx = team_x
                 ty = int(round(row_center - th / 2))
 
             # Logo
@@ -1082,7 +1093,7 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
                 logo_y = int(round(row_center - logo.height / 2))
                 img.paste(logo, (LEFT_MARGIN, logo_y), logo)
 
-            draw.text((tx, ty), display_text, font=TEAM_NAME_FONT, fill=WHITE)
+            draw.text((tx, ty), display_text, font=fitted_font, fill=WHITE)
 
             # Record columns
             for value, key in ((wins, "wins"), (losses, "losses"), (ties, "ties")):
