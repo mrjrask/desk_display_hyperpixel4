@@ -64,6 +64,9 @@ TEXT_COLOR = (255, 255, 255)
 SCOREBOARD_LOGO_RATIO = 0.85
 
 _LOGO_CACHE: Dict[Tuple[str, int], Optional[Image.Image]] = {}
+_LOGO_ABBREVIATION_OVERRIDES: Dict[str, str] = {
+    "BKN": "BRK",
+}
 
 
 def _load_logo_cached(abbr: str, height: int) -> Optional[Image.Image]:
@@ -72,8 +75,12 @@ def _load_logo_cached(abbr: str, height: int) -> Optional[Image.Image]:
         logo = _LOGO_CACHE[key]
         return logo.copy() if logo else None
 
-    logo = load_team_logo(NBA_DIR, key[0], height=height)
-    if logo is None and key[0] != "NBA":
+    # Apply abbreviation overrides (e.g., BKN -> BRK)
+    team_abbr = key[0]
+    team_abbr = _LOGO_ABBREVIATION_OVERRIDES.get(team_abbr, team_abbr)
+
+    logo = load_team_logo(NBA_DIR, team_abbr, height=height)
+    if logo is None and team_abbr != "NBA":
         logo = load_team_logo(NBA_DIR, "NBA", height=height)
     _LOGO_CACHE[key] = logo
     return logo.copy() if logo else None
