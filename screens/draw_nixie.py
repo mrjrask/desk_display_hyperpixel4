@@ -311,7 +311,7 @@ def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
     spacing = max(8, int(round(target_height * SPACING_RATIO)))
 
     digits_scaled = _digits_for_height(target_height)
-    colon_img = _colon_image(target_height)
+    colon_img = _colon_image(int(target_height * 0.5))
 
     element_widths = []
     for item in elements:
