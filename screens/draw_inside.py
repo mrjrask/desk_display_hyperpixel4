@@ -43,6 +43,15 @@ from config import (
 )
 from utils import clear_display, log_call
 
+# Import sensor logger
+try:
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from sensor_logger import log_sensor_reading
+except Exception:
+    log_sensor_reading = None
+
 # Optional imports (we guard usage)
 try:
     from bme280 import BME280  # pimoroni-bme280
@@ -594,6 +603,15 @@ def draw_inside(display, transition=False):
     """Render the primary inside environment screen."""
 
     readings, timestamp = _fetch_readings()
+
+    # Log sensor readings to file
+    if log_sensor_reading is not None and readings:
+        try:
+            log_sensor_reading(readings)
+        except Exception:
+            # Silent failure to not disrupt display
+            pass
+
     clear_display(display)
 
     img = Image.new("RGB", (WIDTH, HEIGHT), "black")
