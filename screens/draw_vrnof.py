@@ -122,7 +122,7 @@ def _fetch_price(symbol: str):
     })
 
 
-def _build_image(symbol: str = "VRNOF") -> Image.Image:
+def _build_image(symbol: str = "VRNO") -> Image.Image:
     """Construct the PIL image for the stock screen."""
     now = time.time()
     if _cache["price"] is None or (now - _cache["ts"] > VRNOF_FRESHNESS_LIMIT):
@@ -209,7 +209,7 @@ def _build_image(symbol: str = "VRNOF") -> Image.Image:
     return img
 
 
-def draw_vrnof_screen(display, symbol: str = "VRNOF", transition: bool = False):
+def draw_vrnof_screen(display, symbol: str = "VRNO", transition: bool = False):
     img = _build_image(symbol)
     change_val = _cache.get("change_val")
     led_color = None

@@ -98,6 +98,7 @@ from utils import (
     resume_display_updates,
     suspend_display_updates,
     temporary_display_led,
+    toggle_brightness,
 )
 import data_fetch
 from services import wifi_utils
@@ -423,7 +424,7 @@ def _find_touchscreen_device():
 
 
 def _monitor_touchscreen() -> None:
-    """Background monitor for touchscreen taps on the right 1/3 of the screen."""
+    """Background monitor for touchscreen taps on the right 1/3 (skip) and bottom-left corner (brightness toggle)."""
     global _touch_device
 
     try:
@@ -444,21 +445,28 @@ def _monitor_touchscreen() -> None:
         caps = _touch_device.capabilities()
         abs_info = caps.get(ecodes.EV_ABS, [])
 
-        # Find X axis info (try both single-touch and multi-touch)
+        # Find X and Y axis info (try both single-touch and multi-touch)
         x_max = WIDTH
+        y_max = HEIGHT
         for code_info in abs_info:
             if code_info[0] in (ecodes.ABS_X, ecodes.ABS_MT_POSITION_X):
                 x_max = code_info[1].max
-                break
+            elif code_info[0] in (ecodes.ABS_Y, ecodes.ABS_MT_POSITION_Y):
+                y_max = code_info[1].max
 
         right_third_threshold = x_max * 2 // 3
-        logging.debug(f"Touchscreen X max: {x_max}, right 1/3 threshold: {right_third_threshold}")
+        left_third_threshold = x_max // 3
+        bottom_third_threshold = y_max * 2 // 3
+        logging.debug(f"Touchscreen max: {x_max}x{y_max}, right 1/3: {right_third_threshold}, left 1/3: {left_third_threshold}, bottom 1/3: {bottom_third_threshold}")
     except Exception as exc:
         logging.warning(f"Could not determine touchscreen resolution: {exc}")
         right_third_threshold = 480  # Default for 720px screen
+        left_third_threshold = 240
+        bottom_third_threshold = 480
 
     try:
         last_x = None
+        last_y = None
         touch_active = False
 
         while not _shutdown_event.is_set():
@@ -474,6 +482,9 @@ def _monitor_touchscreen() -> None:
                     if event.code in (ecodes.ABS_X, ecodes.ABS_MT_POSITION_X):
                         last_x = event.value
                         touch_active = True
+                    elif event.code in (ecodes.ABS_Y, ecodes.ABS_MT_POSITION_Y):
+                        last_y = event.value
+                        touch_active = True
                     elif event.code in (ecodes.ABS_MT_TRACKING_ID,):
                         # Multi-touch tracking ID -1 means touch released
                         if event.value == -1:
@@ -482,11 +493,17 @@ def _monitor_touchscreen() -> None:
                     if event.code == ecodes.BTN_TOUCH:
                         if event.value == 0:  # Touch released
                             touch_active = False
-                            # Check if the touch was in the right 1/3
+                            # Check if the touch was in the right 1/3 (skip screen)
                             if last_x is not None and last_x >= right_third_threshold:
                                 logging.info("👆 Right-side touch detected – skipping to next screen.")
                                 _manual_skip_event.set()
+                            # Check if the touch was in the bottom-left corner (brightness toggle)
+                            elif last_x is not None and last_y is not None:
+                                if last_x <= left_third_threshold and last_y >= bottom_third_threshold:
+                                    logging.info("💡 Bottom-left corner touch detected – toggling brightness.")
+                                    toggle_brightness()
                             last_x = None
+                            last_y = None
                         elif event.value == 1:  # Touch pressed
                             touch_active = True
 

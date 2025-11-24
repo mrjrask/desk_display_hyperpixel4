@@ -1463,3 +1463,141 @@ def fastest_route(routes: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not routes:
         return None
     return min(routes, key=lambda r: r.get("_duration_sec", math.inf))
+
+
+# ─── Backlight brightness control ─────────────────────────────────────────────
+_BACKLIGHT_PATH = None
+_BACKLIGHT_MAX_BRIGHTNESS = None
+_CURRENT_BRIGHTNESS_STATE = None  # None, 0, or 100
+
+
+def _find_backlight_device() -> Optional[str]:
+    """Find the backlight device path."""
+    backlight_base = "/sys/class/backlight"
+    try:
+        if not os.path.isdir(backlight_base):
+            return None
+        devices = os.listdir(backlight_base)
+        if not devices:
+            return None
+        # Prefer specific device names for HyperPixel
+        for preferred in ["rpi_backlight", "10-0045"]:
+            if preferred in devices:
+                return os.path.join(backlight_base, preferred)
+        # Fall back to first available device
+        return os.path.join(backlight_base, devices[0])
+    except Exception as exc:
+        logging.debug("Failed to find backlight device: %s", exc)
+        return None
+
+
+def _get_max_brightness() -> Optional[int]:
+    """Get the maximum brightness value for the backlight."""
+    global _BACKLIGHT_PATH, _BACKLIGHT_MAX_BRIGHTNESS
+
+    if _BACKLIGHT_MAX_BRIGHTNESS is not None:
+        return _BACKLIGHT_MAX_BRIGHTNESS
+
+    if _BACKLIGHT_PATH is None:
+        _BACKLIGHT_PATH = _find_backlight_device()
+
+    if _BACKLIGHT_PATH is None:
+        return None
+
+    max_brightness_file = os.path.join(_BACKLIGHT_PATH, "max_brightness")
+    try:
+        with open(max_brightness_file, "r") as f:
+            _BACKLIGHT_MAX_BRIGHTNESS = int(f.read().strip())
+            return _BACKLIGHT_MAX_BRIGHTNESS
+    except Exception as exc:
+        logging.debug("Failed to read max_brightness: %s", exc)
+        return None
+
+
+def set_brightness(percent: int) -> bool:
+    """Set the backlight brightness to a percentage (0-100).
+
+    Returns True if successful, False otherwise.
+    """
+    global _BACKLIGHT_PATH, _CURRENT_BRIGHTNESS_STATE
+
+    if _BACKLIGHT_PATH is None:
+        _BACKLIGHT_PATH = _find_backlight_device()
+
+    if _BACKLIGHT_PATH is None:
+        logging.debug("No backlight device found")
+        return False
+
+    max_brightness = _get_max_brightness()
+    if max_brightness is None:
+        logging.debug("Could not determine max brightness")
+        return False
+
+    # Clamp percent to 0-100
+    percent = max(0, min(100, percent))
+
+    # Calculate the actual brightness value
+    brightness_value = int((percent / 100.0) * max_brightness)
+
+    brightness_file = os.path.join(_BACKLIGHT_PATH, "brightness")
+    try:
+        with open(brightness_file, "w") as f:
+            f.write(str(brightness_value))
+        _CURRENT_BRIGHTNESS_STATE = percent
+        logging.info("🔆 Brightness set to %d%%", percent)
+        return True
+    except Exception as exc:
+        logging.warning("Failed to set brightness: %s", exc)
+        return False
+
+
+def get_brightness() -> Optional[int]:
+    """Get the current backlight brightness as a percentage (0-100).
+
+    Returns None if unable to read brightness.
+    """
+    global _BACKLIGHT_PATH
+
+    if _BACKLIGHT_PATH is None:
+        _BACKLIGHT_PATH = _find_backlight_device()
+
+    if _BACKLIGHT_PATH is None:
+        return None
+
+    max_brightness = _get_max_brightness()
+    if max_brightness is None:
+        return None
+
+    brightness_file = os.path.join(_BACKLIGHT_PATH, "brightness")
+    try:
+        with open(brightness_file, "r") as f:
+            current = int(f.read().strip())
+        percent = int((current / max_brightness) * 100)
+        return percent
+    except Exception as exc:
+        logging.debug("Failed to read brightness: %s", exc)
+        return None
+
+
+def toggle_brightness() -> bool:
+    """Toggle brightness between 0% and 100%.
+
+    Returns True if successful, False otherwise.
+    """
+    global _CURRENT_BRIGHTNESS_STATE
+
+    # Get current brightness
+    current = get_brightness()
+    if current is None:
+        # If we can't read current brightness, try to use cached state
+        current = _CURRENT_BRIGHTNESS_STATE
+
+    # If still unknown, default to assuming it's at 100%
+    if current is None:
+        current = 100
+
+    # Toggle: if current is near 0, go to 100; otherwise go to 0
+    if current <= 10:
+        return set_brightness(100)
+    else:
+        return set_brightness(0)
