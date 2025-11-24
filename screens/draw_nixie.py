@@ -12,7 +12,7 @@ from typing import Dict, Iterable, Optional, Sequence
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
-from config import HEIGHT, WIDTH, TIMES_SQUARE_FONT_PATH
+from config import HEIGHT, WIDTH, TIMES_SQUARE_FONT_PATH, DISPLAY_OVERRIDES
 from utils import ScreenImage, clear_display, log_call
 
 BACKGROUND_COLOR = (3, 3, 8)
@@ -25,9 +25,20 @@ H_MARGIN = 28
 V_MARGIN = 24
 SPACING_RATIO = 0.12
 COLON_RATIO = 0.28
+COLON_SIZE_RATIO = 0.35
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _get_time_format() -> str:
+    """Return the configured time format ('12' or '24'), defaulting to '24'."""
+    nixie_config = DISPLAY_OVERRIDES.get("nixie", {})
+    if isinstance(nixie_config, dict):
+        format_value = nixie_config.get("time_format", "24")
+        if format_value in ("12", "24"):
+            return format_value
+    return "24"
 
 
 def _candidate_asset_directories() -> Iterable[Path]:
@@ -294,7 +305,14 @@ def _colon_image(height: int) -> Image.Image:
 
 def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
     now = now or dt.datetime.now()
-    time_digits = now.strftime("%H%M%S")
+
+    # Format time according to user preference (12 or 24 hour)
+    time_format = _get_time_format()
+    if time_format == "12":
+        time_digits = now.strftime("%I%M%S")
+    else:
+        time_digits = now.strftime("%H%M%S")
+
     elements = [time_digits[0], time_digits[1], ":", time_digits[2], time_digits[3], ":", time_digits[4], time_digits[5]]
 
     available_height = max(1, HEIGHT - V_MARGIN * 2)
@@ -311,7 +329,7 @@ def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
     spacing = max(8, int(round(target_height * SPACING_RATIO)))
 
     digits_scaled = _digits_for_height(target_height)
-    colon_img = _colon_image(int(target_height * 0.5))
+    colon_img = _colon_image(int(target_height * COLON_SIZE_RATIO))
 
     element_widths = []
     for item in elements:
@@ -328,7 +346,9 @@ def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
 
     for item, width_px in zip(elements, element_widths):
         if item == ":":
-            frame.paste(colon_img, (x, y), colon_img)
+            # Center colons vertically with respect to digit height
+            colon_y_offset = (target_height - colon_img.height) // 2
+            frame.paste(colon_img, (x, y + colon_y_offset), colon_img)
         else:
             digit_img = digits_scaled[item]
             frame.paste(digit_img, (x, y), digit_img)
