@@ -27,7 +27,9 @@ import logging
 import math
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+
+import config
 
 from PIL import Image, ImageDraw
 from smbus2 import SMBus, i2c_msg
@@ -583,95 +585,654 @@ def _format_age(timestamp: Optional[float]) -> Optional[str]:
     return f"{hours:.0f}h ago"
 
 
-def _render_metrics(
-    draw: ImageDraw.ImageDraw, metrics: List[Tuple[str, str]], *, start_y: int
-) -> int:
-    y = start_y
-    margin = 36
-    line_gap = 8
-    for label, value in metrics:
-        label_w, label_h = draw.textsize(label, font=FONT_INSIDE_LABEL)
-        value_w, value_h = draw.textsize(value, font=FONT_INSIDE_VALUE)
-        draw.text((margin, y), label, font=FONT_INSIDE_LABEL, fill=(180, 200, 255))
-        draw.text((WIDTH - margin - value_w, y), value, font=FONT_INSIDE_VALUE, fill=(255, 255, 255))
-        y += max(label_h, value_h) + line_gap
-    return y
+def _dew_point_f(temp_c: Optional[float], humidity_pct: Optional[float]) -> Optional[float]:
+    if temp_c is None or humidity_pct is None:
+        return None
+    try:
+        t = float(temp_c)
+        rh = float(humidity_pct)
+    except Exception:
+        return None
+    if rh <= 0:
+        return None
+    a = 17.62
+    b = 243.12
+    gamma = (a * t / (b + t)) + math.log(rh / 100.0)
+    dew_c = (b * gamma) / (a - gamma)
+    return _c_to_f(dew_c)
+
+
+def _mix_color(color: Tuple[int, int, int], target: Tuple[int, int, int], factor: float) -> Tuple[int, int, int]:
+    factor = max(0.0, min(1.0, factor))
+    return tuple(int(round(color[idx] * (1 - factor) + target[idx] * factor)) for idx in range(3))
+
+
+def _draw_temperature_panel(
+    img: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    rect: Tuple[int, int, int, int],
+    temp_f: float,
+    temp_text: str,
+    descriptor: str,
+    temp_base,
+    label_base,
+) -> None:
+    x0, y0, x1, y1 = rect
+    color = temperature_color(temp_f)
+    width = max(1, x1 - x0)
+    height = max(1, y1 - y0)
+
+    radius = max(14, min(26, min(width, height) // 5))
+    bg = _mix_color(color, config.INSIDE_COL_BG, 0.4)
+    outline = _mix_color(color, config.INSIDE_COL_BG, 0.25)
+    draw.rounded_rectangle(rect, radius=radius, fill=bg, outline=outline, width=1)
+
+    padding_x = max(16, width // 12)
+    padding_y = max(12, height // 10)
+    label_text = "Temperature"
+
+    label_base_size = getattr(label_base, "size", 18)
+    label_font = fit_font(
+        draw,
+        label_text,
+        label_base,
+        max_width=width - 2 * padding_x,
+        max_height=max(14, int(height * 0.18)),
+        min_pt=min(label_base_size, 10),
+        max_pt=label_base_size,
+    )
+    _, label_h = measure_text(draw, label_text, label_font)
+    label_x = x0 + padding_x
+    label_y = y0 + padding_y
+
+    descriptor = descriptor.strip()
+    has_descriptor = bool(descriptor)
+    if has_descriptor:
+        descriptor_base_size = getattr(label_base, "size", 18)
+        desc_font = fit_font(
+            draw,
+            descriptor,
+            label_base,
+            max_width=width - 2 * padding_x,
+            max_height=max(14, int(height * 0.2)),
+            min_pt=min(descriptor_base_size, 12),
+            max_pt=descriptor_base_size,
+        )
+        _, desc_h = measure_text(draw, descriptor, desc_font)
+        desc_x = x0 + padding_x
+        desc_y = y1 - padding_y - desc_h
+    else:
+        desc_font = None
+        desc_h = 0
+        desc_x = x0 + padding_x
+        desc_y = y1 - padding_y
+
+    value_gap = max(10, height // 14)
+    value_top = label_y + label_h + value_gap
+    value_bottom = desc_y - value_gap if has_descriptor else y1 - padding_y
+    value_max_height = max(32, value_bottom - value_top)
+    temp_base_size = getattr(temp_base, "size", 48)
+
+    safe_margin = max(4, width // 28)
+    inner_left = x0 + padding_x
+    inner_right = x1 - padding_x - safe_margin
+    if inner_right <= inner_left:
+        safe_margin = max(0, (width - 2 * padding_x - 1) // 2)
+        inner_left = x0 + padding_x + safe_margin
+        inner_right = max(inner_left + 1, x1 - padding_x - safe_margin)
+
+    value_region_width = max(1, inner_right - inner_left)
+
+    temp_font = fit_font(
+        draw,
+        temp_text,
+        temp_base,
+        max_width=value_region_width,
+        max_height=value_max_height,
+        min_pt=min(temp_base_size, 20),
+        max_pt=temp_base_size,
+    )
+
+    temp_bbox = draw.textbbox((0, 0), temp_text, font=temp_font)
+    temp_w = temp_bbox[2] - temp_bbox[0]
+    temp_h = temp_bbox[3] - temp_bbox[1]
+    while temp_w > value_region_width and getattr(temp_font, "size", 0) > 12:
+        next_size = getattr(temp_font, "size", 0) - 1
+        temp_font = clone_font(temp_font, next_size)
+        temp_bbox = draw.textbbox((0, 0), temp_text, font=temp_font)
+        temp_w = temp_bbox[2] - temp_bbox[0]
+        temp_h = temp_bbox[3] - temp_bbox[1]
+
+    temp_x = x0 + padding_x
+    temp_y = max(label_y + label_h + value_gap, y0 + (height - temp_h) // 2)
+
+    draw.text((label_x, label_y), label_text, font=label_font, fill=_mix_color(color, config.INSIDE_COL_TEXT, 0.35))
+    draw.text((temp_x, temp_y), temp_text, font=temp_font, fill=config.INSIDE_COL_TEXT)
+    if has_descriptor and desc_font is not None:
+        draw.text((desc_x, desc_y), descriptor, font=desc_font, fill=_mix_color(color, config.INSIDE_COL_TEXT, 0.35))
+
+
+def _draw_metric_row(
+    draw: ImageDraw.ImageDraw,
+    rect: Tuple[int, int, int, int],
+    label: str,
+    value: str,
+    accent: Tuple[int, int, int],
+    label_base,
+    value_base,
+) -> None:
+    x0, y0, x1, y1 = rect
+    width = max(1, x1 - x0)
+    height = max(1, y1 - y0)
+    radius = max(6, min(18, min(width, height) // 6))
+    bg = _mix_color(accent, config.INSIDE_COL_BG, 0.3)
+    outline = _mix_color(accent, config.INSIDE_COL_BG, 0.18)
+    draw.rounded_rectangle(rect, radius=radius, fill=bg, outline=outline, width=1)
+
+    padding_x = max(10, width // 14)
+    padding_y = max(8, height // 12)
+
+    max_label_height = max(14, int(height * 0.36))
+    max_value_height = max(16, int(height * 0.48))
+
+    label_base_size = getattr(label_base, "size", 18)
+    value_base_size = getattr(value_base, "size", 20)
+
+    label_font = fit_font(
+        draw,
+        label,
+        label_base,
+        max_width=width - 2 * padding_x,
+        max_height=max_label_height,
+        min_pt=min(label_base_size, 10),
+        max_pt=label_base_size,
+    )
+    label_w, label_h = measure_text(draw, label, label_font)
+
+    min_gap = max(4, height // 16)
+    available_width = max(1, width - 2 * padding_x)
+    value_font = value_base
+    value_w, value_h = measure_text(draw, value, value_font)
+    if value_h > max_value_height or value_w > available_width:
+        value_font = fit_font(
+            draw,
+            value,
+            value_base,
+            max_width=available_width,
+            max_height=max_value_height,
+            min_pt=min(value_base_size, 10),
+            max_pt=value_base_size,
+        )
+        value_w, value_h = measure_text(draw, value, value_font)
+    if value_h + label_h + min_gap > height:
+        value_font = fit_font(
+            draw,
+            value,
+            value_font,
+            max_width=available_width,
+            max_height=max(12, height - label_h - min_gap),
+            min_pt=10,
+            max_pt=getattr(value_font, "size", value_base_size),
+        )
+        value_w, value_h = measure_text(draw, value, value_font)
+
+    label_w = min(label_w, available_width)
+    value_w = min(value_w, available_width)
+
+    label_x = x0 + padding_x
+    label_y = y0 + padding_y
+    value_x = x0 + padding_x
+    value_y = y1 - padding_y - value_h
+    min_gap = max(6, height // 12)
+    if value_y - (label_y + label_h) < min_gap:
+        value_y = min(y1 - padding_y - value_h, label_y + label_h + min_gap)
+
+    label_color = _mix_color(accent, config.INSIDE_COL_TEXT, 0.25)
+    value_color = config.INSIDE_COL_TEXT
+
+    draw.text((label_x, label_y), label, font=label_font, fill=label_color)
+    draw.text((value_x, value_y), value, font=value_font, fill=value_color)
+
+
+def _metric_grid_dimensions(count: int) -> Tuple[int, int]:
+    if count <= 0:
+        return 0, 0
+    if count <= 2:
+        columns = count
+    elif count <= 6:
+        columns = 2
+    else:
+        columns = 3
+    columns = max(1, columns)
+    rows = int(math.ceil(count / columns))
+    return columns, rows
+
+
+def _draw_metric_rows(
+    draw: ImageDraw.ImageDraw,
+    rect: Tuple[int, int, int, int],
+    metrics: Sequence[Dict[str, Any]],
+    label_base,
+    value_base,
+) -> None:
+    x0, y0, x1, y1 = rect
+    count = len(metrics)
+    width = max(0, x1 - x0)
+    height = max(0, y1 - y0)
+    if count <= 0 or width <= 0 or height <= 0:
+        return
+
+    columns, rows = _metric_grid_dimensions(count)
+    if columns <= 0 or rows <= 0:
+        return
+
+    if columns > 1:
+        desired_h_gap = max(8, width // 30)
+        max_h_gap = max(0, (width - columns) // (columns - 1))
+        h_gap = min(desired_h_gap, max_h_gap)
+    else:
+        h_gap = 0
+    if rows > 1:
+        desired_v_gap = max(8, height // 30)
+        max_v_gap = max(0, (height - rows) // (rows - 1))
+        v_gap = min(desired_v_gap, max_v_gap)
+    else:
+        v_gap = 0
+
+    total_h_gap = h_gap * (columns - 1)
+    total_v_gap = v_gap * (rows - 1)
+
+    available_width = max(columns, width - total_h_gap)
+    available_height = max(rows, height - total_v_gap)
+
+    cell_width = max(72, available_width // columns)
+    if cell_width * columns + total_h_gap > width:
+        cell_width = max(1, available_width // columns)
+    cell_height = max(44, available_height // rows)
+    if cell_height * rows + total_v_gap > height:
+        cell_height = max(1, available_height // rows)
+
+    grid_width = min(width, cell_width * columns + total_h_gap)
+    grid_height = min(height, cell_height * rows + total_v_gap)
+    start_x = x0 + max(0, (width - grid_width) // 2)
+    start_y = y0 + max(0, (height - grid_height) // 2)
+
+    for index, metric in enumerate(metrics):
+        row = index // columns
+        col = index % columns
+        left = start_x + col * (cell_width + h_gap)
+        top = start_y + row * (cell_height + v_gap)
+        right = min(x1, left + cell_width)
+        bottom = min(y1, top + cell_height)
+        if right <= left or bottom <= top:
+            continue
+        _draw_metric_row(
+            draw,
+            (left, top, right, bottom),
+            metric["label"],
+            metric["value"],
+            metric["color"],
+            label_base,
+            value_base,
+        )
+
+
+def _prettify_metric_label(key: str) -> str:
+    key = key.replace("_", " ").strip()
+    if not key:
+        return "Value"
+    replacements = {
+        "voc": "VOC",
+        "co2": "CO₂",
+        "co": "CO",
+        "pm25": "PM2.5",
+        "pm10": "PM10",
+        "iaq": "IAQ",
+    }
+    parts = []
+    for token in key.split():
+        lower = token.lower()
+        if lower in replacements:
+            parts.append(replacements[lower])
+        elif len(token) <= 2:
+            parts.append(token.upper())
+        else:
+            parts.append(token.capitalize())
+    return " ".join(parts)
+
+
+def _format_generic_metric_value(key: str, value: float) -> str:
+    key_lower = key.lower()
+    if key_lower.endswith("_ohms"):
+        return format_voc_ohms(value)
+    if key_lower.endswith("_f"):
+        return f"{value:.1f}°F"
+    if key_lower.endswith("_c"):
+        return f"{value:.1f}°C"
+    if key_lower.endswith("_ppm"):
+        return f"{value:.0f} ppm"
+    if key_lower.endswith("_ppb"):
+        return f"{value:.0f} ppb"
+    if key_lower.endswith("_percent") or key_lower.endswith("_pct"):
+        return f"{value:.1f}%"
+    if key_lower.endswith("_inhg"):
+        return f"{value:.2f} inHg"
+    if key_lower.endswith("_hpa"):
+        return f"{value:.1f} hPa"
+    magnitude = abs(value)
+    if magnitude >= 1000:
+        return f"{value:,.0f}"
+    if magnitude >= 100:
+        return f"{value:.0f}"
+    if magnitude >= 10:
+        return f"{value:.1f}"
+    return f"{value:.2f}"
+
+
+def _clean_metric(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except Exception:
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def _build_metric_entries(data: Dict[str, Optional[float]]) -> List[Dict[str, Any]]:
+    metrics: List[Dict[str, Any]] = []
+    used_keys: Set[str] = set()
+    used_groups: Set[str] = set()
+
+    palette: List[Tuple[int, int, int]] = [
+        config.INSIDE_CHIP_BLUE,
+        config.INSIDE_CHIP_AMBER,
+        config.INSIDE_CHIP_PURPLE,
+        _mix_color(config.INSIDE_CHIP_BLUE, config.INSIDE_CHIP_AMBER, 0.45),
+        _mix_color(config.INSIDE_CHIP_PURPLE, config.INSIDE_CHIP_BLUE, 0.4),
+        _mix_color(config.INSIDE_CHIP_PURPLE, config.INSIDE_COL_BG, 0.35),
+    ]
+
+    Spec = Tuple[str, str, Callable[[float], str], Tuple[int, int, int], Optional[str]]
+    known_specs: Sequence[Spec] = (
+        ("humidity", "Humidity", lambda v: f"{v:.1f}%", config.INSIDE_CHIP_BLUE, "humidity"),
+        ("dew_point_f", "Dew Point", lambda v: f"{v:.1f}°F", config.INSIDE_CHIP_BLUE, "dew_point"),
+        ("dew_point_c", "Dew Point", lambda v: f"{v:.1f}°C", config.INSIDE_CHIP_BLUE, "dew_point"),
+        ("pressure_inhg", "Pressure", lambda v: f"{v:.2f} inHg", config.INSIDE_CHIP_AMBER, "pressure"),
+        ("pressure_hpa", "Pressure", lambda v: f"{v:.1f} hPa", config.INSIDE_CHIP_AMBER, "pressure"),
+        ("pressure_pa", "Pressure", lambda v: f"{v:.0f} Pa", config.INSIDE_CHIP_AMBER, "pressure"),
+        ("voc_ohms", "VOC", format_voc_ohms, config.INSIDE_CHIP_PURPLE, "voc"),
+        ("voc_index", "VOC Index", lambda v: f"{v:.0f}", config.INSIDE_CHIP_PURPLE, "voc"),
+        ("iaq", "IAQ", lambda v: f"{v:.0f}", config.INSIDE_CHIP_PURPLE, "iaq"),
+        ("co2_ppm", "CO₂", lambda v: f"{v:.0f} ppm", _mix_color(config.INSIDE_CHIP_BLUE, config.INSIDE_CHIP_AMBER, 0.35), "co2"),
+    )
+
+    for key, label, formatter, color, group in known_specs:
+        if group and group in used_groups:
+            continue
+        value = _clean_metric(data.get(key))
+        if value is None:
+            continue
+        metrics.append(dict(label=label, value=formatter(value), color=color))
+        used_keys.add(key)
+        if group:
+            used_groups.add(group)
+
+    skip_keys = {"temp", "temperature"}
+    extra_palette_index = 0
+    for key in sorted(data.keys()):
+        if key in used_keys or key == "temp_f":
+            continue
+        if any(key.lower().startswith(prefix) for prefix in skip_keys):
+            continue
+        value = _clean_metric(data.get(key))
+        if value is None:
+            continue
+        color = palette[(len(metrics) + extra_palette_index) % len(palette)]
+        extra_palette_index += 1
+        metrics.append(
+            dict(
+                label=_prettify_metric_label(key),
+                value=_format_generic_metric_value(key, value),
+                color=color,
+            )
+        )
+
+    return metrics
+
+
+def _primary_source_label(readings: Dict[str, Any]) -> Optional[str]:
+    sources = readings.get("_sources")
+    if not isinstance(sources, dict):
+        return None
+    for key in (
+        "temperature_c",
+        "humidity_pct",
+        "pressure_hpa",
+        "light_lux",
+    ):
+        source = sources.get(key)
+        if isinstance(source, str):
+            return source
+    return None
+
+
+def _format_sensor_age(timestamp: Optional[float]) -> Optional[str]:
+    age = _format_age(timestamp)
+    if not age:
+        return None
+    return f"Updated {age}"
 
 
 @log_call
-def draw_inside(display, transition=False):
-    """Render the primary inside environment screen."""
+def draw_inside(display, transition: bool = False):
+    """Render a calmer, card-based inside environment screen."""
 
     readings, timestamp = _fetch_readings()
 
-    # Log sensor readings to file
     if log_sensor_reading is not None and readings:
         try:
             log_sensor_reading(readings)
         except Exception:
-            # Silent failure to not disrupt display
             pass
 
-    clear_display(display)
-
-    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    img = Image.new("RGB", (WIDTH, HEIGHT), config.INSIDE_COL_BG)
     draw = ImageDraw.Draw(img)
 
+    temp_c = readings.get("temperature_c")
+    temp_f = _c_to_f(temp_c) if temp_c is not None else None
+    temp_value = f"{temp_f:.1f}°F" if temp_f is not None else "--°F"
+
+    metrics_payload: Dict[str, Optional[float]] = {}
+    humidity = readings.get("humidity_pct")
+    pressure_hpa = readings.get("pressure_hpa")
+    light = readings.get("light_lux")
+
+    if humidity is not None:
+        metrics_payload["humidity"] = humidity
+    dew_point = _dew_point_f(temp_c, humidity)
+    if dew_point is not None:
+        metrics_payload["dew_point_f"] = dew_point
+    if pressure_hpa is not None:
+        metrics_payload["pressure_inhg"] = pressure_hpa * 0.02953
+    if light is not None:
+        metrics_payload["light_lux"] = light
+
+    metrics = _build_metric_entries(metrics_payload)
+
     title = "Inside"
-    title_w, title_h = draw.textsize(title, font=FONT_TITLE_INSIDE)
-    draw.text(((WIDTH - title_w) // 2, 28), title, font=FONT_TITLE_INSIDE, fill=(173, 216, 230))
+    subtitle = _primary_source_label(readings) or _format_sensor_age(timestamp) or ""
 
-    temp_value = _format_temperature(readings.get("temperature_c"))
-    humidity_value = _format_humidity(readings.get("humidity_pct"))
-    pressure_value = _format_pressure(readings.get("pressure_hpa"))
-    light_value = _format_light(readings.get("light_lux"))
+    title_base = FONT_TITLE_INSIDE
+    subtitle_base = FONT_INSIDE_LABEL
+    temp_base = FONT_INSIDE_TEMP
+    label_base = FONT_INSIDE_LABEL
+    value_base = FONT_INSIDE_VALUE
 
-    temp_text = temp_value or "--"
-    temp_w, temp_h = draw.textsize(temp_text, font=FONT_INSIDE_TEMP)
-    draw.text(
-        ((WIDTH - temp_w) // 2, 80),
-        temp_text,
-        font=FONT_INSIDE_TEMP,
-        fill=(255, 255, 255),
+    title_side_pad = 8
+    title_base_size = getattr(title_base, "size", 30)
+    title_sample_h = measure_text(draw, "Hg", title_base)[1]
+    title_max_h = max(1, title_sample_h)
+    t_font = fit_font(
+        draw,
+        title,
+        title_base,
+        max_width=WIDTH - 2 * title_side_pad,
+        max_height=title_max_h,
+        min_pt=min(title_base_size, 12),
+        max_pt=title_base_size,
+    )
+    tw, th = measure_text(draw, title, t_font)
+    title_y = 4
+    draw.text(((WIDTH - tw) // 2, title_y), title, font=t_font, fill=config.INSIDE_COL_TITLE)
+
+    subtitle_gap = 6
+    if subtitle:
+        subtitle_base_size = getattr(subtitle_base, "size", getattr(title_base, "size", 18))
+        subtitle_sample_h = measure_text(draw, "Hg", subtitle_base)[1]
+        subtitle_max_h = max(1, subtitle_sample_h)
+        sub_font = fit_font(
+            draw,
+            subtitle,
+            subtitle_base,
+            max_width=WIDTH - 2 * title_side_pad,
+            max_height=subtitle_max_h,
+            min_pt=min(subtitle_base_size, 12),
+            max_pt=subtitle_base_size,
+        )
+        sw, sh = measure_text(draw, subtitle, sub_font)
+        subtitle_y = title_y + th + subtitle_gap
+        draw.text(((WIDTH - sw) // 2, subtitle_y), subtitle, font=sub_font, fill=_mix_color(config.INSIDE_COL_TITLE, config.INSIDE_COL_BG, 0.15))
+    else:
+        sh = 0
+        subtitle_y = title_y + th
+
+    title_block_h = subtitle_y + (sh if subtitle else 0)
+
+    content_top = title_block_h + 12
+    bottom_margin = 12
+    side_pad = 12
+    content_bottom = HEIGHT - bottom_margin
+    content_height = max(1, content_bottom - content_top)
+
+    metric_count = len(metrics)
+    _, grid_rows = _metric_grid_dimensions(metric_count)
+    if metric_count:
+        temp_ratio = max(0.42, 0.58 - 0.03 * min(metric_count, 6))
+        min_temp = max(84, 118 - 8 * min(metric_count, 6))
+    else:
+        temp_ratio = 0.82
+        min_temp = 128
+
+    temp_height = min(content_height, max(min_temp, int(content_height * temp_ratio)))
+    metric_block_gap = 12 if metric_count else 0
+    if metric_count:
+        min_metric_row_height = 44
+        min_metric_gap = 10 if grid_rows > 1 else 0
+        target_metrics_height = (
+            grid_rows * min_metric_row_height + max(0, grid_rows - 1) * min_metric_gap
+        )
+        preferred_temp_cap = content_height - (target_metrics_height + metric_block_gap)
+        min_temp_floor = min(54, content_height)
+        preferred_temp_cap = max(min_temp_floor, preferred_temp_cap)
+        temp_height = min(temp_height, preferred_temp_cap)
+        temp_height = max(min_temp_floor, min(temp_height, content_height))
+    else:
+        metric_block_gap = 0
+    temp_rect = (
+        side_pad,
+        content_top,
+        WIDTH - side_pad,
+        min(content_bottom, content_top + temp_height),
     )
 
-    metrics: List[Tuple[str, str]] = []
-    if humidity_value and _has_sensor_source(readings, "humidity_pct"):
-        metrics.append(("Humidity", humidity_value))
-    if pressure_value and _has_sensor_source(readings, "pressure_hpa"):
-        metrics.append(("Pressure", pressure_value))
-    if light_value and _has_sensor_source(readings, "light_lux"):
-        metrics.append(("Light", light_value))
+    _draw_temperature_panel(
+        img,
+        draw,
+        temp_rect,
+        temp_f if temp_f is not None else 72.0,
+        temp_value,
+        "",
+        temp_base,
+        label_base,
+    )
 
-    if not metrics:
+    if metrics:
+        metrics_rect = (
+            side_pad,
+            min(content_bottom, temp_rect[3] + metric_block_gap),
+            WIDTH - side_pad,
+            content_bottom,
+        )
+        _draw_metric_rows(draw, metrics_rect, metrics, label_base, value_base)
+    elif temp_f is None:
         message = "No sensor data"
-        msg_w, msg_h = draw.textsize(message, font=FONT_INSIDE_VALUE)
-        draw.text(((WIDTH - msg_w) // 2, HEIGHT - msg_h - 80), message, font=FONT_INSIDE_VALUE, fill=(200, 200, 200))
-    else:
-        _render_metrics(draw, metrics, start_y=80 + temp_h + 30)
+        msg_w, msg_h = measure_text(draw, message, value_base)
+        msg_y = temp_rect[3] + 8
+        draw.text(((WIDTH - msg_w) // 2, msg_y), message, font=value_base, fill=_mix_color(config.INSIDE_COL_TEXT, config.INSIDE_COL_BG, 0.4))
 
-    age_text = _format_age(timestamp)
-    if age_text:
-        age_w, age_h = draw.textsize(age_text, font=FONT_INSIDE_VALUE)
-        draw.text(((WIDTH - age_w) // 2, HEIGHT - age_h - 24), age_text, font=FONT_INSIDE_VALUE, fill=(120, 160, 200))
+    if transition:
+        return img
 
-    return img
+    clear_display(display)
+    display.image(img)
+    display.show()
+    time.sleep(5)
+    return None
 
 
 @log_call
-def draw_inside_sensors(display, transition=False):
-    """Render a diagnostic view showing detected sensors and data sources."""
+def draw_inside_sensors(display, transition: bool = False):
+    """Diagnostic view that mirrors the refreshed inside layout."""
 
     readings, timestamp = _fetch_readings(force_refresh=True)
     hub = _ensure_sensor_hub()
-    clear_display(display)
 
-    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    img = Image.new("RGB", (WIDTH, HEIGHT), config.INSIDE_COL_BG)
     draw = ImageDraw.Draw(img)
 
     title = "Inside Sensors"
-    title_w, title_h = draw.textsize(title, font=FONT_TITLE_INSIDE)
-    draw.text(((WIDTH - title_w) // 2, 28), title, font=FONT_TITLE_INSIDE, fill=(173, 216, 230))
+    subtitle = _primary_source_label(readings) or _format_sensor_age(timestamp) or ""
+
+    title_font = FONT_TITLE_INSIDE
+    subtitle_font = FONT_INSIDE_LABEL
+    title_w, title_h = measure_text(draw, title, title_font)
+    draw.text(((WIDTH - title_w) // 2, 4), title, font=title_font, fill=config.INSIDE_COL_TITLE)
+    title_block_h = title_h
+    if subtitle:
+        sub_font = fit_font(
+            draw,
+            subtitle,
+            subtitle_font,
+            max_width=WIDTH - 16,
+            max_height=subtitle_font.size if hasattr(subtitle_font, "size") else 18,
+            min_pt=10,
+            max_pt=getattr(subtitle_font, "size", 18),
+        )
+        sw, sh = measure_text(draw, subtitle, sub_font)
+        draw.text(((WIDTH - sw) // 2, title_h + 8), subtitle, font=sub_font, fill=_mix_color(config.INSIDE_COL_TITLE, config.INSIDE_COL_BG, 0.15))
+        title_block_h = title_h + 8 + sh
+
+    metrics_payload: Dict[str, Optional[float]] = {}
+    metrics_payload["humidity"] = readings.get("humidity_pct")
+    metrics_payload["pressure_hpa"] = readings.get("pressure_hpa")
+    metrics_payload["light_lux"] = readings.get("light_lux")
+    metrics_payload["temp_f"] = _c_to_f(readings.get("temperature_c")) if readings.get("temperature_c") is not None else None
+    dew_point = _dew_point_f(readings.get("temperature_c"), readings.get("humidity_pct"))
+    if dew_point is not None:
+        metrics_payload["dew_point_f"] = dew_point
+    metrics = _build_metric_entries(metrics_payload)
+
+    content_top = title_block_h + 12
+    content_bottom = HEIGHT - 54
+    side_pad = 12
+
+    if metrics:
+        metrics_rect = (side_pad, content_top, WIDTH - side_pad, content_bottom)
+        _draw_metric_rows(draw, metrics_rect, metrics, FONT_INSIDE_LABEL, FONT_INSIDE_VALUE)
+        content_top = metrics_rect[3] + 8
 
     sensor_lines: List[str] = []
     if hub is None:
@@ -692,66 +1253,30 @@ def draw_inside_sensors(display, transition=False):
 
     sources = readings.get("_sources") if isinstance(readings.get("_sources"), dict) else {}
     if sources:
-        sensor_lines.append("")
         sensor_lines.append("Sources:")
         for metric, source in sorted(sources.items()):
             sensor_lines.append(f"  {metric}: {source}")
 
-    metrics: List[Tuple[str, str]] = []
-    temp_value = _format_temp_dual(readings.get("temperature_c"))
-    humidity_value = _format_humidity(readings.get("humidity_pct"))
-    pressure_value = _format_pressure(readings.get("pressure_hpa"))
-    light_value = _format_light(readings.get("light_lux"))
-    proximity_value = _format_proximity(readings.get("proximity"))
-    if temp_value and _has_sensor_source(readings, "temperature_c"):
-        metrics.append(("🌞 Temperature", temp_value))
-    if humidity_value and _has_sensor_source(readings, "humidity_pct"):
-        metrics.append(("💧 Humidity", humidity_value))
-    if pressure_value and _has_sensor_source(readings, "pressure_hpa"):
-        metrics.append(("☔ Pressure", pressure_value))
-    if light_value and _has_sensor_source(readings, "light_lux"):
-        metrics.append(("💡 Light", light_value))
-    if proximity_value and _has_sensor_source(readings, "proximity"):
-        metrics.append(("📡 Proximity", proximity_value))
-
-    y = 80
-    if metrics:
-        y = _render_metrics(draw, metrics, start_y=y) + 16
-    else:
-        y += 10
-
-    imu_rows: List[Tuple[str, str]] = []
-    orientation_label = readings.get("orientation_label")
-    if isinstance(orientation_label, str):
-        imu_rows.append(("🙃 Orientation", orientation_label))
-
-    pitch_roll = _format_pitch_roll(readings.get("pitch_deg"), readings.get("roll_deg"))
-    if pitch_roll:
-        imu_rows.append(("🎯 Pitch/Roll", pitch_roll))
-
-    accel_text = _format_vector(readings.get("accel_ms2"), "m/s²")
-    if accel_text:
-        imu_rows.append(("🧭 Accel", accel_text))
-
-    gyro_text = _format_vector(readings.get("gyro_rads"), "rad/s")
-    if gyro_text:
-        imu_rows.append(("🌀 Gyro", gyro_text))
-
-    text_y = y
-    if imu_rows:
-        text_y = _render_metrics(draw, imu_rows, start_y=text_y) + 12
-
+    y = max(content_top, HEIGHT - 54)
+    line_font = FONT_INSIDE_VALUE
     for line in sensor_lines:
         if not line:
-            text_y += FONT_INSIDE_VALUE.size // 2
+            y += line_font.size // 2
             continue
-        line_w, line_h = draw.textsize(line, font=FONT_INSIDE_VALUE)
-        draw.text((36, text_y), line, font=FONT_INSIDE_VALUE, fill=(200, 200, 200))
-        text_y += line_h + 6
+        lw, lh = measure_text(draw, line, line_font)
+        draw.text((side_pad, y), line, font=line_font, fill=_mix_color(config.INSIDE_COL_TEXT, config.INSIDE_COL_BG, 0.2))
+        y += lh + 4
 
-    age_text = _format_age(timestamp)
+    age_text = _format_sensor_age(timestamp)
     if age_text:
-        age_w, age_h = draw.textsize(age_text, font=FONT_INSIDE_VALUE)
-        draw.text(((WIDTH - age_w) // 2, HEIGHT - age_h - 24), age_text, font=FONT_INSIDE_VALUE, fill=(120, 160, 200))
+        age_w, age_h = measure_text(draw, age_text, FONT_INSIDE_VALUE)
+        draw.text(((WIDTH - age_w) // 2, HEIGHT - age_h - 8), age_text, font=FONT_INSIDE_VALUE, fill=_mix_color(config.INSIDE_COL_TEXT, config.INSIDE_COL_BG, 0.35))
 
-    return img
+    if transition:
+        return img
+
+    clear_display(display)
+    display.image(img)
+    display.show()
+    time.sleep(5)
+    return None
