@@ -6,7 +6,9 @@ All remote data fetchers for weather, Blackhawks, MLB, etc.,
 with resilient retries via a shared requests.Session.
 """
 
+import csv
 import datetime
+import io
 import logging
 
 import pytz
@@ -31,6 +33,7 @@ from config import (
     NBA_TEAM_ID,
     NBA_TEAM_TRICODE,
 )
+from screens.nhl_standings import _fetch_standings_data as _fetch_nhl_standings_data
 
 # ─── Shared HTTP session ─────────────────────────────────────────────────────
 _session = get_session()
@@ -678,3 +681,150 @@ def fetch_cubs_standings():
 
 def fetch_sox_standings():
     return _fetch_mlb_standings(103, 202, MLB_SOX_TEAM_ID)
+
+
+# -----------------------------------------------------------------------------
+# NFL — Bears standings
+# -----------------------------------------------------------------------------
+NFL_STANDINGS_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/standings.csv"
+NFL_BEARS_ABBR = "CHI"
+
+
+def fetch_bears_standings():
+    try:
+        response = _session.get(NFL_STANDINGS_URL, timeout=10)
+        response.raise_for_status()
+    except Exception as exc:
+        logging.error("Error fetching NFL standings: %s", exc)
+        return None
+
+    try:
+        reader = csv.DictReader(io.StringIO(response.text))
+        latest = None
+        latest_year = -1
+        for row in reader:
+            if not row or row.get("team") != NFL_BEARS_ABBR:
+                continue
+            try:
+                season = int(row.get("season") or 0)
+            except Exception:
+                season = 0
+            if season >= latest_year:
+                latest_year = season
+                latest = row
+
+        if not latest:
+            logging.warning("Bears standings not found in NFL dataset")
+            return None
+
+        wins = int(latest.get("wins", 0) or 0)
+        losses = int(latest.get("losses", 0) or 0)
+        ties = int(latest.get("ties", 0) or 0)
+        pct = latest.get("pct") or _safe_pct(wins, losses, ties)
+        division = latest.get("division") or "Division"
+
+        return {
+            "leagueRecord": {"wins": wins, "losses": losses, "ties": ties, "pct": pct},
+            "divisionRank": latest.get("div_rank") or "-",
+            "divisionName": division,
+            "records": {"splitRecords": []},
+            "streak": {"streakCode": "-"},
+        }
+    except Exception as exc:
+        logging.error("Error parsing NFL standings: %s", exc)
+        return None
+
+
+# -----------------------------------------------------------------------------
+# NHL — Blackhawks standings
+# -----------------------------------------------------------------------------
+NHL_BLACKHAWKS_TEAM_NAME = "Chicago Blackhawks"
+
+
+def fetch_blackhawks_standings():
+    try:
+        standings_by_conf = _fetch_nhl_standings_data()
+    except Exception as exc:
+        logging.error("Error fetching NHL standings data: %s", exc)
+        return None
+
+    for conf in standings_by_conf.values():
+        for division, teams in conf.items():
+            for team in teams:
+                team_info = team.get("team", {}) if isinstance(team, dict) else {}
+                name = team_info.get("name") or team_info.get("teamName") or ""
+                if name != NHL_BLACKHAWKS_TEAM_NAME:
+                    continue
+
+                league_record = team.get("leagueRecord") or {}
+                records = team.get("records") or {}
+                points = team.get("points")
+
+                return {
+                    "leagueRecord": league_record,
+                    "divisionRank": team.get("divisionRank") or "-",
+                    "divisionName": division,
+                    "points": points,
+                    "wildCardGamesBack": team.get("wildCardGamesBack"),
+                    "wildCardRank": team.get("wildCardRank"),
+                    "records": records,
+                    "streak": team.get("streak", {}),
+                }
+    logging.warning("Blackhawks not found in NHL standings data")
+    return None
+
+
+# -----------------------------------------------------------------------------
+# NBA — Bulls standings
+# -----------------------------------------------------------------------------
+NBA_STANDINGS_URL = "https://data.nba.net/prod/v2/2024/standings.json"
+
+
+def fetch_bulls_standings():
+    try:
+        response = _session.get(NBA_STANDINGS_URL, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        logging.error("Error fetching NBA standings: %s", exc)
+        return None
+
+    teams = (payload.get("league") or {}).get("standard") or []
+    for team in teams:
+        if str(team.get("teamId")) != str(NBA_TEAM_ID):
+            continue
+
+        record = team.get("overallWinLoss") or team
+        wins = record.get("wins") or team.get("win") or 0
+        losses = record.get("losses") or team.get("loss") or 0
+        pct = record.get("winPct") or team.get("winPct" ) or _safe_pct(wins, losses)
+        division = team.get("divName") or "Division"
+
+        records = {
+            "splitRecords": [
+                {"type": "lastTen", "wins": team.get("lastTenWins", "-"), "losses": team.get("lastTenLosses", "-")},
+                {"type": "home", "wins": team.get("homeWins", "-"), "losses": team.get("homeLosses", "-")},
+                {"type": "away", "wins": team.get("awayWins", "-"), "losses": team.get("awayLosses", "-")},
+            ]
+        }
+
+        return {
+            "leagueRecord": {"wins": wins, "losses": losses, "pct": pct},
+            "divisionRank": team.get("divRank") or "-",
+            "divisionName": division,
+            "divisionGamesBack": team.get("gamesBack"),
+            "records": records,
+            "streak": {"streakCode": team.get("streakText") or team.get("streak", "-")},
+        }
+
+    logging.warning("Bulls standings not found in NBA dataset")
+    return None
+# -----------------------------------------------------------------------------
+# Shared helpers
+# -----------------------------------------------------------------------------
+def _safe_pct(wins, losses, ties=0):
+    try:
+        games = float(wins) + float(losses) + float(ties)
+        return round(float(wins) / games, 3) if games else 0.0
+    except Exception:
+        return 0.0
