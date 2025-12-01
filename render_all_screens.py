@@ -134,8 +134,9 @@ def build_cache() -> Dict[str, object]:
     logging.info("Refreshing data feeds…")
     cache: Dict[str, object] = {
         "weather": None,
-        "hawks": {"last": None, "live": None, "next": None, "next_home": None},
-        "bulls": {"last": None, "live": None, "next": None, "next_home": None},
+        "bears": {"stand": None},
+        "hawks": {"stand": None, "last": None, "live": None, "next": None, "next_home": None},
+        "bulls": {"stand": None, "last": None, "live": None, "next": None, "next_home": None},
         "cubs": {
             "stand": None,
             "last": None,
@@ -153,8 +154,10 @@ def build_cache() -> Dict[str, object]:
     }
 
     cache["weather"] = data_fetch.fetch_weather()
+    cache["bears"].update({"stand": data_fetch.fetch_bears_standings()})
     cache["hawks"].update(
         {
+            "stand": data_fetch.fetch_blackhawks_standings(),
             "last": data_fetch.fetch_blackhawks_last_game(),
             "live": data_fetch.fetch_blackhawks_live_game(),
             "next": data_fetch.fetch_blackhawks_next_game(),
@@ -163,6 +166,7 @@ def build_cache() -> Dict[str, object]:
     )
     cache["bulls"].update(
         {
+            "stand": data_fetch.fetch_bulls_standings(),
             "last": data_fetch.fetch_bulls_last_game(),
             "live": data_fetch.fetch_bulls_live_game(),
             "next": data_fetch.fetch_bulls_next_game(),

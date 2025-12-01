@@ -62,9 +62,19 @@ def format_games_back(gb):
     return str(gb)
 
 @log_call
-def draw_standings_screen1(display, rec, logo_path, division_name, transition=False):
+def draw_standings_screen1(
+    display,
+    rec,
+    logo_path,
+    division_name,
+    transition=False,
+    *,
+    include_games_back=True,
+    include_wild_card=True,
+    extra_lines=None,
+):
     """
-    Screen 1: logo, W/L, rank, GB, WCGB.
+    Screen 1: logo, W/L, rank, optional GB/WCGB, plus any extra lines.
     """
     if not rec:
         return None
@@ -102,35 +112,43 @@ def draw_standings_screen1(display, rec, logo_path, division_name, transition=Fa
     rank_txt = f"{dr_lbl} in {division_name}"
 
     # GB
-    gb_raw = rec.get('divisionGamesBack','-')
-    gb_txt = f"{format_games_back(gb_raw)} GB" if gb_raw!='-' else "- GB"
+    gb_txt = None
+    if include_games_back:
+        gb_raw = rec.get('divisionGamesBack','-')
+        gb_txt = f"{format_games_back(gb_raw)} GB" if gb_raw!='-' else "- GB"
 
     # WCGB
-    wc_raw  = rec.get('wildCardGamesBack')
-    wc_rank = rec.get('wildCardRank')
     wc_txt  = None
-    if wc_raw is not None:
-        base = format_games_back(wc_raw)
-        try:
-            rank_int = int(wc_rank)
-        except:
-            rank_int = None
+    if include_wild_card:
+        wc_raw  = rec.get('wildCardGamesBack')
+        wc_rank = rec.get('wildCardRank')
+        if wc_raw is not None:
+            base = format_games_back(wc_raw)
+            try:
+                rank_int = int(wc_rank)
+            except:
+                rank_int = None
 
-        if wc_raw == 0:
-            wc_txt = "-- WCGB"
-        elif rank_int and rank_int <= 3:
-            wc_txt = f"+{base} WCGB"
-        else:
-            wc_txt = f"{base} WCGB"
+            if wc_raw == 0:
+                wc_txt = "-- WCGB"
+            elif rank_int and rank_int <= 3:
+                wc_txt = f"+{base} WCGB"
+            else:
+                wc_txt = f"{base} WCGB"
 
     # Lines to draw
     lines = [
         (wl_txt, FONT_STAND1_WL),
         (rank_txt, FONT_STAND1_RANK),
-        (gb_txt, FONT_STAND1_GB_VALUE),
     ]
+    if gb_txt:
+        lines.append((gb_txt, FONT_STAND1_GB_VALUE))
     if wc_txt:
         lines.append((wc_txt, FONT_STAND1_WCGB_VALUE))
+    for line in extra_lines or []:
+        if not isinstance(line, tuple) or len(line) != 2:
+            continue
+        lines.append(line)
 
     # Layout text
     heights = [draw.textsize(txt,font)[1] for txt,font in lines]
