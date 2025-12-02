@@ -255,15 +255,26 @@ def _write_screenshots(
     return saved
 
 
-def _cleanup_screenshots(paths: Iterable[str]) -> None:
-    for path in paths:
+def _cleanup_screenshots(saved_paths: Iterable[str]) -> None:
+    """Delete screenshot files and prune empty directories."""
+
+    deleted_dirs: set[str] = set()
+    for path in saved_paths:
         try:
             os.remove(path)
-            logging.info("Removed screenshot %s", path)
+            deleted_dirs.add(os.path.dirname(path))
         except FileNotFoundError:
-            logging.debug("Screenshot already removed: %s", path)
-        except Exception as exc:  # pragma: no cover - best-effort cleanup
-            logging.warning("Failed to remove screenshot %s: %s", path, exc)
+            continue
+        except OSError as exc:  # pragma: no cover - best-effort cleanup
+            logging.warning("Failed to delete screenshot '%s': %s", path, exc)
+
+    for directory in sorted(deleted_dirs, key=len, reverse=True):
+        try:
+            if os.path.isdir(directory) and not os.listdir(directory):
+                os.rmdir(directory)
+        except OSError:
+            # Directory may not be empty or could have been removed already
+            continue
 
 
 def _suppress_animation_delay():
@@ -369,6 +380,7 @@ def render_all_screens(
         print(archive_path)
         if saved:
             _cleanup_screenshots(saved)
+            logging.info("Cleaned up %d screenshot file(s) from %s", len(saved), SCREENSHOT_DIR)
     elif not create_archive and not sync_screenshots:
         logging.info("Rendered %d screen(s) (no outputs written)", len(assets))
 
