@@ -196,10 +196,10 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 
 ## Install
 
-If you've already cloned this repository (for example into `~/desk_display`), switch into that directory to install dependencies and configure the app.
+If you've already cloned this repository (for example into `~/desk_display_hyperpixel4`), switch into that directory to install dependencies and configure the app.
 
 ```bash
-cd ~/desk_display
+cd ~/desk_display_hyperpixel4
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -212,14 +212,14 @@ The `venv` directory is ignored by Git. Re-run `source venv/bin/activate` whenev
 2. Run `sudo raspi-config`, enable **SPI**, **I²C**, and the **GL (Full KMS)** driver, then reboot.
 3. Install Pimoroni’s HyperPixel overlay (`curl https://get.pimoroni.com/hyperpixel4 | bash`) or manually add `dtoverlay=hyperpixel4` to `/boot/firmware/config.txt` and reboot.
 4. Install the apt packages listed above, clone this repository, and create the virtual environment (`python -m venv venv && source venv/bin/activate`).
-5. For Pi 5 systems running Wayland, no additional tweaks are required; the included service gate script auto-detects Wayland and X11 sessions. To force legacy X11, set `DESK_DISPLAY_FORCE_X11=1` in `/home/pi/desk_display/.env`.
+5. For Pi 5 systems running Wayland, no additional tweaks are required; the included service gate script auto-detects Wayland and X11 sessions. To force legacy X11, set `DESK_DISPLAY_FORCE_X11=1` in `/home/pi/desk_display_hyperpixel4/.env`.
 
 ---
 
 ## Project layout
 
 ```
-desk_display/
+desk_display_hyperpixel4/
 ├─ main.py
 ├─ config.py
 ├─ data_fetch.py
@@ -504,15 +504,15 @@ Wants=graphical-session.target
 
 [Service]
 User=pi
-WorkingDirectory=/home/pi/desk_display
+WorkingDirectory=/home/pi/desk_display_hyperpixel4
 Environment=DISPLAY_PROFILE=hyperpixel4_square
-EnvironmentFile=-/home/pi/desk_display/.env
+EnvironmentFile=-/home/pi/desk_display_hyperpixel4/.env
 EnvironmentFile=-/run/user/%U/desk_display.env
 Environment=INSIDE_SENSOR_I2C_BUS=15
 SupplementaryGroups=video render input gpio i2c spi
-ExecStartPre=/home/pi/desk_display/scripts/wait_and_export_display_env.sh
-ExecStart=/home/pi/desk_display/venv/bin/python /home/pi/desk_display/main.py
-ExecStop=/bin/bash -lc '/home/pi/desk_display/cleanup.sh'
+ExecStartPre=/home/pi/desk_display_hyperpixel4/scripts/wait_and_export_display_env.sh
+ExecStart=/home/pi/desk_display_hyperpixel4/venv/bin/python /home/pi/desk_display_hyperpixel4/main.py
+ExecStop=/bin/bash -lc '/home/pi/desk_display_hyperpixel4/cleanup.sh'
 Restart=always
 RestartSec=3
 
@@ -529,13 +529,13 @@ sudo systemctl start desk_display.service
 journalctl -u desk_display.service -f
 ```
 
-The service definition above assumes the project’s virtual environment lives at `/home/pi/desk_display/venv` and that the
+The service definition above assumes the project’s virtual environment lives at `/home/pi/desk_display_hyperpixel4/venv` and that the
 cleanup helper is executable. Make sure to create the venv first and grant execute permissions to the script:
 
 ```bash
-python -m venv /home/pi/desk_display/venv
-/home/pi/desk_display/venv/bin/pip install -r /home/pi/desk_display/requirements.txt
-chmod +x /home/pi/desk_display/cleanup.sh
+python -m venv /home/pi/desk_display_hyperpixel4/venv
+/home/pi/desk_display_hyperpixel4/venv/bin/pip install -r /home/pi/desk_display_hyperpixel4/requirements.txt
+chmod +x /home/pi/desk_display_hyperpixel4/cleanup.sh
 ```
 
 `INSIDE_SENSOR_I2C_BUS` is optional; set it to match the `/dev/i2c-*` bus number

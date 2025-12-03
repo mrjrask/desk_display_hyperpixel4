@@ -4,7 +4,7 @@ set -euo pipefail
 EXPECTED_CODENAME="${EXPECTED_CODENAME:-}"
 
 INSTALL_USER="${INSTALL_USER:-pi}"
-INSTALL_DIR="${INSTALL_DIR:-/home/${INSTALL_USER}/desk_display}"
+INSTALL_DIR="${INSTALL_DIR:-/home/${INSTALL_USER}/desk_display_hyperpixel4}"
 VENV_PATH="${VENV_PATH:-${INSTALL_DIR}/venv}"
 SERVICE_NAME="desk_display.service"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
