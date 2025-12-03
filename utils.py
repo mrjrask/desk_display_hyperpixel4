@@ -186,6 +186,11 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
+    def hide_mouse_cursor(self) -> None:
+        """Public wrapper to hide the cursor when a mouse is connected."""
+
+        self._hide_mouse_cursor()
+
     def _init_pygame_backend(self) -> Tuple[bool, Optional[str]]:
         if pygame is None:  # pragma: no cover - optional dependency
             return False, "pygame module not installed"
@@ -329,6 +334,9 @@ class Display:
             return
         if self._backend != "pygame":
             return
+
+        # Reinforce cursor hiding whenever the presenter starts or restarts.
+        self._hide_mouse_cursor()
         if self._pygame_present_queue is None:
             self._pygame_present_queue = queue.Queue(maxsize=1)
         if self._pygame_present_thread and self._pygame_present_thread.is_alive():
