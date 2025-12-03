@@ -56,18 +56,29 @@ install_apt_packages() {
     python3-venv python3-pip python3-dev python3-opencv
     build-essential libjpeg-dev libopenblas0 libopenblas-dev
     libopenjp2-7-dev libcairo2-dev libpango1.0-dev
-    libgdk-pixbuf2.0-dev libffi-dev network-manager wireless-tools
-    i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git
-    libatlas-base-dev libegl1-mesa libgles2-mesa libdrm2 rsync
+    libffi-dev network-manager wireless-tools i2c-tools
+    fonts-dejavu-core libgl1 libx264-dev ffmpeg git libdrm2 rsync
   )
 
   local codename_packages=()
   case "${EXPECTED_CODENAME}" in
     bookworm)
-      codename_packages+=(libtiff5-dev)
+      codename_packages+=(
+        libgdk-pixbuf2.0-dev
+        libatlas-base-dev
+        libegl1-mesa
+        libgles2-mesa
+        libtiff5-dev
+      )
       ;;
     trixie)
-      codename_packages+=(libtiff6-dev)
+      codename_packages+=(
+        libgdk-pixbuf-2.0-dev
+        libatlas3-base
+        libegl1
+        libgles2
+        libtiff6-dev
+      )
       ;;
     *)
       echo "Unsupported codename '${EXPECTED_CODENAME}' for package selection." >&2
