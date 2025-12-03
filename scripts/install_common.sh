@@ -94,6 +94,7 @@ create_virtualenv() {
 
 prepare_scripts() {
   ${SUDO} chmod +x "${INSTALL_DIR}/cleanup.sh"
+  ${SUDO} chmod +x "${INSTALL_DIR}/reset_screenshots.sh"
   ${SUDO} chmod +x "${INSTALL_DIR}/scripts/wait_and_export_display_env.sh"
 }
 
