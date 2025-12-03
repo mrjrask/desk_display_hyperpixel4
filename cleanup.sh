@@ -11,12 +11,7 @@ cd "$dir"
 # Defaults (can be overridden via env)
 SCREENSHOTS_DIR="${SCREENSHOTS_DIR:-${dir}/screenshots}"
 ARCHIVE_ROOT="${ARCHIVE_ROOT:-${dir}/screenshot_archive}"
-ARCHIVE_DATED_DIR="${ARCHIVE_DATED_DIR:-${ARCHIVE_ROOT}/dated_folders}"
 ARCHIVE_DEFAULT_FOLDER="${ARCHIVE_DEFAULT_FOLDER:-_unsorted}"
-
-timestamp="$(date +%Y%m%d_%H%M%S)"
-day="$(date +%Y%m%d)"
-batch="${timestamp}"
 
 # --- 1) Clear the display (only when safe) ---
 echo "    → Clearing display…"
@@ -69,7 +64,7 @@ else
 fi
 
 if (( ${#leftover_files[@]} > 0 )); then
-  echo "    → Archiving leftover screenshots/videos to screenshot_archive/dated_folders/<screen>/${day}/cleanup_${batch}…"
+  echo "    → Archiving leftover screenshots/videos to screenshot_archive/<screen>/…"
   for src in "${leftover_files[@]}"; do
     rel_path="${src#${SCREENSHOTS_DIR}/}"
     screen_folder="${ARCHIVE_DEFAULT_FOLDER}"
@@ -83,7 +78,7 @@ if (( ${#leftover_files[@]} > 0 )); then
       fi
     fi
 
-    dest_dir="${ARCHIVE_DATED_DIR}/${screen_folder}/${day}/cleanup_${batch}"
+    dest_dir="${ARCHIVE_ROOT}/${screen_folder}"
     dest="${dest_dir}/${remainder}"
     mkdir -p "$(dirname "${dest}")"
     mv -f "${src}" "${dest}"

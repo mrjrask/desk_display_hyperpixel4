@@ -110,7 +110,7 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 - **Smart Screenshot Archiving**:
   - Auto-capture PNG screenshots of every screen
   - Batch archiving when folder reaches 500 images
-  - Organized by `dated_folders/<screen>/YYYYMMDD/HHMMSS/`
+  - Organized by `<screen>/` to mirror the live screenshots/ structure
   - XDG Base Directory compliance
 - **Data Caching**:
   - 10-minute background refresh for sports/weather data
@@ -564,7 +564,7 @@ Systemd stops when a referenced `EnvironmentFile` is missing; either create the 
 ## Screenshots & archiving
 
 - Screenshots land in a writable XDG-style data directory (by default `~/.local/share/desk_display_hyperpixel4/screenshots/`) when `ENABLE_SCREENSHOTS=True`. Set `DESK_DISPLAY_SCREENSHOT_DIR` or edit `storage_overrides.py` to override the location explicitly.
-- **Batch archiving:** once the live folder reaches **500** images, the program moves the **entire batch** into `screenshot_archive/dated_folders/<screen>/YYYYMMDD/HHMMSS/` beside the screenshots directory (images only) so the archive mirrors the folder layout under the live folder.
+- **Batch archiving:** once the live folder reaches **500** images, the program moves the **entire batch** into `screenshot_archive/<screen>/` beside the screenshots directory (images only) so the archive mirrors the folder layout under the live folder.
 - You will **not** see per‑image pruning logs; instead you’ll see a single archive log like: `🗃️ Archived 500 screenshot(s) → …`
 
 > Tip: videos (if enabled) are written to `screenshots/display_output.mp4` and aren’t moved by the archiver.
