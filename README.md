@@ -204,6 +204,10 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+> **Tip:** Run `pip install -r requirements.txt` from the project root. Pip 25.3
+> resolves editable paths against your current working directory, so installing
+> from elsewhere will fail to find the vendored `./vendor/bme68x` dependency.
+
 The `venv` directory is ignored by Git. Re-run `source venv/bin/activate` whenever you start a new shell session to ensure the project uses the isolated Python environment.
 
 ### Raspberry Pi OS Bookworm quickstart (Pi 4 & Pi 5)
