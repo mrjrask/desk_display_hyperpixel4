@@ -17,6 +17,7 @@ import data_fetch
 from config import CENTRAL_TIME, HEIGHT, WIDTH, DISPLAY_PROFILE
 from screens.draw_travel_time import get_travel_active_window, is_travel_screen_active
 from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
+from screens_catalog import SCREEN_IDS
 from schedule import build_scheduler, load_schedule_config
 from utils import ScreenImage
 from paths import resolve_storage_paths
@@ -338,7 +339,27 @@ def render_all_screens(
 
         registry, _metadata = build_screen_registry(context)
 
+        ordered_screen_ids: list[str] = []
+        missing_screens: list[str] = []
+
+        for screen_id in SCREEN_IDS:
+            if screen_id in registry:
+                ordered_screen_ids.append(screen_id)
+            else:
+                missing_screens.append(screen_id)
+
+        if missing_screens:
+            logging.warning(
+                "Catalog contains %d screen(s) missing from registry: %s",
+                len(missing_screens),
+                ", ".join(sorted(missing_screens)),
+            )
+
         for screen_id in sorted(registry):
+            if screen_id not in ordered_screen_ids:
+                ordered_screen_ids.append(screen_id)
+
+        for screen_id in ordered_screen_ids:
             definition: ScreenDefinition = registry[screen_id]
             if definition.available:
                 logging.info("Rendering '%s'", screen_id)
