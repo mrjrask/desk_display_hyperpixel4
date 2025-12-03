@@ -19,6 +19,9 @@ rpi.gpio
 colorama
 adafruit-circuitpython-bme280
 pimoroni-bme280
+# NOTE: pip resolves editable paths relative to the working directory, not the
+# requirements file. Run installation commands from the repository root so this
+# vendor reference is found.
 -e ./vendor/bme68x
 pygame
 ltr559
