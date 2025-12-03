@@ -10,6 +10,9 @@ import csv
 import datetime
 import io
 import logging
+import socket
+import time
+from typing import Optional
 
 import pytz
 import requests
@@ -33,13 +36,16 @@ from config import (
     NBA_TEAM_ID,
     NBA_TEAM_TRICODE,
 )
-from screens.nhl_standings import _fetch_standings_data as _fetch_nhl_standings_data
 
 # ─── Shared HTTP session ─────────────────────────────────────────────────────
 _session = get_session()
 
 # Track last time we received a 429 from OWM
 _last_owm_429 = None
+# Cache statsapi DNS availability to avoid repeated slow lookups
+_statsapi_dns_available: Optional[bool] = None
+_statsapi_dns_checked_at: Optional[float] = None
+_STATSAPI_DNS_RECHECK_SECONDS = 600
 
 # -----------------------------------------------------------------------------
 # WEATHER
@@ -650,6 +656,92 @@ def fetch_sox_games():
 
 
 # -----------------------------------------------------------------------------
+# Team standings — helpers shared by NFL / NHL / NBA
+# -----------------------------------------------------------------------------
+def _safe_int(value):
+    try:
+        return int(value)
+    except Exception:
+        return value
+
+
+def _format_streak_code(prefix, count):
+    try:
+        c = int(count)
+    except Exception:
+        return "-"
+    if c <= 0:
+        return "-"
+    return f"{prefix}{c}"
+
+
+def _format_streak_from_dict(streak_blob):
+    if not isinstance(streak_blob, dict):
+        return "-"
+    prefix = streak_blob.get("type") or streak_blob.get("streakType")
+    count = streak_blob.get("count") or streak_blob.get("streakNumber")
+    if isinstance(prefix, str):
+        prefix = prefix[:1].upper()
+    return _format_streak_code(prefix or "-", count)
+
+
+def _build_split_record(split_type, wins, losses):
+    return {"type": split_type, "wins": wins, "losses": losses}
+
+
+def _extract_split_records(**kwargs):
+    splits = []
+    for key, value in kwargs.items():
+        if not value:
+            continue
+        wins = value.get("wins")
+        losses = value.get("losses")
+        if wins is None and losses is None:
+            continue
+        splits.append(_build_split_record(key, wins, losses))
+    return splits
+
+
+def _empty_standings_record(team_abbr: str) -> dict:
+    """Return a placeholder standings structure so screens can still render."""
+
+    return {
+        "leagueRecord": {"wins": "-", "losses": "-", "pct": "-"},
+        "divisionRank": "-",
+        "divisionGamesBack": "-",
+        "wildCardGamesBack": None,
+        "streak": {"streakCode": "-"},
+        "records": {"splitRecords": []},
+        "points": None,
+        "team": team_abbr,
+    }
+
+
+def _statsapi_available() -> bool:
+    """Lightweight DNS check so we avoid slow statsapi fallbacks when DNS fails."""
+
+    global _statsapi_dns_available, _statsapi_dns_checked_at
+
+    now = time.time()
+    if _statsapi_dns_checked_at and (now - _statsapi_dns_checked_at) < _STATSAPI_DNS_RECHECK_SECONDS:
+        return bool(_statsapi_dns_available)
+
+    try:
+        socket.getaddrinfo("statsapi.web.nhl.com", 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        logging.debug("NHL statsapi DNS lookup failed: %s", exc)
+        _statsapi_dns_available = False
+    except Exception as exc:
+        logging.debug("Unexpected error checking NHL statsapi DNS: %s", exc)
+        _statsapi_dns_available = False
+    else:
+        _statsapi_dns_available = True
+
+    _statsapi_dns_checked_at = now
+    return bool(_statsapi_dns_available)
+
+
+# -----------------------------------------------------------------------------
 # MLB — standings helper + Cubs/Sox wrappers
 # -----------------------------------------------------------------------------
 def _fetch_mlb_standings(league_id, division_id, team_id):
@@ -686,139 +778,360 @@ def fetch_sox_standings():
 # -----------------------------------------------------------------------------
 # NFL — Bears standings
 # -----------------------------------------------------------------------------
-NFL_STANDINGS_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/standings.csv"
-NFL_BEARS_ABBR = "CHI"
+def _fetch_nfl_team_standings(team_abbr: str):
+    try:
+        url = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/standings.csv"
+        resp = _session.get(url, timeout=10)
+        resp.raise_for_status()
+        entries = [row for row in csv.DictReader(io.StringIO(resp.text)) if row.get("team") == team_abbr]
+        if not entries:
+            logging.warning("Team %s not found in NFL standings", team_abbr)
+            return None
+
+        latest = max(entries, key=lambda r: r.get("season", "0"))
+        wins = _safe_int(latest.get("wins"))
+        losses = _safe_int(latest.get("losses"))
+        ties = _safe_int(latest.get("ties"))
+
+        record = {
+            "wins": wins,
+            "losses": losses,
+            "ties": ties,
+            "pct": latest.get("pct"),
+        }
+
+        return {
+            "leagueRecord": record,
+            "divisionRank": latest.get("div_rank") or latest.get("divRank") or "-",
+            "division": latest.get("division"),
+            "streak": {"streakCode": "-"},
+            "records": {"splitRecords": []},
+        }
+    except Exception as exc:
+        logging.error("Error fetching NFL standings for %s: %s", team_abbr, exc)
+        return None
 
 
 def fetch_bears_standings():
-    try:
-        response = _session.get(NFL_STANDINGS_URL, timeout=10)
-        response.raise_for_status()
-    except Exception as exc:
-        logging.error("Error fetching NFL standings: %s", exc)
-        return None
-
-    try:
-        reader = csv.DictReader(io.StringIO(response.text))
-        latest = None
-        latest_year = -1
-        for row in reader:
-            if not row or row.get("team") != NFL_BEARS_ABBR:
-                continue
-            try:
-                season = int(row.get("season") or 0)
-            except Exception:
-                season = 0
-            if season >= latest_year:
-                latest_year = season
-                latest = row
-
-        if not latest:
-            logging.warning("Bears standings not found in NFL dataset")
-            return None
-
-        wins = int(latest.get("wins", 0) or 0)
-        losses = int(latest.get("losses", 0) or 0)
-        ties = int(latest.get("ties", 0) or 0)
-        pct = latest.get("pct") or _safe_pct(wins, losses, ties)
-        division = latest.get("division") or "Division"
-
-        return {
-            "leagueRecord": {"wins": wins, "losses": losses, "ties": ties, "pct": pct},
-            "divisionRank": latest.get("div_rank") or "-",
-            "divisionName": division,
-            "records": {"splitRecords": []},
-            "streak": {"streakCode": "-"},
-        }
-    except Exception as exc:
-        logging.error("Error parsing NFL standings: %s", exc)
-        return None
+    return _fetch_nfl_team_standings("CHI")
 
 
 # -----------------------------------------------------------------------------
 # NHL — Blackhawks standings
 # -----------------------------------------------------------------------------
-NHL_BLACKHAWKS_TEAM_NAME = "Chicago Blackhawks"
+def _fetch_nhl_team_standings(team_abbr: str):
+    try:
+        url = "https://api-web.nhle.com/v1/standings/now"
+        resp = _session.get(url, timeout=10, headers=NHL_HEADERS)
+        resp.raise_for_status()
+        payload = resp.json() or {}
+        standings = payload.get("standings", []) or []
+        entry = next((row for row in standings if row.get("teamAbbrev") == team_abbr), None)
+        if entry:
+            record = {
+                "wins": _safe_int(entry.get("wins")),
+                "losses": _safe_int(entry.get("losses")),
+                "ot": _safe_int(entry.get("otLosses")),
+                "pct": entry.get("pointsPctg"),
+            }
+
+            home = {"wins": entry.get("homeWins"), "losses": entry.get("homeLosses")}
+            away = {"wins": entry.get("roadWins"), "losses": entry.get("roadLosses")}
+            l10 = {"wins": entry.get("l10Wins"), "losses": entry.get("l10Losses")}
+            division = {
+                "wins": entry.get("divisionWins"),
+                "losses": entry.get("divisionLosses"),
+            }
+            conference = {
+                "wins": entry.get("conferenceWins"),
+                "losses": entry.get("conferenceLosses"),
+            }
+
+            splits = _extract_split_records(
+                home=home, away=away, lastTen=l10, division=division, conference=conference
+            )
+
+            streak_code = entry.get("streakCode") or _format_streak_code(entry.get("streakType"), entry.get("streakNumber"))
+
+            return {
+                "leagueRecord": record,
+                "divisionRank": entry.get("divisionSeq") or entry.get("divisionRank"),
+                "divisionGamesBack": None,
+                "wildCardGamesBack": None,
+                "streak": {"streakCode": streak_code or "-"},
+                "records": {"splitRecords": splits},
+                "points": entry.get("points"),
+                "conferenceRank": entry.get("conferenceSeq")
+                or entry.get("conferenceRank"),
+                "conferenceName": entry.get("conferenceName")
+                or entry.get("conferenceAbbrev"),
+            }
+        logging.warning("Team %s not found in NHL standings; trying fallback", team_abbr)
+    except Exception as exc:
+        logging.error("Error fetching NHL standings for %s: %s", team_abbr, exc)
+    fallback = _fetch_nhl_team_standings_espn(team_abbr)
+    if fallback:
+        return fallback
+    if not _statsapi_available():
+        logging.info("Skipping statsapi NHL standings fallback due to DNS failure")
+        return None
+    return _fetch_nhl_team_standings_statsapi(team_abbr)
 
 
 def fetch_blackhawks_standings():
-    try:
-        standings_by_conf = _fetch_nhl_standings_data()
-    except Exception as exc:
-        logging.error("Error fetching NHL standings data: %s", exc)
-        return None
+    return _fetch_nhl_team_standings("CHI")
 
-    for conf in standings_by_conf.values():
-        for division, teams in conf.items():
-            for team in teams:
-                team_info = team.get("team", {}) if isinstance(team, dict) else {}
-                name = team_info.get("name") or team_info.get("teamName") or ""
-                if name != NHL_BLACKHAWKS_TEAM_NAME:
+
+def _fetch_nhl_team_standings_espn(team_abbr: str):
+    """Fallback to ESPN standings when NHL endpoints are unavailable."""
+
+    def _iter_entries(node):
+        if not isinstance(node, dict):
+            return
+        standings = node.get("standings", {})
+        for entry in standings.get("entries", []) or []:
+            yield entry
+        for child in node.get("children", []) or []:
+            yield from _iter_entries(child)
+
+    def _stat(stats, name, default=None):
+        for stat in stats or []:
+            if stat.get("name") == name:
+                if stat.get("value") is not None:
+                    return stat.get("value")
+                return stat.get("displayValue") or stat.get("summary")
+        return default
+
+    try:
+        url = "https://site.web.api.espn.com/apis/v2/sports/hockey/nhl/standings"
+        resp = _session.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json() or {}
+
+        for entry in _iter_entries(data):
+            team = entry.get("team", {}) or {}
+            if (team.get("abbreviation") or team.get("shortDisplayName")) != team_abbr:
+                continue
+
+            stats = entry.get("stats") or []
+            streak_code = _stat(stats, "streak", "-")
+            pct = _stat(stats, "winPercent")
+            try:
+                pct = float(pct)
+            except Exception:
+                pass
+
+            logging.info("Using ESPN NHL standings fallback for %s", team_abbr)
+            return {
+                "leagueRecord": {
+                    "wins": _safe_int(_stat(stats, "wins")),
+                    "losses": _safe_int(_stat(stats, "losses")),
+                    "ot": _safe_int(_stat(stats, "otLosses")),
+                    "pct": pct,
+                },
+                "divisionRank": _stat(stats, "divisionWinPercent")
+                or _stat(stats, "playoffSeed"),
+                "divisionGamesBack": _stat(stats, "divisionGamesBehind"),
+                "wildCardGamesBack": None,
+                "streak": {"streakCode": streak_code or "-"},
+                "records": {"splitRecords": []},
+                "points": _stat(stats, "points"),
+                "conferenceRank": _stat(stats, "playoffSeed"),
+            }
+    except Exception as exc:
+        logging.error("Error fetching NHL standings (ESPN fallback) for %s: %s", team_abbr, exc)
+    return None
+
+
+def _fetch_nhl_team_standings_statsapi(team_abbr: str):
+    try:
+        url = "https://statsapi.web.nhl.com/api/v1/standings"
+        resp = _session.get(url, timeout=10, headers=NHL_HEADERS)
+        resp.raise_for_status()
+        payload = resp.json() or {}
+        for record in payload.get("records", []) or []:
+            for team in record.get("teamRecords", []) or []:
+                info = team.get("team", {}) or {}
+                abbr = info.get("abbreviation") or info.get("teamName")
+                if abbr != team_abbr:
                     continue
 
-                league_record = team.get("leagueRecord") or {}
-                records = team.get("records") or {}
-                points = team.get("points")
+                league_record = team.get("leagueRecord", {}) or {}
+                streak = team.get("streak", {}) or {}
+                streak_code = streak.get("streakCode") or _format_streak_code(
+                    streak.get("streakType"), streak.get("streakNumber")
+                )
 
+                split_records = []
+                for split in (team.get("records") or {}).get("splitRecords", []) or []:
+                    wins = split.get("wins")
+                    losses = split.get("losses")
+                    if wins is None and losses is None:
+                        continue
+                    split_records.append(
+                        {"type": split.get("type"), "wins": wins, "losses": losses}
+                    )
+
+                logging.info("Using statsapi NHL standings fallback for %s", team_abbr)
                 return {
-                    "leagueRecord": league_record,
-                    "divisionRank": team.get("divisionRank") or "-",
-                    "divisionName": division,
-                    "points": points,
-                    "wildCardGamesBack": team.get("wildCardGamesBack"),
-                    "wildCardRank": team.get("wildCardRank"),
-                    "records": records,
-                    "streak": team.get("streak", {}),
+                    "leagueRecord": {
+                        "wins": _safe_int(league_record.get("wins")),
+                        "losses": _safe_int(league_record.get("losses")),
+                        "ot": _safe_int(league_record.get("ot")),
+                        "pct": league_record.get("pct") or league_record.get("pointsPercentage"),
+                    },
+                    "divisionRank": team.get("divisionRank"),
+                    "divisionGamesBack": team.get("divisionGamesBack"),
+                    "wildCardGamesBack": team.get("wildCardRank"),
+                    "streak": {"streakCode": streak_code or "-"},
+                    "records": {"splitRecords": split_records},
+                    "points": team.get("points"),
+                    "conferenceRank": team.get("conferenceRank"),
                 }
-    logging.warning("Blackhawks not found in NHL standings data")
+        logging.error("Team %s not found in NHL standings (statsapi fallback)", team_abbr)
+    except Exception as exc:
+        logging.error("Error fetching NHL standings (statsapi) for %s: %s", team_abbr, exc)
     return None
 
 
 # -----------------------------------------------------------------------------
 # NBA — Bulls standings
 # -----------------------------------------------------------------------------
-NBA_STANDINGS_URL = "https://data.nba.net/prod/v2/2024/standings.json"
+def _fetch_nba_team_standings(team_tricode: str):
+    def _load_json() -> Optional[dict]:
+        for base in (
+            "https://cdn.nba.com/static/json/liveData/standings",
+            "https://nba-prod-us-east-1-media.s3.amazonaws.com/json/liveData/standings",
+        ):
+            url = f"{base}/league.json"
+            try:
+                resp = _session.get(
+                    url,
+                    timeout=10,
+                    headers={
+                        "Origin": "https://www.nba.com",
+                        "Referer": "https://www.nba.com/",
+                    },
+                )
+                if resp.status_code == 403:
+                    logging.warning("NBA standings returned HTTP 403 from %s", base)
+                    continue
+                resp.raise_for_status()
+                data = resp.json() or {}
+                if data and base.endswith("s3.amazonaws.com/json/liveData/standings"):
+                    logging.info(
+                        "NBA standings fetched successfully from alternate base %s", base
+                    )
+                return data
+            except Exception as exc:
+                logging.error("Error fetching NBA standings from %s: %s", base, exc)
+        return _fetch_nba_team_standings_espn()
+
+    payload = _load_json() or {}
+    teams = payload.get("league", {}).get("standard", {}).get("teams", [])
+
+    try:
+        entry = next((row for row in teams if row.get("teamTricode") == team_tricode), None)
+        if entry:
+            record = {
+                "wins": _safe_int(entry.get("wins") or entry.get("win")),
+                "losses": _safe_int(entry.get("losses") or entry.get("loss")),
+                "pct": entry.get("winPct"),
+            }
+
+            streak_blob = entry.get("streak") or {}
+            streak_code = entry.get("streakText") or entry.get("streakCode")
+            if not streak_code:
+                streak_code = _format_streak_from_dict(streak_blob)
+
+            splits = _extract_split_records(
+                lastTen=entry.get("lastTen"),
+                home=entry.get("home"),
+                away=entry.get("away"),
+            )
+
+            return {
+                "leagueRecord": record,
+                "divisionRank": entry.get("divisionRank")
+                or (entry.get("teamDivision") or {}).get("rank"),
+                "divisionGamesBack": entry.get("gamesBehind")
+                or entry.get("gamesBehindDivision"),
+                "wildCardGamesBack": None,
+                "streak": {"streakCode": streak_code},
+                "records": {"splitRecords": splits},
+            }
+        logging.warning("Team %s not found in NBA standings", team_tricode)
+    except Exception as exc:
+        logging.error("Error fetching NBA standings for %s: %s", team_tricode, exc)
+    fallback = _fetch_nba_team_standings_espn()
+    if fallback:
+        return fallback
+    logging.warning("Using placeholder NBA standings for %s due to fetch errors", team_tricode)
+    return _empty_standings_record(team_tricode)
 
 
 def fetch_bulls_standings():
+    return _fetch_nba_team_standings(NBA_TEAM_TRICODE)
+
+
+def _fetch_nba_team_standings_espn() -> Optional[dict]:
+    """Fallback for NBA standings using ESPN when NBA CDN blocks access."""
+
+    def _iter_entries(node):
+        if not isinstance(node, dict):
+            return
+        standings = node.get("standings", {})
+        for entry in standings.get("entries", []) or []:
+            yield entry
+        for child in node.get("children", []) or []:
+            yield from _iter_entries(child)
+
+    def _stat(stats, name, default=None):
+        for stat in stats or []:
+            if stat.get("name") == name:
+                if stat.get("value") is not None:
+                    return stat.get("value")
+                return stat.get("displayValue") or stat.get("summary")
+        return default
+
     try:
-        response = _session.get(NBA_STANDINGS_URL, timeout=10)
-        response.raise_for_status()
-        payload = response.json()
+        url = "https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings"
+        resp = _session.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json() or {}
+
+        for entry in _iter_entries(data):
+            team = entry.get("team", {}) or {}
+            if (team.get("abbreviation") or team.get("shortDisplayName")) != NBA_TEAM_TRICODE:
+                continue
+
+            stats = entry.get("stats") or []
+            streak_code = _stat(stats, "streak", "-")
+            pct = _stat(stats, "winPercent")
+            try:
+                pct = float(pct)
+            except Exception:
+                pass
+
+            logging.info("Using ESPN NBA standings fallback for %s", NBA_TEAM_TRICODE)
+            return {
+                "leagueRecord": {
+                    "wins": _safe_int(_stat(stats, "wins")),
+                    "losses": _safe_int(_stat(stats, "losses")),
+                    "pct": pct,
+                },
+                "divisionRank": _stat(stats, "divisionWinPercent")
+                or _stat(stats, "playoffSeed"),
+                "divisionGamesBack": _stat(stats, "divisionGamesBehind"),
+                "wildCardGamesBack": None,
+                "streak": {"streakCode": streak_code or "-"},
+                "records": {"splitRecords": []},
+            }
     except Exception as exc:
-        logging.error("Error fetching NBA standings: %s", exc)
-        return None
-
-    teams = (payload.get("league") or {}).get("standard") or []
-    for team in teams:
-        if str(team.get("teamId")) != str(NBA_TEAM_ID):
-            continue
-
-        record = team.get("overallWinLoss") or team
-        wins = record.get("wins") or team.get("win") or 0
-        losses = record.get("losses") or team.get("loss") or 0
-        pct = record.get("winPct") or team.get("winPct" ) or _safe_pct(wins, losses)
-        division = team.get("divName") or "Division"
-
-        records = {
-            "splitRecords": [
-                {"type": "lastTen", "wins": team.get("lastTenWins", "-"), "losses": team.get("lastTenLosses", "-")},
-                {"type": "home", "wins": team.get("homeWins", "-"), "losses": team.get("homeLosses", "-")},
-                {"type": "away", "wins": team.get("awayWins", "-"), "losses": team.get("awayLosses", "-")},
-            ]
-        }
-
-        return {
-            "leagueRecord": {"wins": wins, "losses": losses, "pct": pct},
-            "divisionRank": team.get("divRank") or "-",
-            "divisionName": division,
-            "divisionGamesBack": team.get("gamesBack"),
-            "records": records,
-            "streak": {"streakCode": team.get("streakText") or team.get("streak", "-")},
-        }
-
-    logging.warning("Bulls standings not found in NBA dataset")
+        logging.error("Error fetching NBA standings (ESPN fallback) for %s: %s", NBA_TEAM_TRICODE, exc)
     return None
+
+
 # -----------------------------------------------------------------------------
 # Shared helpers
 # -----------------------------------------------------------------------------
