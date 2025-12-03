@@ -77,7 +77,7 @@ install_apt_packages() {
         libatlas3-base
         libegl1
         libgles2
-        libtiff6-dev
+        libtiff-dev
       )
       ;;
     *)
