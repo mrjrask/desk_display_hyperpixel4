@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from PIL import Image
 
+import config
 from utils import ScreenImage, animate_scroll
 from screen_overrides import ResolvedScreenOverride
 from screen_runtime_overrides import apply_override_to_result
@@ -560,7 +561,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=bulls.get("stand"): draw_bulls_standings_screen1(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "bulls.jpg"),
+                os.path.join(config.NBA_IMAGES_DIR, "CHI.png"),
                 transition=True,
             ),
             available=True,
@@ -570,7 +571,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=bulls.get("stand"): draw_bulls_standings_screen2(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "bulls.jpg"),
+                os.path.join(config.NBA_IMAGES_DIR, "CHI.png"),
                 transition=True,
             ),
             available=True,
