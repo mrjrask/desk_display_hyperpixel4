@@ -172,6 +172,20 @@ class Display:
 
         _ACTIVE_DISPLAY = self
 
+    def _hide_mouse_cursor(self) -> None:
+        if pygame is None:  # pragma: no cover - optional dependency
+            return
+
+        try:
+            pygame.mouse.set_visible(False)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
+        try:
+            pygame.event.set_grab(True)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
     def _init_pygame_backend(self) -> Tuple[bool, Optional[str]]:
         if pygame is None:  # pragma: no cover - optional dependency
             return False, "pygame module not installed"
@@ -233,10 +247,7 @@ class Display:
                 pygame.display.set_caption("Desk Display")
             except Exception:  # pragma: no cover - optional dependency
                 pass
-            try:
-                pygame.mouse.set_visible(False)
-            except Exception:  # pragma: no cover - optional dependency
-                pass
+            self._hide_mouse_cursor()
             try:
                 surface.fill((0, 0, 0))
                 pygame.display.flip()
@@ -417,6 +428,7 @@ class Display:
 
                 success, reason = self._init_pygame_backend()
             if success:
+                self._hide_mouse_cursor()
                 logging.info("✅ Pygame display reset succeeded.")
                 self._start_pygame_presenter()
                 return
