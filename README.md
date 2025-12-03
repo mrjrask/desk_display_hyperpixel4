@@ -170,7 +170,7 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
   sudo apt-get update
   sudo apt-get install -y \
       python3-venv python3-pip python3-dev python3-opencv \
-      build-essential libjpeg-dev libopenblas0 libopenblas-dev \
+      build-essential libjpeg-dev libopenblas0 libopenblas-dev liblgpio-dev \
       libopenjp2-7-dev libtiff5-dev libcairo2-dev libpango1.0-dev \
       libgdk-pixbuf2.0-dev libffi-dev network-manager wireless-tools \
       i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git \
@@ -582,6 +582,8 @@ The checker now logs **which files have diverged** when updates exist, for easie
 ## Troubleshooting
 
 - **Too‑dark colors on date/time:** this project forces high‑brightness random RGB values to ensure legibility on the LCD.
+- **lgpio wheel fails to link on Trixie:** install `liblgpio-dev` so the `lgpio` Python package can find `liblgpio.so` during
+  the build: `sudo apt-get install -y liblgpio-dev`.
 - **Missing logos:** you’ll see a warning like `Logo file missing: CUBS.png`. Add the correct file into `images/mlb/`.
 - **No WebP animation:** ensure your Pillow build supports WebP (`pip3 show pillow`). PNG fallback will still work.
 - **Network/API errors:** MLB/OWM requests are time‑bounded; transient timeouts are logged and screens are skipped gracefully.
