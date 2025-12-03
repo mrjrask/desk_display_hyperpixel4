@@ -43,7 +43,7 @@ from config import (
     FONT_TITLE_INSIDE,
     INSIDE_SENSOR_I2C_BUS,
 )
-from utils import clear_display, log_call
+from utils import clear_display, format_voc_ohms, log_call, measure_text
 
 # Import sensor logger
 try:

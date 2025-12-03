@@ -235,7 +235,7 @@ def _same_game(a, b):
 _BULLS_TEAM_ID = str(NBA_TEAM_ID)
 _BULLS_TRICODE = (NBA_TEAM_TRICODE or "CHI").upper()
 _NBA_LOOKBACK_DAYS = 7
-_NBA_LOOKAHEAD_DAYS = 14
+_NBA_LOOKAHEAD_DAYS = 45
 
 
 def _parse_nba_datetime(value):
@@ -1025,7 +1025,7 @@ def _fetch_nba_team_standings(team_tricode: str):
                 return data
             except Exception as exc:
                 logging.error("Error fetching NBA standings from %s: %s", base, exc)
-        return _fetch_nba_team_standings_espn()
+        return None
 
     payload = _load_json() or {}
     teams = payload.get("league", {}).get("standard", {}).get("teams", [])
