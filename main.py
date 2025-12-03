@@ -226,6 +226,7 @@ def _resolved_screen_overrides(force: bool = False) -> Dict[str, ResolvedScreenO
 
 # ─── Display & Wi-Fi monitor ─────────────────────────────────────────────────
 display = Display()
+display.hide_mouse_cursor()
 
 # Ensure the physical panel is cleared immediately so the Raspberry Pi desktop
 # never peeks through while the application performs its initial data fetches.
