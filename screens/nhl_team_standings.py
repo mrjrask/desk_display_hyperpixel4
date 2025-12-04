@@ -86,13 +86,7 @@ def draw_standings_screen1(display, rec, logo_path, transition=False):
     lr = rec.get("leagueRecord", {}) if isinstance(rec, dict) else {}
     wl_txt, pts_txt = _format_record(lr | {"points": rec.get("points")})
 
-    rank = rec.get("divisionRank", "-")
-    try:
-        rank_lbl = "Last" if int(rank) >= 8 else _ord(rank)
-    except Exception:
-        rank_lbl = rank
-    division_name = rec.get("divisionName", "Division")
-    rank_txt = f"{rank_lbl} in {division_name}"
+    rank_txt = "Western Conf."
 
     lines = [
         (wl_txt, FONT_STAND1_WL),

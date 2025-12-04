@@ -77,30 +77,33 @@ def draw_standings_screen1(display, rec, logo_path, transition=False):
     lr = rec.get("leagueRecord", {}) if isinstance(rec, dict) else {}
     wins = lr.get("wins", "-")
     losses = lr.get("losses", "-")
-    wl_txt = f"W: {wins} L: {losses}"
+    pct_raw = lr.get("pct")
+    pct_txt = "-"
+    if pct_raw not in (None, "", "-"):
+        try:
+            pct_val = float(pct_raw)
+            pct_txt = f"{pct_val:.3f}".lstrip("0")
+        except Exception:
+            pct_txt = str(pct_raw)
+    wl_txt = f"W: {wins} L: {losses} ({pct_txt})"
 
-    rank = rec.get("divisionRank", "-")
-    try:
-        rank_lbl = "Last" if int(rank) >= 5 else _ord(rank)
-    except Exception:
-        rank_lbl = rank
-    division_name = rec.get("divisionName", "Division")
-    rank_txt = f"{rank_lbl} in {division_name}"
+    division_name = "Eastern Conf."
+    rank_txt = division_name
 
     gb_raw = rec.get("divisionGamesBack")
     gb_txt = f"{format_games_back(gb_raw)} GB" if gb_raw is not None else None
 
-    conf_gb = rec.get("gamesBehind") or rec.get("gamesBack")
-    conf_txt = f"{format_games_back(conf_gb)} Conf GB" if conf_gb is not None else None
+    streak = rec.get("streak", {}).get("streakCode", "-")
+    streak_txt = f"Streak: {streak}" if streak else None
 
     lines = [
         (wl_txt, FONT_STAND1_WL),
-        (rank_txt, FONT_STAND1_RANK),
     ]
     if gb_txt:
         lines.append((gb_txt, FONT_STAND1_GB_VALUE))
-    if conf_txt:
-        lines.append((conf_txt, FONT_STAND1_WCGB_VALUE))
+    lines.append((rank_txt, FONT_STAND1_RANK))
+    if streak_txt:
+        lines.append((streak_txt, FONT_STAND1_WCGB_VALUE))
 
     _draw_lines(img, logo, lines)
 
