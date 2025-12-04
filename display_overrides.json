@@ -1,6 +1,6 @@
 {
   "fonts": {},
   "nixie": {
-    "time_format": "24"
+    "time_format": "12"
   }
 }
