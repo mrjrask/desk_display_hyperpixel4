@@ -32,13 +32,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _get_time_format() -> str:
-    """Return the configured time format ('12' or '24'), defaulting to '24'."""
+    """Return the configured time format ('12' or '24'), defaulting to '12'."""
     nixie_config = DISPLAY_OVERRIDES.get("nixie", {})
     if isinstance(nixie_config, dict):
-        format_value = nixie_config.get("time_format", "24")
+        format_value = nixie_config.get("time_format", "12")
         if format_value in ("12", "24"):
             return format_value
-    return "24"
+    return "12"
 
 
 def _candidate_asset_directories() -> Iterable[Path]:
