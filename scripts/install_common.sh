@@ -100,7 +100,8 @@ sync_repository() {
 create_virtualenv() {
   run_as_user "${PYTHON_BIN}" -m venv "${VENV_PATH}"
   run_as_user "${VENV_PATH}/bin/pip" install --upgrade pip wheel
-  run_as_user "${VENV_PATH}/bin/pip" install -r "${INSTALL_DIR}/requirements.txt"
+  # Ensure editable requirements resolve relative to the repository root.
+  run_as_user bash -lc "cd '${INSTALL_DIR}' && '${VENV_PATH}/bin/pip' install -r requirements.txt"
 }
 
 prepare_scripts() {
