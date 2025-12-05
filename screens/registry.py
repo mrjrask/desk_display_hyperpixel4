@@ -64,8 +64,8 @@ from screens.nfl_team_standings import (
     draw_standings_screen2 as draw_bears_standings_screen2,
 )
 from screens.nhl_team_standings import (
-    draw_standings_screen1 as draw_hawks_standings_screen1,
-    draw_standings_screen2 as draw_hawks_standings_screen2,
+    draw_nhl_standings_screen1 as draw_hawks_standings_screen1,
+    draw_nhl_standings_screen2 as draw_hawks_standings_screen2,
 )
 from screens.nba_scoreboard import draw_nba_scoreboard
 from screens.nba_scoreboard_v2 import draw_nba_scoreboard_v2
