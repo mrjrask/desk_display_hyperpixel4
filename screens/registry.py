@@ -56,8 +56,8 @@ from screens.mlb_standings import (
 )
 from screens.mlb_team_standings import draw_standings_screen1, draw_standings_screen2
 from screens.nba_team_standings import (
-    draw_standings_screen1 as draw_bulls_standings_screen1,
-    draw_standings_screen2 as draw_bulls_standings_screen2,
+    draw_nba_standings_screen1 as draw_bulls_standings_screen1,
+    draw_nba_standings_screen2 as draw_bulls_standings_screen2,
 )
 from screens.nfl_team_standings import (
     draw_standings_screen1 as draw_bears_standings_screen1,
