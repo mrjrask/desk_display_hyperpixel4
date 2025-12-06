@@ -23,8 +23,10 @@ def test_config_override_controls_storage(monkeypatch, tmp_path):
     storage_paths = paths.resolve_storage_paths(logger=None)
 
     assert storage_paths.screenshot_dir == override_dir
+    assert storage_paths.current_screenshot_dir == override_dir / "current"
     assert storage_paths.archive_base == override_dir.parent / "screenshot_archive"
     assert override_dir.is_dir()
+    assert (override_dir / "current").is_dir()
     assert (override_dir.parent / "screenshot_archive").is_dir()
 
 
@@ -42,4 +44,5 @@ def test_env_override_beats_config(monkeypatch, tmp_path):
     storage_paths = paths.resolve_storage_paths(logger=None)
 
     assert storage_paths.screenshot_dir == env_dir
+    assert storage_paths.current_screenshot_dir == env_dir / "current"
     assert storage_paths.archive_base == env_dir.parent / "screenshot_archive"

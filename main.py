@@ -137,6 +137,7 @@ SCREEN_OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger("storage"))
 SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
+CURRENT_SCREENSHOT_DIR = str(_storage_paths.current_screenshot_dir)
 
 
 # ─── Screenshot archiving (batch) ────────────────────────────────────────────
@@ -584,6 +585,7 @@ def _next_screen_from_registry(
 # ─── Screenshot / video outputs ──────────────────────────────────────────────
 if ENABLE_SCREENSHOTS:
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+    os.makedirs(CURRENT_SCREENSHOT_DIR, exist_ok=True)
     os.makedirs(SCREENSHOT_ARCHIVE_BASE, exist_ok=True)
 
 video_out = None
@@ -667,11 +669,31 @@ def _save_screenshot(sid: str, img: Image.Image) -> None:
     except Exception:
         logging.warning(f"⚠️ Screenshot save failed for '{sid}'")
 
+    current_name = f"{prefix}.png"
+    try:
+        img.save(os.path.join(CURRENT_SCREENSHOT_DIR, current_name))
+    except Exception:
+        logging.warning(f"⚠️ Current screenshot save failed for '{sid}'")
+    else:
+        try:
+            for existing in os.listdir(CURRENT_SCREENSHOT_DIR):
+                if existing == current_name:
+                    continue
+                if not existing.startswith(prefix):
+                    continue
+                to_remove = os.path.join(CURRENT_SCREENSHOT_DIR, existing)
+                if os.path.isfile(to_remove) and existing.lower().endswith(ALLOWED_SCREEN_EXTS):
+                    os.remove(to_remove)
+        except Exception:
+            logging.debug("Unable to prune stale current screenshots for '%s'", sid)
+
 
 def _list_screenshot_files():
     try:
         results = []
         for root, _dirs, files in os.walk(SCREENSHOT_DIR):
+            if os.path.abspath(root) == os.path.abspath(CURRENT_SCREENSHOT_DIR):
+                continue
             for fname in files:
                 if not fname.lower().endswith(ALLOWED_SCREEN_EXTS):
                     continue

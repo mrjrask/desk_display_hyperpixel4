@@ -23,6 +23,7 @@ OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 _logger = logging.getLogger(__name__)
 _storage_paths = resolve_storage_paths(logger=_logger)
 SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
+CURRENT_SCREENSHOT_DIR = str(_storage_paths.current_screenshot_dir)
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 DEVICE_PROFILE_CHOICES = [
@@ -57,25 +58,41 @@ def _sanitize_directory_name(name: str) -> str:
     return safe or "Screens"
 
 
-def _latest_screenshot(screen_id: str) -> Optional[tuple[str, datetime]]:
-    folder = os.path.join(SCREENSHOT_DIR, _sanitize_directory_name(screen_id))
-    if not os.path.isdir(folder):
-        return None
+def _sanitize_filename_prefix(name: str) -> str:
+    safe = name.strip().replace("/", "-").replace("\\", "-")
+    safe = safe.replace(" ", "_")
+    safe = "".join(ch for ch in safe if ch.isalnum() or ch in ("_", "-"))
+    return safe or "screen"
 
+
+def _latest_screenshot(screen_id: str) -> Optional[tuple[str, datetime]]:
+    prefix = _sanitize_filename_prefix(screen_id)
     latest_path: Optional[str] = None
     latest_mtime: float = -1.0
 
-    for entry in os.scandir(folder):
-        if not entry.is_file():
-            continue
-        _, ext = os.path.splitext(entry.name)
+    def _consider(path: str) -> None:
+        nonlocal latest_path, latest_mtime
+        if not os.path.isfile(path):
+            return
+        _, ext = os.path.splitext(path)
         if ext.lower() not in ALLOWED_EXTENSIONS:
-            continue
-        mtime = entry.stat().st_mtime
+            return
+        mtime = os.path.getmtime(path)
         if mtime > latest_mtime:
             latest_mtime = mtime
-            rel_path = os.path.join(os.path.basename(folder), entry.name)
-            latest_path = rel_path.replace(os.sep, "/")
+            rel_path = os.path.relpath(path, SCREENSHOT_DIR).replace(os.sep, "/")
+            latest_path = rel_path
+
+    if os.path.isdir(CURRENT_SCREENSHOT_DIR):
+        for entry in os.scandir(CURRENT_SCREENSHOT_DIR):
+            if entry.is_file() and entry.name.startswith(prefix):
+                _consider(entry.path)
+
+    legacy_folder = os.path.join(SCREENSHOT_DIR, _sanitize_directory_name(screen_id))
+    if os.path.isdir(legacy_folder):
+        for entry in os.scandir(legacy_folder):
+            if entry.is_file():
+                _consider(entry.path)
 
     if latest_path is None:
         return None
