@@ -35,7 +35,7 @@ IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger(__name__))
 SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
-CURRENT_SCREENSHOT_DIR = os.path.join(SCREENSHOT_DIR, "current")
+CURRENT_SCREENSHOT_DIR = str(_storage_paths.current_screenshot_dir)
 ARCHIVE_DIR = str(_storage_paths.archive_base)
 
 

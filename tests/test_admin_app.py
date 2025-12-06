@@ -15,11 +15,14 @@ def app_client(tmp_path, monkeypatch):
 
     screenshot_dir = tmp_path / "screenshots"
     screenshot_dir.mkdir()
+    current_dir = screenshot_dir / "current"
+    current_dir.mkdir()
 
     overrides_path = tmp_path / "screen_overrides.json"
 
     monkeypatch.setattr(admin, "CONFIG_PATH", str(config_path))
     monkeypatch.setattr(admin, "SCREENSHOT_DIR", str(screenshot_dir))
+    monkeypatch.setattr(admin, "CURRENT_SCREENSHOT_DIR", str(current_dir))
     monkeypatch.setattr(admin, "OVERRIDES_PATH", str(overrides_path))
     admin.app.static_folder = str(screenshot_dir)
 
@@ -55,6 +58,10 @@ def test_api_screens_reports_latest_file(app_client):
     os.utime(first, (1, 1))
     os.utime(second, (2, 2))
 
+    current = screenshot_dir / "current" / "date.png"
+    current.write_bytes(b"now")
+    os.utime(current, (5, 5))
+
     overrides_path.write_text(
         json.dumps({"screens": {"travel": {"defaults": {"font_scale": 1.5}}}})
     )
@@ -65,7 +72,7 @@ def test_api_screens_reports_latest_file(app_client):
     assert payload["status"] == "ok"
 
     screens = {entry["id"]: entry for entry in payload["screens"]}
-    assert screens["date"]["last_screenshot"].endswith("date_2.png")
+    assert screens["date"]["last_screenshot"].endswith("current/date.png")
     assert screens["travel"]["last_screenshot"] is None
     assert screens["travel"]["overrides"]["defaults"]["font_scale"] == 1.5
 

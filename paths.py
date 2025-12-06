@@ -19,6 +19,7 @@ class StoragePaths:
     """Resolved filesystem locations for runtime storage."""
 
     screenshot_dir: Path
+    current_screenshot_dir: Path
     archive_base: Path
 
 
@@ -127,11 +128,18 @@ def resolve_storage_paths(*, logger: Optional[logging.Logger] = None) -> Storage
     """Return writable paths for screenshots and archives."""
 
     screenshot_dir = _select_screenshot_dir(logger)
+    current_screenshot_dir = screenshot_dir / "current"
     archive_base = screenshot_dir.parent / "screenshot_archive"
+    current_screenshot_dir.mkdir(parents=True, exist_ok=True)
     archive_base.mkdir(parents=True, exist_ok=True)
 
     if logger:
         logger.info("Using screenshot directory %s", screenshot_dir)
+        logger.info("Using current screenshot directory %s", current_screenshot_dir)
         logger.info("Using screenshot archive base %s", archive_base)
 
-    return StoragePaths(screenshot_dir=screenshot_dir, archive_base=archive_base)
+    return StoragePaths(
+        screenshot_dir=screenshot_dir,
+        current_screenshot_dir=current_screenshot_dir,
+        archive_base=archive_base,
+    )
