@@ -35,6 +35,7 @@ IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger(__name__))
 SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
+CURRENT_SCREENSHOT_DIR = os.path.join(SCREENSHOT_DIR, "current")
 ARCHIVE_DIR = str(_storage_paths.archive_base)
 
 
@@ -148,31 +149,38 @@ def build_cache() -> Dict[str, object]:
         },
     }
 
-    cache["weather"] = data_fetch.fetch_weather()
-    cache["bears"].update({"stand": data_fetch.fetch_bears_standings()})
+    def _safe_fetch(label: str, func):
+        try:
+            return func()
+        except Exception as exc:
+            logging.warning("Data fetch for %s failed: %s", label, exc)
+            return None
+
+    cache["weather"] = _safe_fetch("weather", data_fetch.fetch_weather)
+    cache["bears"].update({"stand": _safe_fetch("bears standings", data_fetch.fetch_bears_standings)})
     cache["hawks"].update(
         {
-            "stand": data_fetch.fetch_blackhawks_standings(),
-            "last": data_fetch.fetch_blackhawks_last_game(),
-            "live": data_fetch.fetch_blackhawks_live_game(),
-            "next": data_fetch.fetch_blackhawks_next_game(),
-            "next_home": data_fetch.fetch_blackhawks_next_home_game(),
+            "stand": _safe_fetch("blackhawks standings", data_fetch.fetch_blackhawks_standings),
+            "last": _safe_fetch("blackhawks last game", data_fetch.fetch_blackhawks_last_game),
+            "live": _safe_fetch("blackhawks live game", data_fetch.fetch_blackhawks_live_game),
+            "next": _safe_fetch("blackhawks next game", data_fetch.fetch_blackhawks_next_game),
+            "next_home": _safe_fetch("blackhawks next home game", data_fetch.fetch_blackhawks_next_home_game),
         }
     )
     cache["bulls"].update(
         {
-            "stand": data_fetch.fetch_bulls_standings(),
-            "last": data_fetch.fetch_bulls_last_game(),
-            "live": data_fetch.fetch_bulls_live_game(),
-            "next": data_fetch.fetch_bulls_next_game(),
-            "next_home": data_fetch.fetch_bulls_next_home_game(),
+            "stand": _safe_fetch("bulls standings", data_fetch.fetch_bulls_standings),
+            "last": _safe_fetch("bulls last game", data_fetch.fetch_bulls_last_game),
+            "live": _safe_fetch("bulls live game", data_fetch.fetch_bulls_live_game),
+            "next": _safe_fetch("bulls next game", data_fetch.fetch_bulls_next_game),
+            "next_home": _safe_fetch("bulls next home game", data_fetch.fetch_bulls_next_home_game),
         }
     )
 
-    cubs_games = data_fetch.fetch_cubs_games() or {}
+    cubs_games = _safe_fetch("cubs games", data_fetch.fetch_cubs_games) or {}
     cache["cubs"].update(
         {
-            "stand": data_fetch.fetch_cubs_standings(),
+            "stand": _safe_fetch("cubs standings", data_fetch.fetch_cubs_standings),
             "last": cubs_games.get("last_game"),
             "live": cubs_games.get("live_game"),
             "next": cubs_games.get("next_game"),
@@ -180,10 +188,10 @@ def build_cache() -> Dict[str, object]:
         }
     )
 
-    sox_games = data_fetch.fetch_sox_games() or {}
+    sox_games = _safe_fetch("sox games", data_fetch.fetch_sox_games) or {}
     cache["sox"].update(
         {
-            "stand": data_fetch.fetch_sox_standings(),
+            "stand": _safe_fetch("sox standings", data_fetch.fetch_sox_standings),
             "last": sox_games.get("last_game"),
             "live": sox_games.get("live_game"),
             "next": sox_games.get("next_game"),
@@ -240,9 +248,11 @@ def _write_screenshots(
     assets: Iterable[Tuple[str, Image.Image]], timestamp: _dt.datetime
 ) -> list[str]:
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+    os.makedirs(CURRENT_SCREENSHOT_DIR, exist_ok=True)
     saved: list[str] = []
     ts_suffix = timestamp.strftime("%Y%m%d_%H%M%S")
     counts: Dict[str, int] = {}
+    current_paths: dict[str, str] = {}
 
     for screen_id, image in assets:
         prefix = _sanitize_filename_prefix(screen_id)
@@ -252,6 +262,19 @@ def _write_screenshots(
         path = os.path.join(SCREENSHOT_DIR, filename)
         image.save(path)
         saved.append(path)
+
+        current_name = f"{prefix}{suffix}.png"
+        current_path = os.path.join(CURRENT_SCREENSHOT_DIR, current_name)
+        image.save(current_path)
+        current_paths[current_name] = current_path
+
+    for existing in os.listdir(CURRENT_SCREENSHOT_DIR):
+        existing_path = os.path.join(CURRENT_SCREENSHOT_DIR, existing)
+        if existing not in current_paths and os.path.isfile(existing_path):
+            try:
+                os.remove(existing_path)
+            except OSError as exc:
+                logging.warning("Failed to remove stale current screenshot '%s': %s", existing_path, exc)
 
     return saved
 
