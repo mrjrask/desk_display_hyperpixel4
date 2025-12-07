@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -103,6 +104,10 @@ def _ensure_writable(path: Path, logger: Optional[logging.Logger]) -> bool:
     return True
 
 
+def _hostname() -> str:
+    return socket.gethostname()
+
+
 def _select_screenshot_dir(logger: Optional[logging.Logger]) -> Path:
     shared_hint = _read_shared_hint(logger)
     if shared_hint is not None:
@@ -128,7 +133,9 @@ def resolve_storage_paths(*, logger: Optional[logging.Logger] = None) -> Storage
     """Return writable paths for screenshots and archives."""
 
     screenshot_dir = _select_screenshot_dir(logger)
-    current_screenshot_dir = screenshot_dir / "current"
+    hostname = _hostname()
+    current_name = f"{hostname}current" if hostname else "current"
+    current_screenshot_dir = screenshot_dir / current_name
     archive_base = screenshot_dir.parent / "screenshot_archive"
     current_screenshot_dir.mkdir(parents=True, exist_ok=True)
     archive_base.mkdir(parents=True, exist_ok=True)
