@@ -22,14 +22,14 @@
       "frequency": 2,
       "alt": {
         "screen": "NFL Standings NFC",
-        "frequency": 4
+        "frequency": 1
       }
     },
     "NFL Overview AFC": {
       "frequency": 2,
       "alt": {
         "screen": "NFL Standings AFC",
-        "frequency": 4
+        "frequency": 1
       }
     },
     "NFL Standings NFC": 0,
@@ -49,13 +49,19 @@
     "bulls next": 3,
     "bulls next home": 3,
     "nhl logo": 0,
-    "NHL Scoreboard": 1,
-    "NHL Scoreboard v2": 1,
+    "NHL Scoreboard": {
+      "frequency": 1,
+      "alt": {
+        "screen": "NHL Scoreboard v2", 
+        "frequency": 1
+      }
+    },
+    "NHL Scoreboard v2": 0
     "NHL Standings Overview": {
       "frequency": 1,
       "alt": {
         "screen": ["NHL Standings West", "NHL Standings East"],
-        "frequency": 2
+        "frequency": 1
       }
     },
     "NHL Standings West": 0,
