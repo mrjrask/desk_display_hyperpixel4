@@ -18,7 +18,6 @@
     "nfl logo": 0,
     "NFL Scoreboard": 1,
     "NFL Scoreboard v2": 0,
-    "NFL Scoreboard v3": 0,
     "NFL Overview NFC": {
       "frequency": 2,
       "alt": {
@@ -52,7 +51,6 @@
     "nhl logo": 0,
     "NHL Scoreboard": 1,
     "NHL Scoreboard v2": 1,
-    "NHL Scoreboard v3": 0,
     "NHL Standings Overview": {
       "frequency": 1,
       "alt": {
@@ -93,7 +91,6 @@
     "AL Wild Card": 0,
     "nba logo": 0,
     "NBA Scoreboard": 5,
-    "NBA Scoreboard v2": 0,
-    "NBA Scoreboard v3": 0
+    "NBA Scoreboard v2": 0
   }
 }

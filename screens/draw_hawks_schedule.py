@@ -641,7 +641,7 @@ def _draw_scoreboard(
     base_row_height = max(96, int(round(HEIGHT * 0.28)))
 
     header_font = FONT_SMALL
-    header_h = _text_h(d, header_font) + 6 if put_sog_label else 0
+    header_h = _text_h(d, header_font) + 2 if put_sog_label else 0
     available_for_rows = max(0, total_available - header_h)
 
     if available_for_rows > 0:
@@ -660,8 +660,8 @@ def _draw_scoreboard(
         return name_size, score_size, sog_size, header_size
 
     name_size, score_size, sog_size, header_size = _font_sizes(row_h)
-    header_font = _ts(header_size) if put_sog_label else FONT_SMALL
-    header_h = _text_h(d, header_font) + 6 if put_sog_label else 0
+    header_font = _ts(max(1, int(round(header_size * 0.85)))) if put_sog_label else FONT_SMALL
+    header_h = _text_h(d, header_font) + 2 if put_sog_label else 0
     available_for_rows = max(0, total_available - header_h)
     if available_for_rows > 0:
         row_h = max(available_for_rows // 2, row_h)
@@ -672,8 +672,8 @@ def _draw_scoreboard(
     name_font = _ts(name_size)
     score_font = _ts(score_size)
     sog_font = _ts(sog_size)
-    header_font = _ts(header_size) if put_sog_label else FONT_SMALL
-    header_h = _text_h(d, header_font) + 6 if put_sog_label else 0
+    header_font = _ts(max(1, int(round(header_size * 0.85)))) if put_sog_label else FONT_SMALL
+    header_h = _text_h(d, header_font) + 2 if put_sog_label else 0
 
     table_height = header_h + row_h * 2
     if total_available:
@@ -689,14 +689,19 @@ def _draw_scoreboard(
     row2_top = row1_top + row1_h
 
     if put_sog_label and header_h:
-        header_y = table_top + (header_h - _text_h(d, header_font)) // 2
+        text_h = _text_h(d, header_font)
+        header_y = header_bottom - text_h - 1
         sog_lbl = "SOG"
+        sog_w = _text_w(d, sog_lbl, header_font)
+        label_x = x2 + (col3_w - sog_w) // 2
         d.text(
-            (x2 + (col3_w - _text_w(d, sog_lbl, header_font)) // 2, header_y),
+            (label_x, header_y),
             sog_lbl,
             font=header_font,
             fill="white",
         )
+        underline_y = header_y + text_h
+        d.line([(label_x, underline_y), (label_x + sog_w, underline_y)], fill="white")
 
     logo_target = max(48, int(round(max(row1_h, row2_h) * 0.85)))
 

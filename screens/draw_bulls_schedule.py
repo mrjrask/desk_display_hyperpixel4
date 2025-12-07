@@ -608,7 +608,7 @@ def _render_scoreboard(
 def _format_footer_last(game: Dict) -> str:
     date_text = _format_game_date(game)
     status_text = _final_status_label(game)
-    return _join_dateline_parts(date_text, status_text)
+    return _join_dateline_parts(status_text, date_text)
 
 
 def _format_footer_next(game: Dict) -> str:
@@ -627,7 +627,7 @@ def _format_footer_next(game: Dict) -> str:
 def _format_game_date(game: Dict) -> str:
     date_obj = _get_official_date(game)
     if isinstance(date_obj, dt.date):
-        fmt = "%a, %b %-d" if os.name != "nt" else "%a, %b %#d"
+        fmt = "%a %-m/%-d" if os.name != "nt" else "%a %#m/%#d"
         return date_obj.strftime(fmt)
     return ""
 
@@ -652,9 +652,9 @@ def _final_status_label(game: Dict) -> str:
             suffix = suffix.replace(" ", "")
             if suffix and not suffix.startswith("/"):
                 suffix = f"/{suffix}"
-            return f"F{suffix}" if suffix else "F"
+            return f"Final{suffix}" if suffix else "Final"
         if upper == "F" or upper.startswith("F/"):
-            return upper
+            return f"Final{upper[1:]}" if len(upper) > 1 else "Final"
 
     linescore = game.get("linescore") or {}
     final_period = linescore.get("finalPeriod") or linescore.get("currentPeriod")
