@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from config import HEIGHT, WIDTH, TIMES_SQUARE_FONT_PATH, DISPLAY_OVERRIDES
 from utils import ScreenImage, clear_display, log_call
 
-BACKGROUND_COLOR = (3, 3, 8)
+BACKGROUND_COLOR = (0, 0, 0)
 TUBE_HIGHLIGHT = (255, 214, 170, 90)
 DIGIT_COLOR = (255, 232, 179, 255)
 DIGIT_EDGE_COLOR = (255, 180, 90, 255)
