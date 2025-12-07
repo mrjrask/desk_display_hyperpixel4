@@ -51,7 +51,7 @@ from utils import (
 from services.http_client import get_session
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-TITLE               = "NBA Scoreboard v2"
+TITLE               = "NBA Scoreboard"
 TITLE_GAP           = 12
 BLOCK_SPACING       = 15
 SCORE_ROW_H         = 150

@@ -54,7 +54,7 @@ from utils import (
 from services.http_client import NHL_HEADERS, get_session
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-TITLE               = "NHL Scoreboard v2"
+TITLE               = "NHL Scoreboard"
 TITLE_GAP           = 12
 BLOCK_SPACING       = 15
 SCORE_ROW_H         = 150

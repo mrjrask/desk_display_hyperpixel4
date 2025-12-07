@@ -52,7 +52,7 @@ from utils import (
 )
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-TITLE               = "NFL Scoreboard v2"
+TITLE               = "NFL Scoreboard"
 TITLE_GAP           = 12
 BLOCK_SPACING       = 15
 SCORE_ROW_H         = 150
