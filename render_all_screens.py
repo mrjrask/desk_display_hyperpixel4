@@ -103,7 +103,7 @@ def load_logo(
 
 
 def build_logo_map() -> Dict[str, Optional[Image.Image]]:
-    bears_logo = load_logo("bears.png")
+    bears_logo = load_logo("nfl/chi.png")
     team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
 
     def _team_logo(path: str) -> Optional[Image.Image]:
@@ -116,11 +116,11 @@ def build_logo_map() -> Dict[str, Optional[Image.Image]]:
         "verano logo": load_logo("verano.jpg"),
         "bears logo": bears_logo,
         "nfl logo": load_logo("nfl/nfl.png"),
-        "hawks logo": _team_logo("hawks.jpg"),
+        "hawks logo": _team_logo("nhl/CHI.png"),
         "nhl logo": load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png"),
-        "cubs logo": _team_logo("cubs.jpg"),
-        "sox logo": _team_logo("sox.jpg"),
-        "mlb logo": load_logo("mlb.jpg"),
+        "cubs logo": _team_logo("mlb/CUBS.png"),
+        "sox logo": _team_logo("mlb/SOX.png"),
+        "mlb logo": load_logo("mlb/MLB.png"),
         "nba logo": load_logo("nba/NBA.png"),
         "bulls logo": _team_logo("nba/CHI.png"),
     }

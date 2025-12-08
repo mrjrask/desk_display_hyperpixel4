@@ -280,7 +280,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=bears.get("stand"): draw_bears_standings_screen1(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "bears.png"),
+                os.path.join(context.image_dir, "nfl/chi.png"),
                 transition=True,
             ),
             available=True,
@@ -290,7 +290,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=bears.get("stand"): draw_bears_standings_screen2(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "bears.png"),
+                os.path.join(context.image_dir, "nfl/chi.png"),
                 transition=True,
             ),
             available=True,
@@ -317,7 +317,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
                 lambda data=hawks.get("stand"): draw_hawks_standings_screen1(
                     context.display,
                     data,
-                    os.path.join(context.image_dir, "hawks.jpg"),
+                    os.path.join(context.image_dir, "nhl/CHI.png"),
                     transition=True,
                 ),
                 available=True,
@@ -327,7 +327,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
                 lambda data=hawks.get("stand"): draw_hawks_standings_screen2(
                     context.display,
                     data,
-                    os.path.join(context.image_dir, "hawks.jpg"),
+                    os.path.join(context.image_dir, "nhl/CHI.png"),
                     transition=True,
                 ),
                 available=True,
@@ -391,7 +391,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=cubs.get("stand"): draw_standings_screen1(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "cubs.jpg"),
+                os.path.join(context.image_dir, "mlb/CUBS.png"),
                 "NL Central",
                 transition=True,
             ),
@@ -402,7 +402,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=cubs.get("stand"): draw_standings_screen2(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "cubs.jpg"),
+                os.path.join(context.image_dir, "mlb/CUBS.png"),
                 transition=True,
             ),
             available=bool(cubs.get("stand")),
@@ -468,7 +468,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=sox.get("stand"): draw_standings_screen1(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "sox.jpg"),
+                os.path.join(context.image_dir, "mlb/SOX.png"),
                 "AL Central",
                 transition=True,
             ),
@@ -479,7 +479,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
             lambda data=sox.get("stand"): draw_standings_screen2(
                 context.display,
                 data,
-                os.path.join(context.image_dir, "sox.jpg"),
+                os.path.join(context.image_dir, "mlb/SOX.png"),
                 transition=True,
             ),
             available=bool(sox.get("stand")),
