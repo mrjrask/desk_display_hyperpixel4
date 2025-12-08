@@ -397,9 +397,28 @@ if DISPLAY_ROTATION not in {0, 90, 180, 270}:
     DISPLAY_ROTATION = DEFAULT_DISPLAY_ROTATION
 
 # ─── Font resources ───────────────────────────────────────────────────────────
-# Drop your TimesSquare-m105.ttf, DejaVuSans.ttf, DejaVuSans-Bold.ttf and
-# NotoColorEmoji.ttf into a folder named `fonts` alongside this file.
+# Drop your TimesSquare-m105.ttf, DejaVuSans.ttf, and DejaVuSans-Bold.ttf into a
+# folder named `fonts` alongside this file. Noto Color Emoji is installed via
+# the system package `fonts-noto-color-emoji`.
 FONTS_DIR = os.path.join(SCRIPT_DIR, "fonts")
+
+
+def _iter_font_paths(*names: str):
+    seen = set()
+    search_roots = [FONTS_DIR, "/usr/share/fonts", "/usr/local/share/fonts"]
+
+    for root in search_roots:
+        for name in names:
+            direct = os.path.join(root, name)
+            if os.path.isfile(direct) and direct not in seen:
+                seen.add(direct)
+                yield direct
+
+        for name in names:
+            for path in glob.glob(os.path.join(root, "**", name), recursive=True):
+                if path not in seen and os.path.isfile(path):
+                    seen.add(path)
+                    yield path
 
 
 def _load_font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -650,22 +669,21 @@ FONT_GB_VALUE = _load_screen_font("mlb_standings", "div_gb_value", "DejaVuSans.t
 FONT_GB_LABEL = _load_screen_font("mlb_standings", "div_gb_label", "DejaVuSans.ttf", 20)
 
 def _load_emoji_font(size: int) -> ImageFont.ImageFont:
-    noto = _try_load_font("NotoColorEmoji.ttf", size)
-    if noto:
-        return noto
-
-    noto_path = os.path.join(FONTS_DIR, "NotoColorEmoji.ttf")
-    if os.path.isfile(noto_path):
-        for native_size in (109, 128, 160):
-            try:
-                return _BitmapEmojiFont(noto_path, native_size, size)
-            except OSError as exc:
-                logging.debug(
-                    "Unable to load bitmap emoji font %s at native size %s: %s",
-                    noto_path,
-                    native_size,
-                    exc,
-                )
+    for noto_path in _iter_font_paths("NotoColorEmoji.ttf"):
+        try:
+            return ImageFont.truetype(noto_path, size)
+        except OSError as exc:
+            logging.debug("Unable to load emoji font %s: %s", noto_path, exc)
+            for native_size in (109, 128, 160):
+                try:
+                    return _BitmapEmojiFont(noto_path, native_size, size)
+                except OSError as bitmap_exc:
+                    logging.debug(
+                        "Unable to load bitmap emoji font %s at native size %s: %s",
+                        noto_path,
+                        native_size,
+                        bitmap_exc,
+                    )
 
     symbola_paths = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
     for path in symbola_paths:

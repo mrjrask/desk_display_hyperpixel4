@@ -23,7 +23,7 @@ if [ -f /etc/debian_version ]; then
                   build-essential libjpeg-dev libopenblas0 libopenblas-dev \
                   libopenjp2-7-dev libtiff5-dev libcairo2-dev libpango1.0-dev liblgpio-dev \
                   libgdk-pixbuf2.0-dev libffi-dev network-manager wireless-tools \
-                  i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git \
+                  i2c-tools fonts-dejavu-core fonts-noto-color-emoji libgl1 libx264-dev ffmpeg git \
                   libatlas-base-dev libegl1-mesa libgles2-mesa libdrm2"
     elif [ "$MAJOR_VERSION" = "13" ]; then
         echo "✓ Running Debian Trixie (13.x)"
@@ -31,7 +31,7 @@ if [ -f /etc/debian_version ]; then
                   build-essential libjpeg62-turbo-dev libopenblas-pthread-dev \
                   libopenjp2-7 libtiff6 libcairo2-dev libpango-1.0-0 liblgpio-dev \
                   libgdk-pixbuf-2.0-0 libffi8 network-manager wireless-tools \
-                  i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git \
+                  i2c-tools fonts-dejavu-core fonts-noto-color-emoji libgl1 libx264-dev ffmpeg git \
                   libatlas-base-dev libegl1 libgles-dev libdrm2"
     else
         echo "⚠ Warning: Unrecognized Debian version: $DEBIAN_VERSION"
