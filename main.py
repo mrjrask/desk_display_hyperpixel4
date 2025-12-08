@@ -791,7 +791,7 @@ def load_logo(fn, height=LOGO_SCREEN_HEIGHT, width: Optional[int] = None):
         logging.warning(f"Logo load failed '{fn}': {e}")
         return None
 
-bears_logo  = load_logo("bears.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+bears_logo  = load_logo("nfl/chi.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
 team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
 
 def _team_logo(fn: str) -> Optional[Image.Image]:
@@ -799,12 +799,12 @@ def _team_logo(fn: str) -> Optional[Image.Image]:
         return load_logo(fn, width=team_logo_width)
     return load_logo(fn, height=DOUBLE_LOGO_SCREEN_HEIGHT)
 
-cubs_logo   = _team_logo("cubs.jpg")
-hawks_logo  = _team_logo("hawks.jpg")
+cubs_logo   = _team_logo("mlb/CUBS.png")
+hawks_logo  = _team_logo("nhl/CHI.png")
 bulls_logo  = _team_logo("nba/CHI.png")
-sox_logo    = _team_logo("sox.jpg")
+sox_logo    = _team_logo("mlb/SOX.png")
 weather_img = load_logo("weather.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
-mlb_logo    = load_logo("mlb.jpg")
+mlb_logo    = load_logo("mlb/MLB.png")
 nba_logo    = load_logo("nba/NBA.png")
 nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
 nfl_logo    = load_logo("nfl/nfl.png")
