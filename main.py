@@ -763,11 +763,10 @@ signal.signal(signal.SIGTERM, _handle_sigterm)
 
 # ─── Logos ───────────────────────────────────────────────────────────────────
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
-LOGO_SCREEN_HEIGHT = 148  # 80px base increased by ~85%
-DOUBLE_LOGO_SCREEN_HEIGHT = LOGO_SCREEN_HEIGHT * 2
+LOGO_SCROLL_HEIGHT = max(1, HEIGHT - 30)  # Leave a 30px margin while filling the display
 
 
-def load_logo(fn, height=LOGO_SCREEN_HEIGHT, width: Optional[int] = None):
+def load_logo(fn, height=LOGO_SCROLL_HEIGHT, width: Optional[int] = None):
     path = os.path.join(IMAGES_DIR, fn)
     try:
         with Image.open(path) as img:
@@ -791,24 +790,26 @@ def load_logo(fn, height=LOGO_SCREEN_HEIGHT, width: Optional[int] = None):
         logging.warning(f"Logo load failed '{fn}': {e}")
         return None
 
-bears_logo  = load_logo("nfl/chi.png", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+
+bears_logo  = load_logo("nfl/chi.png", height=LOGO_SCROLL_HEIGHT)
 team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
 
 def _team_logo(fn: str) -> Optional[Image.Image]:
     if team_logo_width:
         return load_logo(fn, width=team_logo_width)
-    return load_logo(fn, height=DOUBLE_LOGO_SCREEN_HEIGHT)
+    return load_logo(fn, height=LOGO_SCROLL_HEIGHT)
+
 
 cubs_logo   = _team_logo("mlb/CUBS.png")
 hawks_logo  = _team_logo("nhl/CHI.png")
 bulls_logo  = _team_logo("nba/CHI.png")
 sox_logo    = _team_logo("mlb/SOX.png")
-weather_img = load_logo("weather.jpg", height=DOUBLE_LOGO_SCREEN_HEIGHT)
+weather_img = load_logo("weather.jpg", height=LOGO_SCROLL_HEIGHT)
 mlb_logo    = load_logo("mlb/MLB.png")
 nba_logo    = load_logo("nba/NBA.png")
 nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
 nfl_logo    = load_logo("nfl/nfl.png")
-verano_img  = load_logo("verano.jpg")
+verano_img  = load_logo("verano.jpg", height=LOGO_SCROLL_HEIGHT)
 
 LOGOS = {
     "weather logo": weather_img,

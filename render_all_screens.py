@@ -70,7 +70,7 @@ def _sanitize_filename_prefix(name: str) -> str:
     return safe or "screen"
 
 
-LOGO_SCREEN_HEIGHT = 370  # 80px base increased by 2.5x for team showcases
+LOGO_SCREEN_HEIGHT = max(1, HEIGHT - 30)  # Leave a 30px margin while filling the display
 
 
 def load_logo(
