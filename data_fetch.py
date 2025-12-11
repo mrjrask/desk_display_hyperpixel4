@@ -56,14 +56,26 @@ def fetch_weather():
     or if recently rate-limited.
     """
     global _last_owm_429
+    # Keep the last good payload so transient failures (or alternating between
+    # providers) don't cause screens to show wildly different data within a
+    # short period.
+    if not hasattr(fetch_weather, "_last_success"):
+        fetch_weather._last_success = None  # type: ignore[attr-defined]
+
     now = datetime.datetime.now()
     if not OWM_API_KEY:
         logging.warning("OpenWeatherMap API key missing; using fallback provider")
-        return fetch_weather_fallback()
+        fallback = fetch_weather_fallback()
+        if fallback:
+            fetch_weather._last_success = fallback  # type: ignore[attr-defined]
+        return fallback
     # If we got a 429 within the last 2 hours, skip OWM and fallback
     if _last_owm_429 and (now - _last_owm_429) < datetime.timedelta(hours=2):
         logging.warning("Skipping OpenWeatherMap due to recent 429; using fallback")
-        return fetch_weather_fallback()
+        fallback = fetch_weather_fallback()
+        if fallback:
+            fetch_weather._last_success = fallback  # type: ignore[attr-defined]
+        return fallback or fetch_weather._last_success  # type: ignore[attr-defined]
 
     try:
         params = {
@@ -74,19 +86,25 @@ def fetch_weather():
         }
         r = _session.get(ONE_CALL_URL, params=params, timeout=10)
         r.raise_for_status()
-        return r.json()
+        payload = r.json()
+        fetch_weather._last_success = payload  # type: ignore[attr-defined]
+        return payload
 
     except requests.exceptions.HTTPError as http_err:
         if r.status_code == 429:
             logging.warning("HTTP 429 from OWM; falling back and pausing OWM for 2h")
             _last_owm_429 = datetime.datetime.now()
-            return fetch_weather_fallback()
+            fallback = fetch_weather_fallback()
+            if fallback:
+                fetch_weather._last_success = fallback  # type: ignore[attr-defined]
+                return fallback
+            return fetch_weather._last_success  # type: ignore[attr-defined]
         logging.error("HTTP error fetching weather: %s", http_err)
-        return None
+        return fetch_weather._last_success  # type: ignore[attr-defined]
 
     except Exception as e:
         logging.error("Error fetching weather: %s", e)
-        return None
+        return fetch_weather._last_success  # type: ignore[attr-defined]
 
 
 def fetch_weather_fallback():
