@@ -181,6 +181,16 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
+        # Some platforms only hide the cursor after it has moved. Force a blank
+        # cursor surface so it is invisible immediately after startup.
+        try:
+            transparent = pygame.Surface((1, 1), flags=pygame.SRCALPHA)
+            transparent.fill((0, 0, 0, 0))
+            invisible_cursor = pygame.cursors.Cursor((0, 0), transparent)
+            pygame.mouse.set_cursor(invisible_cursor)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
         try:
             pygame.event.set_grab(True)
         except Exception:  # pragma: no cover - optional dependency
