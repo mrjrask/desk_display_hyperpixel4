@@ -239,6 +239,11 @@ HEIGHT = _int_from_env("DISPLAY_HEIGHT", DEFAULT_HEIGHT)
 IS_SQUARE_DISPLAY = WIDTH == HEIGHT
 SCREEN_DELAY = 4
 LOGO_SCREEN_DELAY = 1.0
+HOURLY_FORECAST_HOURS = _int_from_env("HOURLY_FORECAST_HOURS", 5)
+if HOURLY_FORECAST_HOURS < 1:
+    HOURLY_FORECAST_HOURS = 1
+if HOURLY_FORECAST_HOURS > 12:
+    HOURLY_FORECAST_HOURS = 12
 
 BASE_WIDTH = 320
 BASE_HEIGHT = 240
@@ -353,6 +358,36 @@ def _load_screen_font(
     screen_key: str, font_key: str, font_name: str, default_size: float
 ) -> ImageFont.ImageFont:
     return _load_font(font_name, _font_pixels(screen_key, font_key, default_size))
+
+
+def _load_emoji_font(size: int) -> ImageFont.ImageFont:
+    for noto_path in _iter_font_paths("NotoColorEmoji.ttf"):
+        try:
+            return ImageFont.truetype(noto_path, size)
+        except OSError as exc:
+            logging.debug("Unable to load emoji font %s: %s", noto_path, exc)
+            for native_size in (109, 128, 160):
+                try:
+                    return _BitmapEmojiFont(noto_path, native_size, size)
+                except OSError as bitmap_exc:
+                    logging.debug(
+                        "Unable to load bitmap emoji font %s at native size %s: %s",
+                        noto_path,
+                        native_size,
+                        bitmap_exc,
+                    )
+
+    symbola_paths = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
+    for path in symbola_paths:
+        if "symbola" not in path.lower():
+            continue
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError as exc:
+            logging.debug("Unable to load fallback emoji font %s: %s", path, exc)
+
+    logging.warning("Emoji font not found; falling back to PIL default font")
+    return ImageFont.load_default()
 
 
 def _load_screen_emoji_font(screen_key: str, font_key: str, default_size: float):
@@ -528,7 +563,17 @@ FONT_WEATHER_DETAILS = _load_screen_font("weather", "details", "DejaVuSans.ttf",
 FONT_WEATHER_DETAILS_BOLD = _load_screen_font(
     "weather", "details_bold", "DejaVuSans-Bold.ttf", 18
 )
+FONT_WEATHER_DETAILS_SMALL = _load_screen_font(
+    "weather", "details_small", "DejaVuSans.ttf", 14
+)
+FONT_WEATHER_DETAILS_SMALL_BOLD = _load_screen_font(
+    "weather", "details_small_bold", "DejaVuSans-Bold.ttf", 14
+)
+FONT_WEATHER_DETAILS_TINY = _load_screen_font(
+    "weather", "details_tiny", "DejaVuSans.ttf", 12
+)
 FONT_WEATHER_LABEL = _load_screen_font("weather", "label", "DejaVuSans.ttf", 18)
+FONT_EMOJI_SMALL = _load_screen_emoji_font("shared", "emoji_small", 18)
 
 FONT_TITLE_SPORTS = _load_screen_font("sports", "title", "TimesSquare-m105.ttf", 30)
 FONT_TEAM_SPORTS = _load_screen_font("sports", "team", "TimesSquare-m105.ttf", 37)
@@ -667,36 +712,6 @@ FONT_DIV_RECORD = _load_screen_font("mlb_standings", "div_record", "DejaVuSans.t
 FONT_DIV_GB = _load_screen_font("mlb_standings", "div_gb", "DejaVuSans.ttf", 24)
 FONT_GB_VALUE = _load_screen_font("mlb_standings", "div_gb_value", "DejaVuSans.ttf", 24)
 FONT_GB_LABEL = _load_screen_font("mlb_standings", "div_gb_label", "DejaVuSans.ttf", 20)
-
-def _load_emoji_font(size: int) -> ImageFont.ImageFont:
-    for noto_path in _iter_font_paths("NotoColorEmoji.ttf"):
-        try:
-            return ImageFont.truetype(noto_path, size)
-        except OSError as exc:
-            logging.debug("Unable to load emoji font %s: %s", noto_path, exc)
-            for native_size in (109, 128, 160):
-                try:
-                    return _BitmapEmojiFont(noto_path, native_size, size)
-                except OSError as bitmap_exc:
-                    logging.debug(
-                        "Unable to load bitmap emoji font %s at native size %s: %s",
-                        noto_path,
-                        native_size,
-                        bitmap_exc,
-                    )
-
-    symbola_paths = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
-    for path in symbola_paths:
-        if "symbola" not in path.lower():
-            continue
-        try:
-            return ImageFont.truetype(path, size)
-        except OSError as exc:
-            logging.debug("Unable to load fallback emoji font %s: %s", path, exc)
-
-    logging.warning("Emoji font not found; falling back to PIL default font")
-    return ImageFont.load_default()
-
 
 FONT_EMOJI = _load_screen_emoji_font("shared", "emoji", 30)
 
