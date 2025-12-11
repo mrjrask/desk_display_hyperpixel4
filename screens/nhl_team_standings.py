@@ -17,19 +17,39 @@ def draw_nhl_standings_screen1(
     transition=False,
 ):
     """Wrap the generic standings screen for NHL teams (no GB/WC columns)."""
-    division_label = division_name or (rec or {}).get("division", {}).get("name")
-    division_label = division_label or "Division"
+    rec = rec or {}
+    conference_name = (rec.get("conference") or {}).get("name")
+    conference_name = conference_name or rec.get("conferenceName")
+    conference_name = conference_name or division_name or "Conference"
+
+    def _record_line(record_obj, base_rec):
+        record_data = record_obj.get("leagueRecord", {}) if isinstance(record_obj, dict) else {}
+        wins = _format_int(record_data.get("wins"))
+        losses = _format_int(record_data.get("losses"))
+        ot = _format_int(record_data.get("ot"))
+        if ot != "-":
+            return f"{wins}-{losses}-{ot}"
+        return f"{wins}-{losses}"
+
+    rec_for_display = {
+        **rec,
+        "divisionRank": rec.get("conferenceRank"),
+        "divisionGamesBack": None,
+        "division": {"name": conference_name},
+    }
+
     return _base_screen1(
         display,
-        rec,
+        rec_for_display,
         logo_path,
-        division_label,
+        conference_name,
         show_games_back=False,
         show_wild_card=False,
-        ot_label="OTL",
+        ot_label=None,
         points_label="points",
-        conference_label="conference",
+        conference_label=None,
         show_conference_rank=False,
+        record_details_fn=_record_line,
         transition=transition,
     )
 

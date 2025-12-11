@@ -1062,6 +1062,20 @@ def _fetch_nba_team_standings(team_tricode: str):
             if not streak_code:
                 streak_code = _format_streak_from_dict(streak_blob)
 
+            division_gb = (
+                entry.get("gamesBehind")
+                or entry.get("gamesBehindConference")
+                or entry.get("gamesBehindConf")
+                or entry.get("gamesBehindDivision")
+            )
+
+            conference_rank = (
+                entry.get("confRank")
+                or entry.get("playoffRank")
+                or (entry.get("teamConference") or {}).get("rank")
+                or entry.get("playoffSeed")
+            )
+
             splits = _extract_split_records(
                 lastTen=entry.get("lastTen"),
                 home=entry.get("home"),
@@ -1071,12 +1085,13 @@ def _fetch_nba_team_standings(team_tricode: str):
             return {
                 "leagueRecord": record,
                 "divisionRank": entry.get("divisionRank")
-                or (entry.get("teamDivision") or {}).get("rank"),
-                "divisionGamesBack": entry.get("gamesBehind")
-                or entry.get("gamesBehindDivision"),
+                or (entry.get("teamDivision") or {}).get("rank")
+                or conference_rank,
+                "divisionGamesBack": division_gb,
                 "wildCardGamesBack": None,
-                "streak": {"streakCode": streak_code},
+                "streak": {"streakCode": streak_code or "-"},
                 "records": {"splitRecords": splits},
+                "conferenceRank": conference_rank,
             }
         logging.warning("Team %s not found in NBA standings", team_tricode)
     except Exception as exc:
