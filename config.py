@@ -157,29 +157,43 @@ def get_current_ssid():
 
 CURRENT_SSID = get_current_ssid()
 
+# Allow environment variable overrides for latitude/longitude to ensure sync
+# across multiple devices (useful when multiple Pis should show same weather)
+ENV_LATITUDE  = os.environ.get("LATITUDE")
+ENV_LONGITUDE = os.environ.get("LONGITUDE")
+
 if CURRENT_SSID == "Verano":
     ENABLE_WEATHER = True
     OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_VERANO", "OWM_API_KEY")
-    LATITUDE       = 41.9103
-    LONGITUDE      = -87.6340
+    LATITUDE       = float(ENV_LATITUDE) if ENV_LATITUDE else 41.9103
+    LONGITUDE      = float(ENV_LONGITUDE) if ENV_LONGITUDE else -87.6340
     TRAVEL_MODE    = "to_home"
 elif CURRENT_SSID == "wiffy":
     ENABLE_WEATHER = True
     OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_WIFFY", "OWM_API_KEY")
-    LATITUDE       = 42.13444
-    LONGITUDE      = -87.876389
+    LATITUDE       = float(ENV_LATITUDE) if ENV_LATITUDE else 42.13444
+    LONGITUDE      = float(ENV_LONGITUDE) if ENV_LONGITUDE else -87.876389
     TRAVEL_MODE    = "to_work"
 else:
     ENABLE_WEATHER = True
     OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_DEFAULT", "OWM_API_KEY")
-    LATITUDE       = 41.9103
-    LONGITUDE      = -87.6340
+    LATITUDE       = float(ENV_LATITUDE) if ENV_LATITUDE else 41.9103
+    LONGITUDE      = float(ENV_LONGITUDE) if ENV_LONGITUDE else -87.6340
     TRAVEL_MODE    = "to_home"
 
 if not OWM_API_KEY:
     logging.warning(
         "OpenWeatherMap API key not configured; the app will use fallback weather data only."
     )
+
+# Log weather location configuration for debugging sync issues
+logging.info(
+    "Weather location configured: SSID=%s, Lat=%s, Lon=%s %s",
+    CURRENT_SSID or "NOT DETECTED",
+    LATITUDE,
+    LONGITUDE,
+    "(from environment)" if ENV_LATITUDE or ENV_LONGITUDE else "(from SSID config)"
+)
 
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
