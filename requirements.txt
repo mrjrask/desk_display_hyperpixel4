@@ -1,5 +1,6 @@
 Flask 
-requests 
+requests
+python-dotenv
 pytz 
 Pillow 
 waitress
