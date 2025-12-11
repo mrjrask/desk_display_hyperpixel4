@@ -16,11 +16,16 @@ def draw_nba_standings_screen1(
     transition=False,
 ):
     """Wrap the generic standings screen for NBA teams (shows games back)."""
-    division_label = division_name or (rec or {}).get("division", {}).get("name")
+    rec = rec or {}
+    division_label = division_name or rec.get("division", {}).get("name")
     division_label = division_label or "Division"
+    rec_for_display = {
+        **rec,
+        "divisionRank": rec.get("divisionRank") or rec.get("conferenceRank"),
+    }
     return _base_screen1(
         display,
-        rec,
+        rec_for_display,
         logo_path,
         division_label,
         conference_label=None,
