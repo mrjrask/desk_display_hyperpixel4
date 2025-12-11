@@ -9,12 +9,14 @@ import logging
 import os
 import sys
 import zipfile
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Optional, Set, Tuple
 
 from PIL import Image
 
 import data_fetch
 from config import CENTRAL_TIME, HEIGHT, WIDTH, DISPLAY_PROFILE
+from data_feeds import required_feeds
+from logos import build_logo_map
 from screens.draw_travel_time import get_travel_active_window, is_travel_screen_active
 from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
 from screens_catalog import SCREEN_IDS
@@ -70,63 +72,9 @@ def _sanitize_filename_prefix(name: str) -> str:
     return safe or "screen"
 
 
-LOGO_SCREEN_HEIGHT = max(1, HEIGHT - 30)  # Leave a 30px margin while filling the display
 
 
-def load_logo(
-    filename: str,
-    height: int = LOGO_SCREEN_HEIGHT,
-    width: Optional[int] = None,
-) -> Optional[Image.Image]:
-    path = os.path.join(IMAGES_DIR, filename)
-    try:
-        with Image.open(path) as img:
-            has_transparency = (
-                img.mode in ("RGBA", "LA")
-                or (img.mode == "P" and "transparency" in img.info)
-            )
-            target_mode = "RGBA" if has_transparency else "RGB"
-            img = img.convert(target_mode)
-            if width is not None and img.width:
-                ratio = width / float(img.width)
-                target_w = max(1, int(round(img.width * ratio)))
-                target_h = max(1, int(round(img.height * ratio)))
-            else:
-                ratio = height / float(img.height) if img.height else 1
-                target_h = max(1, int(round(img.height * ratio))) if img.height else height
-                target_w = max(1, int(round(img.width * ratio))) if img.width else max(1, height)
-            resized = img.resize((target_w, target_h), Image.ANTIALIAS)
-        return resized
-    except Exception as exc:
-        logging.warning("Logo load failed '%s': %s", filename, exc)
-        return None
-
-
-def build_logo_map() -> Dict[str, Optional[Image.Image]]:
-    bears_logo = load_logo("nfl/chi.png")
-    team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
-
-    def _team_logo(path: str) -> Optional[Image.Image]:
-        if team_logo_width:
-            return load_logo(path, width=team_logo_width)
-        return load_logo(path)
-
-    return {
-        "weather logo": load_logo("weather.jpg"),
-        "verano logo": load_logo("verano.jpg"),
-        "bears logo": bears_logo,
-        "nfl logo": load_logo("nfl/nfl.png"),
-        "hawks logo": _team_logo("nhl/CHI.png"),
-        "nhl logo": load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png"),
-        "cubs logo": _team_logo("mlb/CUBS.png"),
-        "sox logo": _team_logo("mlb/SOX.png"),
-        "mlb logo": load_logo("mlb/MLB.png"),
-        "nba logo": load_logo("nba/NBA.png"),
-        "bulls logo": _team_logo("nba/CHI.png"),
-    }
-
-
-def build_cache() -> Dict[str, object]:
+def build_cache(requested_ids: Optional[Set[str]] = None) -> Dict[str, object]:
     logging.info("Refreshing data feeds…")
     cache: Dict[str, object] = {
         "weather": None,
@@ -156,48 +104,64 @@ def build_cache() -> Dict[str, object]:
             logging.warning("Data fetch for %s failed: %s", label, exc)
             return None
 
-    cache["weather"] = _safe_fetch("weather", data_fetch.fetch_weather)
-    cache["bears"].update({"stand": _safe_fetch("bears standings", data_fetch.fetch_bears_standings)})
-    cache["hawks"].update(
-        {
-            "stand": _safe_fetch("blackhawks standings", data_fetch.fetch_blackhawks_standings),
-            "last": _safe_fetch("blackhawks last game", data_fetch.fetch_blackhawks_last_game),
-            "live": _safe_fetch("blackhawks live game", data_fetch.fetch_blackhawks_live_game),
-            "next": _safe_fetch("blackhawks next game", data_fetch.fetch_blackhawks_next_game),
-            "next_home": _safe_fetch("blackhawks next home game", data_fetch.fetch_blackhawks_next_home_game),
-        }
-    )
-    cache["bulls"].update(
-        {
-            "stand": _safe_fetch("bulls standings", data_fetch.fetch_bulls_standings),
-            "last": _safe_fetch("bulls last game", data_fetch.fetch_bulls_last_game),
-            "live": _safe_fetch("bulls live game", data_fetch.fetch_bulls_live_game),
-            "next": _safe_fetch("bulls next game", data_fetch.fetch_bulls_next_game),
-            "next_home": _safe_fetch("bulls next home game", data_fetch.fetch_bulls_next_home_game),
-        }
-    )
+    feeds = required_feeds(requested_ids or set())
+    if not feeds:
+        logging.info("No data feeds requested; skipping fetch.")
+        return cache
 
-    cubs_games = _safe_fetch("cubs games", data_fetch.fetch_cubs_games) or {}
-    cache["cubs"].update(
-        {
-            "stand": _safe_fetch("cubs standings", data_fetch.fetch_cubs_standings),
-            "last": cubs_games.get("last_game"),
-            "live": cubs_games.get("live_game"),
-            "next": cubs_games.get("next_game"),
-            "next_home": cubs_games.get("next_home_game"),
-        }
-    )
+    logging.info("Fetching data feeds: %s", ", ".join(sorted(feeds)))
 
-    sox_games = _safe_fetch("sox games", data_fetch.fetch_sox_games) or {}
-    cache["sox"].update(
-        {
-            "stand": _safe_fetch("sox standings", data_fetch.fetch_sox_standings),
-            "last": sox_games.get("last_game"),
-            "live": sox_games.get("live_game"),
-            "next": sox_games.get("next_game"),
-            "next_home": sox_games.get("next_home_game"),
-        }
-    )
+    if "weather" in feeds:
+        cache["weather"] = _safe_fetch("weather", data_fetch.fetch_weather)
+
+    if "bears" in feeds:
+        cache["bears"].update({"stand": _safe_fetch("bears standings", data_fetch.fetch_bears_standings)})
+
+    if "hawks" in feeds:
+        cache["hawks"].update(
+            {
+                "stand": _safe_fetch("blackhawks standings", data_fetch.fetch_blackhawks_standings),
+                "last": _safe_fetch("blackhawks last game", data_fetch.fetch_blackhawks_last_game),
+                "live": _safe_fetch("blackhawks live game", data_fetch.fetch_blackhawks_live_game),
+                "next": _safe_fetch("blackhawks next game", data_fetch.fetch_blackhawks_next_game),
+                "next_home": _safe_fetch("blackhawks next home game", data_fetch.fetch_blackhawks_next_home_game),
+            }
+        )
+
+    if "bulls" in feeds:
+        cache["bulls"].update(
+            {
+                "stand": _safe_fetch("bulls standings", data_fetch.fetch_bulls_standings),
+                "last": _safe_fetch("bulls last game", data_fetch.fetch_bulls_last_game),
+                "live": _safe_fetch("bulls live game", data_fetch.fetch_bulls_live_game),
+                "next": _safe_fetch("bulls next game", data_fetch.fetch_bulls_next_game),
+                "next_home": _safe_fetch("bulls next home game", data_fetch.fetch_bulls_next_home_game),
+            }
+        )
+
+    if "cubs" in feeds:
+        cubs_games = _safe_fetch("cubs games", data_fetch.fetch_cubs_games) or {}
+        cache["cubs"].update(
+            {
+                "stand": _safe_fetch("cubs standings", data_fetch.fetch_cubs_standings),
+                "last": cubs_games.get("last_game"),
+                "live": cubs_games.get("live_game"),
+                "next": cubs_games.get("next_game"),
+                "next_home": cubs_games.get("next_home_game"),
+            }
+        )
+
+    if "sox" in feeds:
+        sox_games = _safe_fetch("sox games", data_fetch.fetch_sox_games) or {}
+        cache["sox"].update(
+            {
+                "stand": _safe_fetch("sox standings", data_fetch.fetch_sox_standings),
+                "last": sox_games.get("last_game"),
+                "live": sox_games.get("live_game"),
+                "next": sox_games.get("next_game"),
+                "next_home": sox_games.get("next_home_game"),
+            }
+        )
 
     return cache
 
@@ -332,7 +296,7 @@ def render_all_screens(
     try:
         display = HeadlessDisplay()
         logos = build_logo_map()
-        cache = build_cache()
+        cache = build_cache(requested_ids)
 
         schedule_error: Optional[str] = None
         if ignore_schedule:

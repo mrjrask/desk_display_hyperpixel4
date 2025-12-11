@@ -88,6 +88,7 @@ from config import (
     TRAVEL_ACTIVE_WINDOW,
     DISPLAY_PROFILE,
 )
+from data_feeds import required_feeds
 from utils import (
     Display,
     ScreenImage,
@@ -111,6 +112,7 @@ from screens.draw_travel_time import (
 )
 from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
 from schedule import ScreenScheduler, build_scheduler, load_schedule_config
+from logos import build_logo_map
 from screen_overrides import (
     ResolvedScreenOverride,
     load_overrides as load_screen_overrides,
@@ -145,6 +147,7 @@ ARCHIVE_THRESHOLD       = 500  # archive when we reach this many images
 SCREENSHOT_ARCHIVE_BASE = str(_storage_paths.archive_base)
 ARCHIVE_DEFAULT_FOLDER  = "Screens"
 ALLOWED_SCREEN_EXTS     = (".png", ".jpg", ".jpeg")  # images only
+_screenshot_file_index: Optional[Set[str]] = None
 
 _screen_config_mtime: Optional[float] = None
 screen_scheduler: Optional[ScreenScheduler] = None
@@ -668,6 +671,8 @@ def _save_screenshot(sid: str, img: Image.Image) -> None:
         img.save(path)
     except Exception:
         logging.warning(f"⚠️ Screenshot save failed for '{sid}'")
+    else:
+        _register_screenshot(path)
 
     current_name = f"{prefix}.png"
     try:
@@ -688,7 +693,7 @@ def _save_screenshot(sid: str, img: Image.Image) -> None:
             logging.debug("Unable to prune stale current screenshots for '%s'", sid)
 
 
-def _list_screenshot_files():
+def _scan_screenshot_files():
     try:
         results = []
         for root, _dirs, files in os.walk(SCREENSHOT_DIR):
@@ -700,9 +705,22 @@ def _list_screenshot_files():
                 rel_dir = os.path.relpath(root, SCREENSHOT_DIR)
                 rel_path = fname if rel_dir == "." else os.path.join(rel_dir, fname)
                 results.append(rel_path)
-        return sorted(results)
+        return set(results)
     except Exception:
-        return []
+        return set()
+
+
+def _ensure_screenshot_index() -> Set[str]:
+    global _screenshot_file_index
+    if _screenshot_file_index is None:
+        _screenshot_file_index = _scan_screenshot_files()
+    return _screenshot_file_index
+
+
+def _register_screenshot(path: str) -> None:
+    rel_path = os.path.relpath(path, SCREENSHOT_DIR)
+    if rel_path and rel_path.lower().endswith(ALLOWED_SCREEN_EXTS):
+        _ensure_screenshot_index().add(rel_path)
 
 def maybe_archive_screenshots():
     """
@@ -712,20 +730,24 @@ def maybe_archive_screenshots():
     """
     if not ENABLE_SCREENSHOTS:
         return
-    files = _list_screenshot_files()
-    if len(files) < ARCHIVE_THRESHOLD:
+    index = _ensure_screenshot_index()
+    if len(index) < ARCHIVE_THRESHOLD:
         return
 
     with _archive_lock:
-        files = _list_screenshot_files()
-        if len(files) < ARCHIVE_THRESHOLD:
+        index = _ensure_screenshot_index()
+        if len(index) < ARCHIVE_THRESHOLD:
             return
 
         moved = 0
         created_dirs = set()
+        files = sorted(index)
 
         for fname in files:
             src = os.path.join(SCREENSHOT_DIR, fname)
+            if not os.path.isfile(src):
+                index.discard(fname)
+                continue
             try:
                 parts = fname.split(os.sep)
                 if len(parts) > 1:
@@ -740,6 +762,7 @@ def maybe_archive_screenshots():
                     created_dirs.add(dest_dir)
                 shutil.move(src, dest)
                 moved += 1
+                index.discard(fname)
             except Exception as e:
                 logging.warning(f"⚠️  Could not move '{fname}' to archive: {e}")
 
@@ -763,67 +786,8 @@ signal.signal(signal.SIGTERM, _handle_sigterm)
 
 # ─── Logos ───────────────────────────────────────────────────────────────────
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
-LOGO_SCROLL_HEIGHT = max(1, HEIGHT - 30)  # Leave a 30px margin while filling the display
 
-
-def load_logo(fn, height=LOGO_SCROLL_HEIGHT, width: Optional[int] = None):
-    path = os.path.join(IMAGES_DIR, fn)
-    try:
-        with Image.open(path) as img:
-            has_transparency = (
-                img.mode in ("RGBA", "LA")
-                or (img.mode == "P" and "transparency" in img.info)
-            )
-            target_mode = "RGBA" if has_transparency else "RGB"
-            img = img.convert(target_mode)
-            if width is not None and img.width:
-                ratio = width / float(img.width)
-                target_w = max(1, int(round(img.width * ratio)))
-                target_h = max(1, int(round(img.height * ratio)))
-            else:
-                ratio = height / float(img.height) if img.height else 1
-                target_h = max(1, int(round(img.height * ratio))) if img.height else height
-                target_w = max(1, int(round(img.width * ratio))) if img.width else max(1, height)
-            resized = img.resize((target_w, target_h), Image.ANTIALIAS)
-        return resized
-    except Exception as e:
-        logging.warning(f"Logo load failed '{fn}': {e}")
-        return None
-
-
-bears_logo  = load_logo("nfl/chi.png", height=LOGO_SCROLL_HEIGHT)
-team_logo_width = bears_logo.width if isinstance(bears_logo, Image.Image) else None
-
-def _team_logo(fn: str) -> Optional[Image.Image]:
-    if team_logo_width:
-        return load_logo(fn, width=team_logo_width)
-    return load_logo(fn, height=LOGO_SCROLL_HEIGHT)
-
-
-cubs_logo   = _team_logo("mlb/CUBS.png")
-hawks_logo  = _team_logo("nhl/CHI.png")
-bulls_logo  = _team_logo("nba/CHI.png")
-sox_logo    = _team_logo("mlb/SOX.png")
-weather_img = load_logo("weather.jpg", height=LOGO_SCROLL_HEIGHT)
-mlb_logo    = load_logo("mlb/MLB.png")
-nba_logo    = load_logo("nba/NBA.png")
-nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
-nfl_logo    = load_logo("nfl/nfl.png")
-verano_img  = load_logo("verano.jpg", height=LOGO_SCROLL_HEIGHT)
-
-LOGOS = {
-    "weather logo": weather_img,
-    "verano logo": verano_img,
-    "bears logo": bears_logo,
-    "nfl logo": nfl_logo,
-    "hawks logo": hawks_logo,
-    "nhl logo": nhl_logo,
-    "cubs logo": cubs_logo,
-    "sox logo": sox_logo,
-    "mlb logo": mlb_logo,
-    "nba logo": nba_logo,
-    "bulls logo": bulls_logo,
-}
+LOGOS = build_logo_map()
 
 # ─── Data cache & refresh ────────────────────────────────────────────────────
 cache = {
@@ -836,39 +800,56 @@ cache = {
 }
 
 def refresh_all():
-    logging.info("🔄 Refreshing all data…")
-    cache["weather"] = data_fetch.fetch_weather()
-    cache["bears"].update({"stand": data_fetch.fetch_bears_standings()})
-    cache["hawks"].update({
-        "stand": data_fetch.fetch_blackhawks_standings(),
-        "last": data_fetch.fetch_blackhawks_last_game(),
-        "live": data_fetch.fetch_blackhawks_live_game(),
-        "next": data_fetch.fetch_blackhawks_next_game(),
-        "next_home": data_fetch.fetch_blackhawks_next_home_game(),
-    })
-    cache["bulls"].update({
-        "stand": data_fetch.fetch_bulls_standings(),
-        "last": data_fetch.fetch_bulls_last_game(),
-        "live": data_fetch.fetch_bulls_live_game(),
-        "next": data_fetch.fetch_bulls_next_game(),
-        "next_home": data_fetch.fetch_bulls_next_home_game(),
-    })
-    cubg = data_fetch.fetch_cubs_games() or {}
-    cache["cubs"].update({
-        "stand": data_fetch.fetch_cubs_standings(),
-        "last":  cubg.get("last_game"),
-        "live":  cubg.get("live_game"),
-        "next":  cubg.get("next_game"),
-        "next_home": cubg.get("next_home_game"),
-    })
-    soxg = data_fetch.fetch_sox_games() or {}
-    cache["sox"].update({
-        "stand": data_fetch.fetch_sox_standings(),
-        "last":  soxg.get("last_game"),
-        "live":  soxg.get("live_game"),
-        "next":  soxg.get("next_game"),
-        "next_home": soxg.get("next_home_game"),
-    })
+    feeds = required_feeds(_requested_screen_ids)
+    if not feeds:
+        logging.info("🔄 Skipping data refresh; no feeds requested.")
+        return
+
+    logging.info("🔄 Refreshing data feeds: %s", ", ".join(sorted(feeds)))
+
+    if "weather" in feeds:
+        cache["weather"] = data_fetch.fetch_weather()
+
+    if "bears" in feeds:
+        cache["bears"].update({"stand": data_fetch.fetch_bears_standings()})
+
+    if "hawks" in feeds:
+        cache["hawks"].update({
+            "stand": data_fetch.fetch_blackhawks_standings(),
+            "last": data_fetch.fetch_blackhawks_last_game(),
+            "live": data_fetch.fetch_blackhawks_live_game(),
+            "next": data_fetch.fetch_blackhawks_next_game(),
+            "next_home": data_fetch.fetch_blackhawks_next_home_game(),
+        })
+
+    if "bulls" in feeds:
+        cache["bulls"].update({
+            "stand": data_fetch.fetch_bulls_standings(),
+            "last": data_fetch.fetch_bulls_last_game(),
+            "live": data_fetch.fetch_bulls_live_game(),
+            "next": data_fetch.fetch_bulls_next_game(),
+            "next_home": data_fetch.fetch_bulls_next_home_game(),
+        })
+
+    if "cubs" in feeds:
+        cubg = data_fetch.fetch_cubs_games() or {}
+        cache["cubs"].update({
+            "stand": data_fetch.fetch_cubs_standings(),
+            "last": cubg.get("last_game"),
+            "live": cubg.get("live_game"),
+            "next": cubg.get("next_game"),
+            "next_home": cubg.get("next_home_game"),
+        })
+
+    if "sox" in feeds:
+        soxg = data_fetch.fetch_sox_games() or {}
+        cache["sox"].update({
+            "stand": data_fetch.fetch_sox_standings(),
+            "last": soxg.get("last_game"),
+            "live": soxg.get("live_game"),
+            "next": soxg.get("next_game"),
+            "next_home": soxg.get("next_home_game"),
+        })
 
 def _background_refresh() -> None:
     time.sleep(30)
