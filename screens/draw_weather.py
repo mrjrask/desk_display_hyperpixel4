@@ -455,6 +455,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
             "time": _format_hour_label(hour.get("dt"), index=idx + 1),
             "condition": _normalise_condition(hour),
             "icon": None,
+            "weather_id": None,
             "pop": _pop_pct_from(hour),
             "wind_speed": wind_speed,
             "wind_dir": wind_dir,
@@ -463,6 +464,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
         weather_list = hour.get("weather") if isinstance(hour.get("weather"), list) else []
         if weather_list:
             entry["icon"] = weather_list[0].get("icon")
+            entry["weather_id"] = weather_list[0].get("id")
         forecast.append(entry)
     return forecast
 
@@ -618,27 +620,56 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
             wind_text = f"{wind_speed} mph"
             if wind_dir:
                 wind_text = f"{wind_text} {wind_dir}"
-            stat_items.append((wind_text, FONT_WEATHER_DETAILS_TINY, (180, 225, 255)))
+            stat_items.append((wind_text, FONT_WEATHER_DETAILS_TINY, (180, 225, 255), None))
 
         pop = hour.get("pop")
         if pop is not None:
             clamped_pop = max(0, min(pop, 100))
-            pop_text = f"💧 {clamped_pop}%"
-            stat_items.append((pop_text, FONT_WEATHER_DETAILS_TINY, (135, 206, 250)))
+            pop_color = (135, 206, 250)
+            weather_id = hour.get("weather_id")
+            icon_code = hour.get("icon")
+            condition_text = hour.get("condition", "")
+            is_snow = False
+            if isinstance(weather_id, int) and 600 <= weather_id < 700:
+                is_snow = True
+            elif isinstance(icon_code, str) and icon_code.startswith("13"):
+                is_snow = True
+            elif isinstance(condition_text, str) and condition_text.lower().startswith("snow"):
+                is_snow = True
+
+            font_size = getattr(FONT_WEATHER_DETAILS_TINY, "size", 14)
+            pop_icon = _render_precip_icon(is_snow, font_size, pop_color)
+            pop_text = f"{clamped_pop}%"
+            stat_items.append((pop_text, FONT_WEATHER_DETAILS_TINY, pop_color, pop_icon))
 
         uvi_val = hour.get("uvi")
         if uvi_val is not None:
             uv_color = uv_index_color(uvi_val)
             uv_text = f"UV {uvi_val}"
-            stat_items.append((uv_text, FONT_WEATHER_DETAILS_TINY, uv_color))
+            stat_items.append((uv_text, FONT_WEATHER_DETAILS_TINY, uv_color, None))
 
         if stat_items:
             slots = len(stat_items) + 1
-            for idx, (text, font, color) in enumerate(stat_items, start=1):
+            for idx, (text, font, color, icon) in enumerate(stat_items, start=1):
                 text_w, text_h = draw.textsize(text, font=font)
-                text_y = int(stat_area_top + (stat_area_height * idx / slots) - text_h / 2)
-                text_y = max(stat_area_top, min(text_y, stat_area_bottom - text_h))
-                draw.text((cx - text_w // 2, text_y), text, font=font, fill=color)
+                icon_w = icon_h = 0
+                if icon:
+                    icon_w, icon_h = icon.size
+                content_h = max(text_h, icon_h)
+                text_y = int(stat_area_top + (stat_area_height * idx / slots) - content_h / 2)
+                text_y = max(stat_area_top, min(text_y, stat_area_bottom - content_h))
+
+                icon_gap = 4 if icon else 0
+                total_w = text_w + (icon_w + icon_gap if icon else 0)
+                text_x = cx - total_w // 2 + (icon_w + icon_gap if icon else 0)
+                text_offset_y = text_y + (content_h - text_h) // 2
+
+                if icon:
+                    icon_x = cx - total_w // 2
+                    icon_y = text_y + (content_h - icon_h) // 2
+                    img.paste(icon, (icon_x, icon_y), icon)
+
+                draw.text((text_x, text_offset_y), text, font=font, fill=color)
 
 
     if transition:
