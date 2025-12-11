@@ -7,13 +7,22 @@ from utils import log_call
 
 
 @log_call
-def draw_nba_standings_screen1(display, rec, logo_path, division_name, *, transition=False):
+def draw_nba_standings_screen1(
+    display,
+    rec,
+    logo_path,
+    division_name: str | None = None,
+    *,
+    transition=False,
+):
     """Wrap the generic standings screen for NBA teams (shows games back)."""
+    division_label = division_name or (rec or {}).get("division", {}).get("name")
+    division_label = division_label or "Division"
     return _base_screen1(
         display,
         rec,
         logo_path,
-        division_name,
+        division_label,
         conference_label=None,
         place_gb_before_rank=True,
         show_pct=True,

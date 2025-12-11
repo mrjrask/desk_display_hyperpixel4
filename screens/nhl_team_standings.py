@@ -8,13 +8,22 @@ from utils import log_call
 
 
 @log_call
-def draw_nhl_standings_screen1(display, rec, logo_path, division_name, *, transition=False):
+def draw_nhl_standings_screen1(
+    display,
+    rec,
+    logo_path,
+    division_name: str | None = None,
+    *,
+    transition=False,
+):
     """Wrap the generic standings screen for NHL teams (no GB/WC columns)."""
+    division_label = division_name or (rec or {}).get("division", {}).get("name")
+    division_label = division_label or "Division"
     return _base_screen1(
         display,
         rec,
         logo_path,
-        division_name,
+        division_label,
         show_games_back=False,
         show_wild_card=False,
         ot_label="OTL",
