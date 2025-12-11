@@ -743,7 +743,7 @@ def _sanitize_filename_prefix(name: str) -> str:
     return safe or "screen"
 
 
-def _save_screenshot(sid: str, img: Image.Image) -> None:
+def _save_screenshot(sid: str, img: "Image.Image") -> None:
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     folder = _sanitize_directory_name(sid)
     prefix = _sanitize_filename_prefix(sid)
