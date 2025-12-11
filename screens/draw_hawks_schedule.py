@@ -690,7 +690,10 @@ def _draw_scoreboard(
 
     if put_sog_label and header_h:
         text_h = _text_h(d, header_font)
-        header_y = header_bottom - text_h - 1
+        top_row_cy = row1_top + row1_h // 2
+        sog_h = _text_h(d, sog_font)
+        top_sog_y = top_row_cy - sog_h // 2
+        header_y = max(table_top, top_sog_y - text_h - 2)
         sog_lbl = "SOG"
         sog_w = _text_w(d, sog_lbl, header_font)
         label_x = x2 + (col3_w - sog_w) // 2
