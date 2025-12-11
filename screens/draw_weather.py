@@ -143,6 +143,15 @@ def _render_precip_icon(is_snow: bool, size: int, color: Tuple[int, int, int]) -
     icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     icon_draw = ImageDraw.Draw(icon)
 
+    if not is_snow:
+        # First try to render the Noto Color Emoji droplet for a polished look.
+        try:
+            icon_draw.text((size / 2, size / 2), "💧", font=FONT_EMOJI, anchor="mm")
+            return icon
+        except Exception:
+            # Fall back to a vector droplet if emoji rendering isn't available.
+            pass
+
     if is_snow:
         center = size / 2
         radius = size * 0.42
@@ -167,21 +176,16 @@ def _render_precip_icon(is_snow: bool, size: int, color: Tuple[int, int, int]) -
                 width=max(1, arm_width - 1),
             )
     else:
-        top = (size * 0.5, size * 0.05)
-        left = (size * 0.24, size * 0.58)
-        right = (size * 0.76, size * 0.58)
-        bottom = (size * 0.5, size * 0.95)
-        icon_draw.polygon([top, left, bottom, right], fill=color)
-        ellipse_height = size * 0.32
-        icon_draw.ellipse(
-            (
-                size * 0.22,
-                size * 0.56,
-                size * 0.78,
-                size * 0.56 + ellipse_height,
-            ),
-            fill=color,
-        )
+        tip = (size * 0.5, size * 0.04)
+        left = (size * 0.22, size * 0.48)
+        right = (size * 0.78, size * 0.48)
+        icon_draw.polygon([tip, left, right], fill=color)
+
+        ellipse_top = size * 0.35
+        ellipse_bottom = size * 0.96
+        ellipse_left = size * 0.12
+        ellipse_right = size * 0.88
+        icon_draw.ellipse((ellipse_left, ellipse_top, ellipse_right, ellipse_bottom), fill=color)
 
     return icon
 
