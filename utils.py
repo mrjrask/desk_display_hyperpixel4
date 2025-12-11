@@ -1339,6 +1339,21 @@ def uv_index_color(uvi: int) -> tuple[int, int, int]:
 
 def timestamp_to_datetime(value, tz) -> datetime.datetime | None:
     try:
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+
+            if text.isdigit():
+                value = float(text)
+            else:
+                if text.endswith("Z"):
+                    text = text[:-1] + "+00:00"
+                dt = datetime.datetime.fromisoformat(text)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)
+                return dt.astimezone(tz)
+
         return datetime.datetime.fromtimestamp(value, tz)
     except Exception:
         return None
