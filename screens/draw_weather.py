@@ -433,10 +433,21 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
     if not isinstance(weather, dict):
         return []
     hourly = weather.get("hourly") if isinstance(weather.get("hourly"), list) else []
-    forecast = []
-    for idx, hour in enumerate(hourly[:hours]):
+
+    now = datetime.datetime.now(CENTRAL_TIME)
+    fresh_hours: list[dict] = []
+    for hour in hourly:
         if not isinstance(hour, dict):
             continue
+
+        dt = timestamp_to_datetime(hour.get("dt"), CENTRAL_TIME)
+        if dt and dt < now - datetime.timedelta(minutes=30):
+            continue
+
+        fresh_hours.append(hour)
+
+    forecast = []
+    for hour in fresh_hours[:hours]:
         wind_speed = None
         try:
             wind_speed = int(round(float(hour.get("wind_speed", 0))))
@@ -452,7 +463,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
             uvi_val = None
         entry = {
             "temp": round(hour.get("temp", 0)),
-            "time": _format_hour_label(hour.get("dt"), index=idx + 1),
+            "time": _format_hour_label(hour.get("dt"), index=len(forecast) + 1),
             "condition": _normalise_condition(hour),
             "icon": None,
             "weather_id": None,
@@ -487,7 +498,8 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     hours_to_show = len(forecast)
     title = f"Next {hours_to_show} Hours"
     title_w, title_h = draw.textsize(title, font=FONT_WEATHER_LABEL)
-    draw.text(((WIDTH - title_w) // 2, 2), title, font=FONT_WEATHER_LABEL, fill=(200, 200, 200))
+    title_y = 6
+    draw.text(((WIDTH - title_w) // 2, title_y), title, font=FONT_WEATHER_LABEL, fill=(200, 200, 200))
 
     gap = 4
     available_width = WIDTH - gap * (hours_to_show + 1)
@@ -495,7 +507,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     icon_cache: dict[str, Optional[Image.Image]] = {}
     icon_size = max(32, min(WEATHER_ICON_SIZE, col_w - 10))
 
-    card_top = title_h + 6
+    card_top = title_y + title_h + 10
     card_bottom = HEIGHT - 6
     card_height = card_bottom - card_top
     x_start = (WIDTH - (hours_to_show * col_w + gap * (hours_to_show - 1))) // 2
