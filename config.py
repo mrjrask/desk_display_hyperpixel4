@@ -73,7 +73,35 @@ def _initialise_env() -> None:
             _load_env_file(str(path))
 
 
-_initialise_env()
+_ENV_LOADED = False
+
+
+def _should_load_env() -> bool:
+    """Return ``True`` when dotenv files should be loaded."""
+
+    if os.environ.get("DESK_DISPLAY_SKIP_DOTENV"):
+        return False
+
+    # Skip filesystem scans when running under pytest to keep test startup fast.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+
+    return True
+
+
+def load_environment() -> None:
+    """Load environment variables from `.env` files once, if allowed."""
+
+    global _ENV_LOADED
+
+    if _ENV_LOADED or not _should_load_env():
+        return
+
+    _initialise_env()
+    _ENV_LOADED = True
+
+
+load_environment()
 
 
 def _get_first_env_var(*names: str):

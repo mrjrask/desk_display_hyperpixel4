@@ -69,82 +69,133 @@ def _prepare_runtime_dir() -> None:
     )
 
 
-_prepare_runtime_dir()
+# Runtime dependencies are imported lazily to avoid doing heavy work on import.
+Image = None
+ImageDraw = None
+Display = None
+ScreenImage = None
+animate_fade_in = None
+clear_display = None
+draw_text_centered = None
+resume_display_updates = None
+suspend_display_updates = None
+temporary_display_led = None
+toggle_brightness = None
+data_fetch = None
+wifi_utils = None
+resolve_storage_paths = None
+draw_date = None
+draw_time = None
+nixie_frame = None
+ScreenContext = None
+ScreenDefinition = None
+build_screen_registry = None
+ScreenScheduler = None
+build_scheduler = None
+load_schedule_config = None
+build_logo_map = None
+ResolvedScreenOverride = None
+load_screen_overrides = None
+resolve_overrides_for_profile = None
+required_feeds = None
 
-from PIL import Image, ImageDraw
+WIDTH = HEIGHT = SCREEN_DELAY = LOGO_SCREEN_DELAY = SCHEDULE_UPDATE_INTERVAL = None
+FONT_DATE_SPORTS = None
+ENABLE_SCREENSHOTS = ENABLE_VIDEO = ENABLE_WIFI_MONITOR = VIDEO_FPS = None
+CENTRAL_TIME = TRAVEL_ACTIVE_WINDOW = DISPLAY_PROFILE = None
 
-from config import (
-    WIDTH,
-    HEIGHT,
-    SCREEN_DELAY,
-    LOGO_SCREEN_DELAY,
-    SCHEDULE_UPDATE_INTERVAL,
-    FONT_DATE_SPORTS,
-    ENABLE_SCREENSHOTS,
-    ENABLE_VIDEO,
-    VIDEO_FPS,
-    ENABLE_WIFI_MONITOR,
-    CENTRAL_TIME,
-    TRAVEL_ACTIVE_WINDOW,
-    DISPLAY_PROFILE,
-)
-from data_feeds import required_feeds
-from utils import (
-    Display,
-    ScreenImage,
-    animate_fade_in,
-    clear_display,
-    draw_text_centered,
-    resume_display_updates,
-    suspend_display_updates,
-    temporary_display_led,
-    toggle_brightness,
-)
-import data_fetch
-from services import wifi_utils
-from paths import resolve_storage_paths
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(message)s",
+        datefmt="%H:%M:%S",
+        force=True,
+    )
+    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.info("🖥️  Starting display service…")
 
-from screens.draw_date_time import draw_date, draw_time
-from screens.draw_nixie import nixie_frame
-from screens.draw_travel_time import (
-    get_travel_active_window,
-    is_travel_screen_active,
-)
-from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
-from schedule import ScreenScheduler, build_scheduler, load_schedule_config
-from logos import build_logo_map
-from screen_overrides import (
-    ResolvedScreenOverride,
-    load_overrides as load_screen_overrides,
-    resolve_overrides_for_profile,
-)
+    for _message in _startup_warnings:
+        logging.warning(_message)
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(message)s",
-    datefmt="%H:%M:%S",
-    force=True,
-)
-logging.getLogger("requests").setLevel(logging.WARNING)
-logging.info("🖥️  Starting display service…")
 
-for _message in _startup_warnings:
-    logging.warning(_message)
+def _import_runtime_dependencies() -> None:
+    global Image, ImageDraw, Display, ScreenImage, animate_fade_in, clear_display
+    global draw_text_centered, resume_display_updates, suspend_display_updates
+    global temporary_display_led, toggle_brightness, data_fetch, wifi_utils
+    global resolve_storage_paths, draw_date, draw_time, nixie_frame, ScreenContext
+    global ScreenDefinition, build_screen_registry, ScreenScheduler, build_scheduler
+    global load_schedule_config, build_logo_map, ResolvedScreenOverride
+    global load_screen_overrides, resolve_overrides_for_profile, required_feeds
+    global WIDTH, HEIGHT, SCREEN_DELAY, LOGO_SCREEN_DELAY, SCHEDULE_UPDATE_INTERVAL
+    global FONT_DATE_SPORTS, ENABLE_SCREENSHOTS, ENABLE_VIDEO, VIDEO_FPS
+    global ENABLE_WIFI_MONITOR, CENTRAL_TIME, TRAVEL_ACTIVE_WINDOW, DISPLAY_PROFILE
+    global get_travel_active_window, is_travel_screen_active
+
+    from PIL import Image, ImageDraw
+
+    from config import (
+        WIDTH,
+        HEIGHT,
+        SCREEN_DELAY,
+        LOGO_SCREEN_DELAY,
+        SCHEDULE_UPDATE_INTERVAL,
+        FONT_DATE_SPORTS,
+        ENABLE_SCREENSHOTS,
+        ENABLE_VIDEO,
+        VIDEO_FPS,
+        ENABLE_WIFI_MONITOR,
+        CENTRAL_TIME,
+        TRAVEL_ACTIVE_WINDOW,
+        DISPLAY_PROFILE,
+    )
+    from data_feeds import required_feeds
+    from utils import (
+        Display,
+        ScreenImage,
+        animate_fade_in,
+        clear_display,
+        draw_text_centered,
+        resume_display_updates,
+        suspend_display_updates,
+        temporary_display_led,
+        toggle_brightness,
+    )
+    import data_fetch
+    from services import wifi_utils
+    from paths import resolve_storage_paths
+
+    from screens.draw_date_time import draw_date, draw_time
+    from screens.draw_nixie import nixie_frame
+    from screens.draw_travel_time import (
+        get_travel_active_window,
+        is_travel_screen_active,
+    )
+    from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
+    from schedule import ScreenScheduler, build_scheduler, load_schedule_config
+    from logos import build_logo_map
+    from screen_overrides import (
+        ResolvedScreenOverride,
+        load_overrides as load_screen_overrides,
+        resolve_overrides_for_profile,
+    )
+
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
 SCREEN_OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 
-_storage_paths = resolve_storage_paths(logger=logging.getLogger("storage"))
-SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
-CURRENT_SCREENSHOT_DIR = str(_storage_paths.current_screenshot_dir)
+_storage_paths = None
+SCREENSHOT_DIR = ""
+CURRENT_SCREENSHOT_DIR = ""
+display = None
+
+_initialized = False
 
 
 # ─── Screenshot archiving (batch) ────────────────────────────────────────────
 ARCHIVE_THRESHOLD       = 500  # archive when we reach this many images
-SCREENSHOT_ARCHIVE_BASE = str(_storage_paths.archive_base)
+SCREENSHOT_ARCHIVE_BASE = ""
 ARCHIVE_DEFAULT_FOLDER  = "Screens"
 ALLOWED_SCREEN_EXTS     = (".png", ".jpg", ".jpeg")  # images only
 _screenshot_file_index: Optional[Set[str]] = None
@@ -163,6 +214,45 @@ _SKIP_BUTTON_SCREEN_IDS = {"date", "time"}
 _shutdown_event = threading.Event()
 _shutdown_complete = threading.Event()
 _display_cleared = threading.Event()
+
+
+def _initialize_runtime() -> None:
+    """Perform runtime-only initialization for the display service."""
+
+    global _storage_paths, SCREENSHOT_DIR, CURRENT_SCREENSHOT_DIR, SCREENSHOT_ARCHIVE_BASE
+    global display, LOGOS, _initialized
+
+    if _initialized:
+        return
+
+    _prepare_runtime_dir()
+    _configure_logging()
+    _import_runtime_dependencies()
+
+    _storage_paths = resolve_storage_paths(logger=logging.getLogger("storage"))
+    SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
+    CURRENT_SCREENSHOT_DIR = str(_storage_paths.current_screenshot_dir)
+    SCREENSHOT_ARCHIVE_BASE = str(_storage_paths.archive_base)
+
+    display = Display()
+    display.hide_mouse_cursor()
+
+    # Ensure the physical panel is cleared immediately so the Raspberry Pi desktop
+    # never peeks through while the application performs its initial data fetches.
+    clear_display(display)
+    if ENABLE_WIFI_MONITOR:
+        logging.info("🔌 Starting Wi-Fi monitor…")
+        wifi_utils.start_monitor()
+
+    LOGOS = build_logo_map()
+
+    threading.Thread(
+        target=_background_refresh,
+        daemon=True
+    ).start()
+    refresh_all()
+
+    _initialized = True
 
 BUTTON_POLL_INTERVAL = 0.1
 _BUTTON_NAMES = ("A", "B", "X", "Y")
@@ -229,19 +319,13 @@ def _resolved_screen_overrides(force: bool = False) -> Dict[str, ResolvedScreenO
     return _resolved_override_cache
 
 # ─── Display & Wi-Fi monitor ─────────────────────────────────────────────────
-display = Display()
-display.hide_mouse_cursor()
-
-# Ensure the physical panel is cleared immediately so the Raspberry Pi desktop
-# never peeks through while the application performs its initial data fetches.
-clear_display(display)
-if ENABLE_WIFI_MONITOR:
-    logging.info("🔌 Starting Wi-Fi monitor…")
-    wifi_utils.start_monitor()
 
 
 def _clear_display_immediately(reason: Optional[str] = None) -> None:
     """Clear the LCD as soon as a shutdown is requested."""
+
+    if display is None:
+        return
 
     already_cleared = _display_cleared.is_set()
 
@@ -787,7 +871,7 @@ signal.signal(signal.SIGTERM, _handle_sigterm)
 # ─── Logos ───────────────────────────────────────────────────────────────────
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 
-LOGOS = build_logo_map()
+LOGOS: Dict[str, object] = {}
 
 # ─── Data cache & refresh ────────────────────────────────────────────────────
 cache = {
@@ -858,19 +942,15 @@ def _background_refresh() -> None:
         if _shutdown_event.wait(SCHEDULE_UPDATE_INTERVAL):
             break
 
-
-threading.Thread(
-    target=_background_refresh,
-    daemon=True
-).start()
-refresh_all()
-
 # ─── Main loop ───────────────────────────────────────────────────────────────
 loop_count = 0
 _travel_schedule_state: Optional[str] = None
 
 def main_loop():
     global loop_count, _travel_schedule_state, _last_screen_id
+
+    if not _initialized:
+        _initialize_runtime()
 
     refresh_schedule_if_needed(force=True)
 
@@ -1060,7 +1140,7 @@ def main_loop():
     finally:
         _finalize_shutdown()
 
-if __name__ == '__main__':
+def main() -> None:
     try:
         main_loop()
     except KeyboardInterrupt:
@@ -1070,3 +1150,7 @@ if __name__ == '__main__':
         _finalize_shutdown()
 
     os._exit(0)
+
+
+if __name__ == '__main__':
+    main()
