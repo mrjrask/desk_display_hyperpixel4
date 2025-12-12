@@ -126,6 +126,32 @@ def _get_required_env_var(*names: str) -> str:
         f"{joined}"
     )
 
+
+def _int_from_env(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        logging.warning("Invalid %s value %r; using default %d", name, raw_value, default)
+        return default
+    if value <= 0:
+        logging.warning("%s must be greater than zero; using default %d", name, default)
+        return default
+    return value
+
+
+def _optional_int_from_env(name: str) -> Optional[int]:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return None
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        logging.warning("Invalid %s value %r; ignoring", name, raw_value)
+        return None
+
 import pytz
 from PIL import Image, ImageDraw, ImageFont
 
@@ -164,27 +190,47 @@ ENV_LONGITUDE = os.environ.get("LONGITUDE")
 
 if CURRENT_SSID == "Verano":
     ENABLE_WEATHER = True
-    OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_VERANO", "OWM_API_KEY")
     LATITUDE       = float(ENV_LATITUDE) if ENV_LATITUDE else 41.9103
     LONGITUDE      = float(ENV_LONGITUDE) if ENV_LONGITUDE else -87.6340
     TRAVEL_MODE    = "to_home"
 elif CURRENT_SSID == "wiffy":
     ENABLE_WEATHER = True
-    OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_WIFFY", "OWM_API_KEY")
     LATITUDE       = float(ENV_LATITUDE) if ENV_LATITUDE else 42.13444
     LONGITUDE      = float(ENV_LONGITUDE) if ENV_LONGITUDE else -87.876389
     TRAVEL_MODE    = "to_work"
 else:
     ENABLE_WEATHER = True
-    OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_DEFAULT", "OWM_API_KEY")
     LATITUDE       = float(ENV_LATITUDE) if ENV_LATITUDE else 41.9103
     LONGITUDE      = float(ENV_LONGITUDE) if ENV_LONGITUDE else -87.6340
     TRAVEL_MODE    = "to_home"
 
-if not OWM_API_KEY:
-    logging.warning(
-        "OpenWeatherMap API key not configured; the app will use fallback weather data only."
-    )
+WEATHERKIT_TEAM_ID       = os.environ.get("WEATHERKIT_TEAM_ID")
+WEATHERKIT_KEY_ID        = os.environ.get("WEATHERKIT_KEY_ID")
+WEATHERKIT_SERVICE_ID    = os.environ.get("WEATHERKIT_SERVICE_ID")
+
+
+def _load_weatherkit_private_key() -> Optional[str]:
+    key_text = os.environ.get("WEATHERKIT_PRIVATE_KEY")
+    key_path = os.environ.get("WEATHERKIT_PRIVATE_KEY_PATH")
+
+    if key_path:
+        try:
+            with open(key_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as exc:
+            logging.error("Failed to read WEATHERKIT_PRIVATE_KEY_PATH: %s", exc)
+
+    if key_text:
+        return key_text
+    return None
+
+
+WEATHERKIT_PRIVATE_KEY = _load_weatherkit_private_key()
+WEATHERKIT_API_URL      = os.environ.get(
+    "WEATHERKIT_API_URL", "https://weatherkit.apple.com/api/v1/weather"
+)
+WEATHERKIT_LANGUAGE     = os.environ.get("WEATHERKIT_LANGUAGE", "en")
+WEATHER_REFRESH_MINUTES = _int_from_env("WEATHER_REFRESH_MINUTES", 20)
 
 # Log weather location configuration for debugging sync issues
 logging.info(
@@ -198,32 +244,6 @@ logging.info(
 GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
 # ─── Display configuration ─────────────────────────────────────────────────────
-
-def _int_from_env(name: str, default: int) -> int:
-    raw_value = os.environ.get(name)
-    if raw_value is None:
-        return default
-    try:
-        value = int(raw_value)
-    except (TypeError, ValueError):
-        logging.warning("Invalid %s value %r; using default %d", name, raw_value, default)
-        return default
-    if value <= 0:
-        logging.warning("%s must be greater than zero; using default %d", name, default)
-        return default
-    return value
-
-
-def _optional_int_from_env(name: str) -> Optional[int]:
-    raw_value = os.environ.get(name)
-    if raw_value is None:
-        return None
-    try:
-        return int(raw_value)
-    except (TypeError, ValueError):
-        logging.warning("Invalid %s value %r; ignoring", name, raw_value)
-        return None
-
 
 # Optional override for the bus number used by the inside environmental sensor.
 INSIDE_SENSOR_I2C_BUS = _optional_int_from_env("INSIDE_SENSOR_I2C_BUS")
@@ -684,17 +704,6 @@ SCOREBOARD_SCROLL_PAUSE_TOP    = 0.75
 SCOREBOARD_SCROLL_PAUSE_BOTTOM = 0.5
 
 # ─── API endpoints ────────────────────────────────────────────────────────────
-ONE_CALL_URL      = "https://api.openweathermap.org/data/3.0/onecall"
-OPEN_METEO_URL    = "https://api.open-meteo.com/v1/forecast"
-OPEN_METEO_PARAMS = {
-    "latitude":        LATITUDE,
-    "longitude":       LONGITUDE,
-    "current_weather": True,
-    "timezone":        "America/Chicago",
-    "temperature_unit":"fahrenheit",
-    "windspeed_unit":  "mph",
-    "daily":           "temperature_2m_max,temperature_2m_min,sunrise,sunset"
-}
 
 NHL_API_URL        = "https://api-web.nhle.com/v1/club-schedule-season/CHI/20252026"
 MLB_API_URL        = "https://statsapi.mlb.com/api/v1/schedule"

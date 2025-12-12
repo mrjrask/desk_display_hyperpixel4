@@ -2,9 +2,9 @@ Flask
 requests
 python-dotenv
 pytz 
-Pillow 
+Pillow
 waitress
-yfinance 
+yfinance
 numpy
 adafruit-blinka
 adafruit-extended-bus
@@ -28,3 +28,4 @@ pygame
 ltr559
 pimoroni-bme280
 smbus2
+PyJWT

@@ -41,22 +41,24 @@ print(f"   Latitude:  {lat}")
 print(f"   Longitude: {lon}")
 print()
 
-# 3. Check API keys
-print("3. API Key Configuration:")
+# 3. Check Apple WeatherKit credentials
+print("3. WeatherKit Configuration:")
 print("-" * 40)
-if ssid == "Verano":
-    owm_key = os.environ.get("OWM_API_KEY_VERANO") or os.environ.get("OWM_API_KEY")
-elif ssid == "wiffy":
-    owm_key = os.environ.get("OWM_API_KEY_WIFFY") or os.environ.get("OWM_API_KEY")
-else:
-    owm_key = os.environ.get("OWM_API_KEY_DEFAULT") or os.environ.get("OWM_API_KEY")
+team_id = os.environ.get("WEATHERKIT_TEAM_ID")
+key_id = os.environ.get("WEATHERKIT_KEY_ID")
+service_id = os.environ.get("WEATHERKIT_SERVICE_ID")
+private_key = os.environ.get("WEATHERKIT_PRIVATE_KEY") or os.environ.get("WEATHERKIT_PRIVATE_KEY_PATH")
 
-if owm_key:
-    print(f"   OpenWeatherMap API Key: {owm_key[:8]}...{owm_key[-4:]}")
-    print("   Provider: OpenWeatherMap (primary)")
+print(f"   Team ID:      {team_id or 'NOT SET'}")
+print(f"   Key ID:       {key_id or 'NOT SET'}")
+print(f"   Service ID:   {service_id or 'NOT SET'}")
+if private_key:
+    if len(private_key) > 40:
+        print(f"   Private key:  set (length {len(private_key)} chars)")
+    else:
+        print("   Private key:  set")
 else:
-    print("   OpenWeatherMap API Key: NOT SET")
-    print("   Provider: Open-Meteo (fallback)")
+    print("   Private key:  NOT SET")
 print()
 
 # 4. Test actual weather fetch
@@ -85,10 +87,20 @@ print("SUMMARY")
 print("=" * 60)
 print(f"SSID: {ssid or 'NOT DETECTED'}")
 print(f"Coordinates: {lat}, {lon}")
-print(f"API Provider: {'OpenWeatherMap' if owm_key else 'Open-Meteo'}")
+missing = [name for name, val in [
+    ("TEAM_ID", team_id),
+    ("KEY_ID", key_id),
+    ("SERVICE_ID", service_id),
+    ("PRIVATE_KEY", private_key),
+] if not val]
+if missing:
+    status = f"Missing WeatherKit values: {', '.join(missing)}"
+else:
+    status = "WeatherKit"
+print(f"API Provider: {status}")
 print()
 print("Run this script on both Pis and compare:")
 print("  - If SSIDs differ → Both Pis need same network")
 print("  - If coordinates differ → Fix SSID detection")
-print("  - If API providers differ → Check API keys")
+print("  - If API credentials differ → align WeatherKit env vars")
 print("=" * 60)

@@ -54,19 +54,13 @@ def _first_env(*names: str) -> Optional[str]:
 def build_checks() -> List[Dict[str, object]]:
     """Build the list of API checks with any dynamic values resolved."""
 
-    owm_key = _first_env("OWM_API_KEY_VERANO", "OWM_API_KEY_WIFFY", "OWM_API_KEY_DEFAULT", "OWM_API_KEY")
+    wk_team_id = os.environ.get("WEATHERKIT_TEAM_ID")
+    wk_key_id = os.environ.get("WEATHERKIT_KEY_ID")
+    wk_service_id = os.environ.get("WEATHERKIT_SERVICE_ID")
+    wk_private_key = os.environ.get("WEATHERKIT_PRIVATE_KEY") or os.environ.get("WEATHERKIT_PRIVATE_KEY_PATH")
     google_maps_key = os.environ.get("GOOGLE_MAPS_API_KEY")
 
     checks: List[Dict[str, object]] = [
-        {
-            "name": "Open-Meteo forecast",
-            "url": "https://api.open-meteo.com/v1/forecast",
-            "params": {
-                "latitude": DEFAULT_LATITUDE,
-                "longitude": DEFAULT_LONGITUDE,
-                "current_weather": True,
-            },
-        },
         {
             "name": "ESPN NFL scoreboard",
             "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
@@ -85,25 +79,24 @@ def build_checks() -> List[Dict[str, object]]:
         },
     ]
 
-    if owm_key:
+    if wk_team_id and wk_key_id and wk_service_id and wk_private_key:
         checks.append(
             {
-                "name": "OpenWeatherMap current weather",
-                "url": "https://api.openweathermap.org/data/2.5/weather",
+                "name": "Apple WeatherKit token",
+                "url": "https://weatherkit.apple.com",
                 "params": {
-                    "lat": DEFAULT_LATITUDE,
-                    "lon": DEFAULT_LONGITUDE,
-                    "appid": owm_key,
-                    "units": "imperial",
+                    "team": wk_team_id,
+                    "service": wk_service_id,
                 },
+                "skip": "Requires private key; validate via diagnose_weather.py",
             }
         )
     else:
         checks.append(
             {
-                "name": "OpenWeatherMap current weather",
-                "url": "https://api.openweathermap.org/data/2.5/weather",
-                "skip": "OWM_API_KEY not configured",
+                "name": "Apple WeatherKit",
+                "url": "https://weatherkit.apple.com",
+                "skip": "WeatherKit credentials not configured",
             }
         )
 

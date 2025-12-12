@@ -58,7 +58,6 @@ if CURRENT_SSID == "Verano":
     # existing code...
 elif CURRENT_SSID == "YourActualSSID":  # <-- Add this
     ENABLE_WEATHER = True
-    OWM_API_KEY    = _get_first_env_var("OWM_API_KEY_DEFAULT", "OWM_API_KEY")
     LATITUDE       = 41.9103  # Your coordinates
     LONGITUDE      = -87.6340
     TRAVEL_MODE    = "to_home"
@@ -66,17 +65,13 @@ elif CURRENT_SSID == "wiffy":
     # existing code...
 ```
 
-### Option 4: Use Same API Key
-If one Pi uses OpenWeatherMap and the other uses Open-Meteo fallback, results may differ slightly.
-
-Ensure the same API key on both:
+### Option 4: Use Same WeatherKit Credentials
+Ensure both Pis share the exact same WeatherKit environment variables (Team ID, Key ID, Service ID, and private key path/text):
 ```bash
-export OWM_API_KEY="your_api_key_here"
-```
-
-Or disable OWM on both to force Open-Meteo:
-```bash
-unset OWM_API_KEY
+export WEATHERKIT_TEAM_ID="YOUR_APPLE_TEAM_ID"
+export WEATHERKIT_KEY_ID="YOUR_WEATHERKIT_KEY_ID"
+export WEATHERKIT_SERVICE_ID="com.example.service"
+export WEATHERKIT_PRIVATE_KEY_PATH="/home/pi/AuthKey.p8"
 ```
 
 ## Verification
