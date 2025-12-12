@@ -61,7 +61,7 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
   - **Phone-style Clock** with persistent time in upper left corner
   - Nixie tube retro digital clock display
   - **GitHub Update Indicator**: Red dot when new commits available
-- **Weather** (OpenWeatherMap + Open-Meteo):
+- **Weather** (Apple WeatherKit):
   - Current conditions with temperature, wind, and emoji icons
   - Daily forecasts with high/low and sunrise/sunset
   - Rate-limit handling with automatic fallback
@@ -431,8 +431,8 @@ Each step above maps directly to the JSON structure under `playlists.default.ste
 API keys are no longer stored directly in `config.py`. Set them as environment variables before running any of the
 scripts:
 
-- `OWM_API_KEY_VERANO`, `OWM_API_KEY_WIFFY`, or `OWM_API_KEY_DEFAULT` (fallback); the code also accepts a generic
-  `OWM_API_KEY` value if you only have a single OpenWeatherMap key.
+- `WEATHERKIT_TEAM_ID`, `WEATHERKIT_KEY_ID`, `WEATHERKIT_SERVICE_ID`, and either `WEATHERKIT_PRIVATE_KEY`
+  or `WEATHERKIT_PRIVATE_KEY_PATH`.
 - `GOOGLE_MAPS_API_KEY` for travel-time requests (leave unset to disable that screen).
 - `TRAVEL_TO_HOME_ORIGIN`, `TRAVEL_TO_HOME_DESTINATION`, `TRAVEL_TO_WORK_ORIGIN`,
   and `TRAVEL_TO_WORK_DESTINATION` to override the default travel addresses.
@@ -440,7 +440,13 @@ scripts:
 You can export the variables in your shell session:
 
 ```bash
-export OWM_API_KEY="your-open-weather-map-key"
+export WEATHERKIT_TEAM_ID="YOUR_APPLE_TEAM_ID"
+export WEATHERKIT_KEY_ID="YOUR_WEATHERKIT_KEY_ID"
+export WEATHERKIT_SERVICE_ID="com.example.service"
+export WEATHERKIT_PRIVATE_KEY_PATH="/home/pi/AuthKey.p8"
+
+Weather requests are throttled to once every 20 minutes (configurable via `WEATHER_REFRESH_MINUTES`) to stay well below the
+Apple Developer 500k calls/month allotment even when multiple devices are deployed.
 export GOOGLE_MAPS_API_KEY="your-google-maps-key"
 ```
 
@@ -464,7 +470,7 @@ Or copy `.env.example` to `.env` and load it with your preferred process manager
 ## Screens
 
 - **Date/Time:** both screens display date & time in bright/legible colors with a red dot when updates are available.
-- **Weather (1/2):** Open‑Meteo + OWM configuration.
+- **Weather (1/2):** WeatherKit configuration and troubleshooting.
 - **Inside:** BME sensor summary (labels/values) if wired.
 - **VRNOF:** stock mini‑panel.
 - **Travel:** Maps ETA using your configured mode.
@@ -590,7 +596,7 @@ The checker now logs **which files have diverged** when updates exist, for easie
   the build: `sudo apt-get install -y liblgpio-dev`.
 - **Missing logos:** you’ll see a warning like `Logo file missing: CUBS.png`. Add the correct file into `images/mlb/`.
 - **No WebP animation:** ensure your Pillow build supports WebP (`pip3 show pillow`). PNG fallback will still work.
-- **Network/API errors:** MLB/OWM requests are time‑bounded; transient timeouts are logged and screens are skipped gracefully.
+- **Network/API errors:** MLB/WeatherKit requests are time‑bounded; transient timeouts are logged and screens are skipped gracefully.
 - **NHL statsapi DNS warning:** run `python3 nhl_scoreboard.py --diagnose-dns` to print resolver details, `/etc/resolv.conf`, and
   quick HTTP checks for both the statsapi and api-web fallbacks. Attach the JSON output when filing an issue.
 - **Font not found:** the code falls back to `ImageFont.load_default()` so the app keeps running; install the missing TTFs to restore look.

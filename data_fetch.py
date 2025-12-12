@@ -16,13 +16,12 @@ from typing import Optional
 
 import pytz
 import requests
+import jwt
 
 from services.http_client import NHL_HEADERS, get_session
 from screens.nba_scoreboard import _fetch_games_for_date as _nba_fetch_games_for_date
 
 from config import (
-    OWM_API_KEY,
-    ONE_CALL_URL,
     LATITUDE,
     LONGITUDE,
     NHL_API_URL,
@@ -31,17 +30,20 @@ from config import (
     MLB_CUBS_TEAM_ID,
     MLB_SOX_TEAM_ID,
     CENTRAL_TIME,
-    OPEN_METEO_URL,
-    OPEN_METEO_PARAMS,
     NBA_TEAM_ID,
     NBA_TEAM_TRICODE,
+    WEATHERKIT_API_URL,
+    WEATHERKIT_KEY_ID,
+    WEATHERKIT_LANGUAGE,
+    WEATHERKIT_PRIVATE_KEY,
+    WEATHERKIT_SERVICE_ID,
+    WEATHERKIT_TEAM_ID,
+    WEATHER_REFRESH_MINUTES,
 )
 
 # ─── Shared HTTP session ─────────────────────────────────────────────────────
 _session = get_session()
 
-# Track last time we received a 429 from OWM
-_last_owm_429 = None
 # Cache statsapi DNS availability to avoid repeated slow lookups
 _statsapi_dns_available: Optional[bool] = None
 _statsapi_dns_checked_at: Optional[float] = None
@@ -50,118 +52,277 @@ _STATSAPI_DNS_RECHECK_SECONDS = 600
 # -----------------------------------------------------------------------------
 # WEATHER
 # -----------------------------------------------------------------------------
-def fetch_weather():
-    """
-    Fetch weather from OpenWeatherMap OneCall, falling back to Open-Meteo on errors
-    or if recently rate-limited.
-    """
-    global _last_owm_429
-    # Keep the last good payload so transient failures (or alternating between
-    # providers) don't cause screens to show wildly different data within a
-    # short period.
-    if not hasattr(fetch_weather, "_last_success"):
-        fetch_weather._last_success = None  # type: ignore[attr-defined]
+_weather_token: Optional[str] = None
+_weather_token_expiration: Optional[datetime.datetime] = None
 
-    now = datetime.datetime.now()
-    if not OWM_API_KEY:
-        logging.warning("OpenWeatherMap API key missing; using fallback provider")
-        fallback = fetch_weather_fallback()
-        if fallback:
-            fetch_weather._last_success = fallback  # type: ignore[attr-defined]
-        return fallback
-    # If we got a 429 within the last 2 hours, skip OWM and fallback
-    if _last_owm_429 and (now - _last_owm_429) < datetime.timedelta(hours=2):
-        logging.warning("Skipping OpenWeatherMap due to recent 429; using fallback")
-        fallback = fetch_weather_fallback()
-        if fallback:
-            fetch_weather._last_success = fallback  # type: ignore[attr-defined]
-        return fallback or fetch_weather._last_success  # type: ignore[attr-defined]
+
+class _ConditionMapping:
+    def __init__(self, weather_id: int, main: str, description: str, icon: str):
+        self.weather_id = weather_id
+        self.main = main
+        self.description = description
+        self.icon = icon
+
+
+_CONDITION_MAP: dict[str, _ConditionMapping] = {
+    "Blizzard": _ConditionMapping(602, "Snow", "Blizzard", "snow-heavy"),
+    "BlowingSnow": _ConditionMapping(601, "Snow", "Blowing snow", "snow"),
+    "Breezy": _ConditionMapping(951, "Wind", "Breezy", "wind"),
+    "Clear": _ConditionMapping(800, "Clear", "Clear sky", "clear"),
+    "Cloudy": _ConditionMapping(803, "Clouds", "Cloudy", "cloudy"),
+    "Drizzle": _ConditionMapping(300, "Drizzle", "Drizzle", "drizzle"),
+    "Dust": _ConditionMapping(731, "Dust", "Dust", "dust"),
+    "Flurries": _ConditionMapping(620, "Snow", "Flurries", "snow"),
+    "Fog": _ConditionMapping(741, "Fog", "Fog", "fog"),
+    "FreezingDrizzle": _ConditionMapping(301, "Drizzle", "Freezing drizzle", "drizzle"),
+    "FreezingRain": _ConditionMapping(511, "Rain", "Freezing rain", "rain-freezing"),
+    "Frigid": _ConditionMapping(900, "Extreme", "Frigid", "extreme"),
+    "Hail": _ConditionMapping(906, "Hail", "Hail", "hail"),
+    "Haze": _ConditionMapping(721, "Haze", "Haze", "haze"),
+    "HeavyRain": _ConditionMapping(502, "Rain", "Heavy rain", "rain-heavy"),
+    "HeavySnow": _ConditionMapping(602, "Snow", "Heavy snow", "snow-heavy"),
+    "Hot": _ConditionMapping(904, "Extreme", "Hot", "extreme"),
+    "Hurricane": _ConditionMapping(781, "Extreme", "Hurricane", "storm"),
+    "IsolatedThunderstorms": _ConditionMapping(211, "Thunderstorm", "Isolated t-storms", "thunder"),
+    "MostlyClear": _ConditionMapping(801, "Clear", "Mostly clear", "mostly-clear"),
+    "MostlyCloudy": _ConditionMapping(804, "Clouds", "Mostly cloudy", "cloudy"),
+    "PartlyCloudy": _ConditionMapping(802, "Clouds", "Partly cloudy", "partly-cloudy"),
+    "Rain": _ConditionMapping(501, "Rain", "Rain", "rain"),
+    "ScatteredThunderstorms": _ConditionMapping(210, "Thunderstorm", "Scattered t-storms", "thunder"),
+    "Sleet": _ConditionMapping(611, "Snow", "Sleet", "sleet"),
+    "Smoke": _ConditionMapping(711, "Smoke", "Smoke", "haze"),
+    "Snow": _ConditionMapping(600, "Snow", "Snow", "snow"),
+    "StrongStorms": _ConditionMapping(212, "Thunderstorm", "Strong storms", "thunder"),
+    "SunFlurries": _ConditionMapping(615, "Snow", "Sun flurries", "snow"),
+    "SunShowers": _ConditionMapping(521, "Rain", "Sun showers", "rain"),
+    "Thunderstorms": _ConditionMapping(211, "Thunderstorm", "Thunderstorms", "thunder"),
+    "Tornado": _ConditionMapping(781, "Extreme", "Tornado", "storm"),
+    "Windy": _ConditionMapping(905, "Wind", "Windy", "wind"),
+}
+
+
+def _generate_weatherkit_token() -> Optional[str]:
+    global _weather_token, _weather_token_expiration
+
+    if not WEATHERKIT_KEY_ID or not WEATHERKIT_TEAM_ID or not WEATHERKIT_SERVICE_ID:
+        logging.error("WeatherKit credentials missing; cannot fetch weather data")
+        return None
+    if not WEATHERKIT_PRIVATE_KEY:
+        logging.error("WeatherKit private key missing; cannot fetch weather data")
+        return None
+
+    now = datetime.datetime.utcnow()
+    if _weather_token and _weather_token_expiration and now < _weather_token_expiration:
+        return _weather_token
+
+    headers = {"alg": "ES256", "kid": WEATHERKIT_KEY_ID, "id": f"{WEATHERKIT_TEAM_ID}.{WEATHERKIT_SERVICE_ID}"}
+    claims = {
+        "iss": WEATHERKIT_TEAM_ID,
+        "iat": now,
+        "exp": now + datetime.timedelta(minutes=50),
+        "sub": WEATHERKIT_SERVICE_ID,
+    }
 
     try:
-        params = {
-            "lat": LATITUDE,
-            "lon": LONGITUDE,
-            "appid": OWM_API_KEY,
-            "units": "imperial",
-        }
-        r = _session.get(ONE_CALL_URL, params=params, timeout=10)
-        r.raise_for_status()
-        payload = r.json()
-        fetch_weather._last_success = payload  # type: ignore[attr-defined]
-        return payload
-
-    except requests.exceptions.HTTPError as http_err:
-        if r.status_code == 429:
-            logging.warning("HTTP 429 from OWM; falling back and pausing OWM for 2h")
-            _last_owm_429 = datetime.datetime.now()
-            fallback = fetch_weather_fallback()
-            if fallback:
-                fetch_weather._last_success = fallback  # type: ignore[attr-defined]
-                return fallback
-            return fetch_weather._last_success  # type: ignore[attr-defined]
-        logging.error("HTTP error fetching weather: %s", http_err)
-        return fetch_weather._last_success  # type: ignore[attr-defined]
-
-    except Exception as e:
-        logging.error("Error fetching weather: %s", e)
-        return fetch_weather._last_success  # type: ignore[attr-defined]
-
-
-def fetch_weather_fallback():
-    """
-    Fallback using Open-Meteo API for weather data.
-    """
-    try:
-        r = _session.get(OPEN_METEO_URL, params=OPEN_METEO_PARAMS, timeout=10)
-        r.raise_for_status()
-        data = r.json()
-        logging.debug("Weather data (Open-Meteo): %s", data)
-
-        current = data.get("current_weather", {})
-        daily   = data.get("daily", {})
-
-        mapped = {
-            "current": {
-                "temp":        current.get("temperature"),
-                "feels_like":  current.get("temperature"),
-                "weather": [{
-                    "description": weather_code_to_description(
-                        current.get("weathercode", -1)
-                    )
-                }],
-                "wind_speed":  current.get("windspeed"),
-                "wind_deg":    current.get("winddirection"),
-                "humidity":    (daily.get("relativehumidity_2m") or [0])[0],
-                "pressure":    (daily.get("surface_pressure")   or [0])[0],
-                "uvi":         0,
-                "sunrise":     (daily.get("sunrise")  or [None])[0],
-                "sunset":      (daily.get("sunset")   or [None])[0],
-            },
-            "daily": [{
-                "temp": {
-                    "max": (daily.get("temperature_2m_max") or [None])[0],
-                    "min": (daily.get("temperature_2m_min") or [None])[0],
-                },
-                "sunrise": (daily.get("sunrise") or [None])[0],
-                "sunset":  (daily.get("sunset")  or [None])[0],
-            }],
-        }
-        return mapped
-
-    except Exception as e:
-        logging.error("Error fetching fallback weather: %s", e)
+        _weather_token = jwt.encode(claims, WEATHERKIT_PRIVATE_KEY, algorithm="ES256", headers=headers)
+        _weather_token_expiration = now + datetime.timedelta(minutes=50)
+        return _weather_token
+    except Exception as exc:
+        logging.error("Failed to create WeatherKit token: %s", exc)
         return None
 
 
-def weather_code_to_description(code):
-    mapping = {
-        0:  "Clear sky",     1: "Mainly clear",  2: "Partly cloudy", 3: "Overcast",
-        45: "Fog",           48: "Rime fog",     51: "Light drizzle", 53: "Mod. drizzle",
-        55: "Dense drizzle", 61: "Slight rain",  63: "Mod. rain",     65: "Heavy rain",
-        80: "Rain showers",  81: "Mod. showers", 82: "Violent showers",
-        95: "Thunderstorm",  96: "Thunder w/ hail", 99: "Thunder w/ hail"
+def _convert_temperature(value, unit_hint: Optional[str]):
+    if value is None:
+        return None
+    if unit_hint and unit_hint.lower().startswith("c"):
+        return round((float(value) * 9 / 5) + 32, 1)
+    try:
+        return round(float(value), 1)
+    except Exception:
+        return None
+
+
+def _convert_speed(value, unit_hint: Optional[str]):
+    if value is None:
+        return None
+    try:
+        val = float(value)
+    except Exception:
+        return None
+    if unit_hint and unit_hint.lower().startswith("kph"):
+        return round(val / 1.60934, 1)
+    if unit_hint and unit_hint.lower().startswith("mps"):
+        return round(val * 2.23694, 1)
+    return round(val, 1)
+
+
+def _map_condition(code: Optional[str], is_daytime: bool) -> dict:
+    if not code:
+        return {"description": "Unknown", "icon": None}
+    mapping = _CONDITION_MAP.get(code) or _ConditionMapping(800, "Clear", code, "clear")
+    suffix = "day" if is_daytime else "night"
+    icon_code = f"wk-{mapping.icon}-{suffix}"
+    return {
+        "id": mapping.weather_id,
+        "main": mapping.main,
+        "description": mapping.description,
+        "icon": icon_code,
     }
-    return mapping.get(code, f"Code {code}")
+
+
+def _map_daily_forecast(payload: dict) -> list[dict]:
+    forecast = []
+    days = (payload.get("forecastDaily") or {}).get("days") if isinstance(payload, dict) else []
+    if not isinstance(days, list):
+        return forecast
+
+    units = ((payload.get("forecastDaily") or {}).get("metadata") or {}).get("units", {}) if isinstance(payload, dict) else {}
+    for day in days:
+        if not isinstance(day, dict):
+            continue
+        condition = _map_condition(day.get("conditionCode"), True)
+        forecast.append(
+            {
+                "dt": day.get("forecastStart"),
+                "sunrise": day.get("sunriseTime") or day.get("sunrise"),
+                "sunset": day.get("sunsetTime") or day.get("sunset"),
+                "temp": {
+                    "max": _convert_temperature(day.get("highTemperature"), units.get("temperature")),
+                    "min": _convert_temperature(day.get("lowTemperature"), units.get("temperature")),
+                },
+                "rain": day.get("precipitationAmount"),
+                "weather": [condition],
+            }
+        )
+    return forecast
+
+
+def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
+    current = payload.get("currentWeather", {}) if isinstance(payload, dict) else {}
+    units = (current.get("metadata", {}) or {}).get("units", {}) if isinstance(current, dict) else {}
+    is_daylight = bool(current.get("isDaylight", True)) if isinstance(current, dict) else True
+    sunrise = daily[0].get("sunrise") if daily else None
+    sunset = daily[0].get("sunset") if daily else None
+    condition = _map_condition(current.get("conditionCode"), is_daylight)
+
+    return {
+        "dt": current.get("asOf") or current.get("timestamp"),
+        "temp": _convert_temperature(current.get("temperature"), units.get("temperature")),
+        "feels_like": _convert_temperature(current.get("apparentTemperature"), units.get("temperature")),
+        "humidity": current.get("humidity"),
+        "pressure": current.get("pressure"),
+        "wind_speed": _convert_speed(current.get("windSpeed"), units.get("windSpeed")),
+        "wind_deg": current.get("windDirection"),
+        "uvi": current.get("uvIndex"),
+        "sunrise": sunrise,
+        "sunset": sunset,
+        "weather": [condition],
+    }
+
+
+def _map_hourly_forecast(payload: dict) -> list[dict]:
+    hours = (payload.get("forecastHourly") or {}).get("hours") if isinstance(payload, dict) else []
+    forecast = []
+    if not isinstance(hours, list):
+        return forecast
+
+    units = ((payload.get("forecastHourly") or {}).get("metadata") or {}).get("units", {}) if isinstance(payload, dict) else {}
+
+    for hour in hours:
+        if not isinstance(hour, dict):
+            continue
+        is_daytime = bool(hour.get("daylight", True)) if isinstance(hour.get("daylight"), bool) else True
+        condition = _map_condition(hour.get("conditionCode"), is_daytime)
+        forecast.append(
+            {
+                "dt": hour.get("forecastStart"),
+                "temp": _convert_temperature(hour.get("temperature"), units.get("temperature")),
+                "feels_like": _convert_temperature(hour.get("temperatureApparent"), units.get("temperature")),
+                "humidity": hour.get("humidity"),
+                "pressure": hour.get("pressure"),
+                "wind_speed": _convert_speed(hour.get("windSpeed"), units.get("windSpeed")),
+                "wind_deg": hour.get("windDirection"),
+                "pop": hour.get("precipitationChance"),
+                "uvi": hour.get("uvIndex"),
+                "weather": [condition],
+            }
+        )
+    return forecast
+
+
+def _map_alerts(payload: dict) -> list[dict]:
+    alerts_blob = (payload.get("weatherAlerts") or {}).get("alerts") if isinstance(payload, dict) else []
+    alerts: list[dict] = []
+    if not isinstance(alerts_blob, list):
+        return alerts
+
+    for alert in alerts_blob:
+        if not isinstance(alert, dict):
+            continue
+        alerts.append(
+            {
+                "event": alert.get("name") or alert.get("severity"),
+                "description": alert.get("description") or alert.get("details"),
+                "severity": alert.get("severity"),
+                "start": alert.get("effectiveTime"),
+                "end": alert.get("expirationTime"),
+            }
+        )
+    return alerts
+
+
+def fetch_weather():
+    """Fetch weather exclusively from Apple WeatherKit."""
+
+    if not hasattr(fetch_weather, "_last_success"):
+        fetch_weather._last_success = None  # type: ignore[attr-defined]
+        fetch_weather._last_fetched = None  # type: ignore[attr-defined]
+
+    now = datetime.datetime.utcnow()
+    last_fetched = getattr(fetch_weather, "_last_fetched", None)  # type: ignore[attr-defined]
+    if last_fetched and now - last_fetched < datetime.timedelta(minutes=WEATHER_REFRESH_MINUTES):
+        return fetch_weather._last_success  # type: ignore[attr-defined]
+
+    token = _generate_weatherkit_token()
+    if not token:
+        return fetch_weather._last_success  # type: ignore[attr-defined]
+
+    params = {
+        "dataSets": "currentWeather,forecastDaily,forecastHourly,weatherAlerts",
+        "timezone": "America/Chicago",
+    }
+
+    url = f"{WEATHERKIT_API_URL}/{WEATHERKIT_LANGUAGE}/{LATITUDE}/{LONGITUDE}"
+    try:
+        r = _session.get(
+            url,
+            params=params,
+            timeout=10,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        r.raise_for_status()
+        payload = r.json()
+
+        daily = _map_daily_forecast(payload)
+        mapped = {
+            "lat": LATITUDE,
+            "lon": LONGITUDE,
+            "daily": daily,
+            "hourly": _map_hourly_forecast(payload),
+            "current": _map_current_weather(payload, daily),
+            "alerts": _map_alerts(payload),
+        }
+
+        fetch_weather._last_success = mapped  # type: ignore[attr-defined]
+        fetch_weather._last_fetched = now  # type: ignore[attr-defined]
+        return mapped
+    except requests.exceptions.HTTPError as http_err:
+        logging.error("HTTP error fetching WeatherKit data: %s", http_err)
+        return fetch_weather._last_success  # type: ignore[attr-defined]
+    except Exception as exc:
+        logging.error("Error fetching WeatherKit data: %s", exc)
+        return fetch_weather._last_success  # type: ignore[attr-defined]
 
 
 # -----------------------------------------------------------------------------

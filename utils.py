@@ -1313,13 +1313,54 @@ def fetch_weather_icon(icon_code: str, size: int) -> Image.Image | None:
     if not icon_code:
         return None
     try:
-        url = f"https://openweathermap.org/img/wn/{icon_code}@2x.png"
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        icon = Image.open(BytesIO(response.content)).convert("RGBA")
-        return icon.resize((size, size), Image.ANTIALIAS)
-    except Exception as exc:  # pragma: no cover - network failures are non-fatal
-        logging.warning("Weather icon fetch failed: %s", exc)
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        palette = [
+            (255, 223, 99),
+            (129, 199, 212),
+            (255, 179, 71),
+            (176, 196, 222),
+            (255, 140, 105),
+            (152, 251, 152),
+            (221, 160, 221),
+        ]
+        color = palette[hash(icon_code) % len(palette)]
+
+        inset = max(2, size // 12)
+        draw.rounded_rectangle(
+            [(inset, inset), (size - inset, size - inset)],
+            radius=size // 5,
+            fill=(0, 0, 0, 180),
+        )
+        circle_radius = size // 3
+        center = (size // 2, size // 2)
+        draw.ellipse(
+            [
+                (center[0] - circle_radius, center[1] - circle_radius),
+                (center[0] + circle_radius, center[1] + circle_radius),
+            ],
+            fill=color + (220,),
+        )
+
+        label = (icon_code.replace("wk-", "").replace("-", " ") or "?").split()[0]
+        font_size = max(12, size // 4)
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+        except Exception:  # pragma: no cover - font availability varies
+            font = ImageFont.load_default()
+        text = label[:3].upper()
+        text_w, text_h = draw.textsize(text, font=font)
+        draw.text(
+            ((size - text_w) // 2, (size - text_h) // 2),
+            text,
+            font=font,
+            fill=(0, 0, 0),
+        )
+
+        return img
+    except Exception as exc:  # pragma: no cover - drawing failures are non-fatal
+        logging.warning("Weather icon render failed: %s", exc)
         return None
 
 
