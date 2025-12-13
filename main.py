@@ -35,6 +35,7 @@ gc = __import__('gc')
 
 
 _startup_warnings = []
+wifi_utils = None  # type: ignore[assignment]
 
 
 def _prepare_runtime_dir() -> None:
@@ -160,7 +161,14 @@ def _import_runtime_dependencies() -> None:
         temporary_display_led,
         toggle_brightness,
     )
-    import data_fetch
+    try:
+        import data_fetch
+    except ModuleNotFoundError as exc:
+        if exc.name == "jwt":
+            logging.error(
+                "Missing dependency 'PyJWT' (imported as 'jwt'); install with 'pip install \"PyJWT[crypto]\"'."
+            )
+        raise
     from services import wifi_utils
     from paths import resolve_storage_paths
 
@@ -710,8 +718,10 @@ def _finalize_shutdown() -> None:
         logging.info("🎬 Finalizing video…")
     _release_video_writer()
 
-    if ENABLE_WIFI_MONITOR:
-        wifi_utils.stop_monitor()
+    if ENABLE_WIFI_MONITOR and wifi_utils:
+        stop_monitor = getattr(wifi_utils, "stop_monitor", None)
+        if callable(stop_monitor):
+            stop_monitor()
 
     global _button_monitor_thread, _touch_monitor_thread
     if _button_monitor_thread and _button_monitor_thread.is_alive():
