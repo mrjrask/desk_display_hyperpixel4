@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import subprocess
+from cryptography.hazmat.primitives import serialization
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -52,8 +53,10 @@ def _initialise_env() -> None:
 
     try:
         from dotenv import load_dotenv  # type: ignore
+        from dotenv.main import DotenvParseError  # type: ignore
     except ImportError:
         load_dotenv = None
+        DotenvParseError = None
 
     candidate_paths = []
 
@@ -68,7 +71,22 @@ def _initialise_env() -> None:
         if not path.is_file():
             continue
         if load_dotenv is not None:
-            load_dotenv(path, override=False)
+            try:
+                load_dotenv(path, override=False)
+            except Exception as exc:  # pragma: no cover - defensive against bad env files
+                if DotenvParseError is not None and isinstance(exc, DotenvParseError):
+                    logging.warning(
+                        "Ignoring malformed lines while loading %s: %s; using simple parser instead",
+                        path,
+                        exc,
+                    )
+                else:
+                    logging.warning(
+                        "Failed to load %s with python-dotenv (%s); using simple parser instead",
+                        path,
+                        exc,
+                    )
+                _load_env_file(str(path))
         else:
             _load_env_file(str(path))
 
@@ -237,6 +255,21 @@ def _normalize_weatherkit_key(key_text: str) -> str:
     return key_text
 
 
+def _validate_weatherkit_private_key(key_text: str, source: str) -> Optional[str]:
+    try:
+        serialization.load_pem_private_key(
+            key_text.encode("utf-8"), password=None
+        )
+        return key_text
+    except Exception as exc:  # pragma: no cover - validation only
+        logging.error(
+            "WeatherKit private key from %s is not valid PEM; check newline formatting or contents: %s",
+            source,
+            exc,
+        )
+        return None
+
+
 def _load_weatherkit_private_key() -> Optional[str]:
     key_text = os.environ.get("WEATHERKIT_PRIVATE_KEY")
     key_path = os.environ.get("WEATHERKIT_PRIVATE_KEY_PATH")
@@ -244,12 +277,18 @@ def _load_weatherkit_private_key() -> Optional[str]:
     if key_path:
         try:
             with open(key_path, "r", encoding="utf-8") as f:
-                return f.read()
+                contents = f.read()
+                return _validate_weatherkit_private_key(
+                    contents, "WEATHERKIT_PRIVATE_KEY_PATH"
+                )
         except Exception as exc:
             logging.error("Failed to read WEATHERKIT_PRIVATE_KEY_PATH: %s", exc)
 
     if key_text:
-        return _normalize_weatherkit_key(key_text)
+        normalized = _normalize_weatherkit_key(key_text)
+        return _validate_weatherkit_private_key(
+            normalized, "WEATHERKIT_PRIVATE_KEY"
+        )
     return None
 
 

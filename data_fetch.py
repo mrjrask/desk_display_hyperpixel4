@@ -413,7 +413,9 @@ def _fetch_weatherkit(now: datetime.datetime) -> Optional[dict]:
 
 def _fetch_openweathermap(now: datetime.datetime) -> Optional[dict]:
     if not OWM_API_KEY:
-        logging.error("OpenWeatherMap API key missing; cannot fetch backup weather data")
+        logging.warning(
+            "OpenWeatherMap API key missing; skipping backup weather fetch"
+        )
         return None
 
     params = {
