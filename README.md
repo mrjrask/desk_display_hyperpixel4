@@ -453,6 +453,11 @@ export GOOGLE_MAPS_API_KEY="your-google-maps-key"
 Or copy `.env.example` to `.env` and load it with your preferred process manager or a tool such as
 [`python-dotenv`](https://github.com/theskumar/python-dotenv).
 
+**WeatherKit PEM tips:** if you store the `.p8` key in an environment variable, keep real newlines
+between the `-----BEGIN` / `-----END` lines. Converting newlines to `\n`, copying the file path into
+`WEATHERKIT_PRIVATE_KEY`, or using a CRLF-wrapped file will cause cryptography to raise
+`MalformedFraming`/`Unable to load PEM file` errors.
+
 ---
 
 ## Images & Fonts

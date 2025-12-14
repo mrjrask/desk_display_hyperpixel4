@@ -220,6 +220,23 @@ def _get_owm_api_key(ssid: Optional[str]) -> Optional[str]:
 OWM_API_KEY = _get_owm_api_key(CURRENT_SSID)
 
 
+def _normalize_weatherkit_key(key_text: str) -> str:
+    stripped = key_text.strip()
+
+    if "\\n" in key_text and "\n" not in key_text:
+        logging.warning(
+            "WEATHERKIT_PRIVATE_KEY contains literal \\n; converting to newlines"
+        )
+        key_text = key_text.replace("\\n", "\n")
+
+    if stripped.endswith(".p8") and "BEGIN" not in key_text:
+        logging.warning(
+            "WEATHERKIT_PRIVATE_KEY looks like a path; set WEATHERKIT_PRIVATE_KEY_PATH instead"
+        )
+
+    return key_text
+
+
 def _load_weatherkit_private_key() -> Optional[str]:
     key_text = os.environ.get("WEATHERKIT_PRIVATE_KEY")
     key_path = os.environ.get("WEATHERKIT_PRIVATE_KEY_PATH")
@@ -232,7 +249,7 @@ def _load_weatherkit_private_key() -> Optional[str]:
             logging.error("Failed to read WEATHERKIT_PRIVATE_KEY_PATH: %s", exc)
 
     if key_text:
-        return key_text
+        return _normalize_weatherkit_key(key_text)
     return None
 
 
