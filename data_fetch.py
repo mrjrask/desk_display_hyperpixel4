@@ -10,6 +10,7 @@ import csv
 import datetime
 import io
 import logging
+import os
 import socket
 import time
 from typing import Optional
@@ -17,6 +18,8 @@ from typing import Optional
 import pytz
 import requests
 import jwt
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 
 from services.http_client import NHL_HEADERS, get_session
 from screens.nba_scoreboard import _fetch_games_for_date as _nba_fetch_games_for_date
@@ -56,6 +59,20 @@ _STATSAPI_DNS_RECHECK_SECONDS = 600
 _weather_token: Optional[str] = None
 _weather_token_expiration: Optional[datetime.datetime] = None
 _OWM_URL = "https://api.openweathermap.org/data/3.0/onecall"
+
+
+def load_weatherkit_private_key(key_path: str):
+    with open(key_path, "rb") as f:
+        pem_bytes = f.read()
+
+    # normalize line endings; ensure trailing newline
+    pem_bytes = pem_bytes.replace(b"\r\n", b"\n").strip() + b"\n"
+
+    return serialization.load_pem_private_key(
+        pem_bytes,
+        password=None,
+        backend=default_backend(),
+    )
 
 
 class _ConditionMapping:
@@ -109,8 +126,23 @@ def _generate_weatherkit_token() -> Optional[str]:
     if not WEATHERKIT_KEY_ID or not WEATHERKIT_TEAM_ID or not WEATHERKIT_SERVICE_ID:
         logging.error("WeatherKit credentials missing; cannot fetch weather data")
         return None
-    if not WEATHERKIT_PRIVATE_KEY:
-        logging.error("WeatherKit private key missing; cannot fetch weather data")
+
+    key_path = os.environ.get("WEATHERKIT_KEY_PATH")
+    signing_key = WEATHERKIT_PRIVATE_KEY
+
+    if key_path:
+        try:
+            signing_key = load_weatherkit_private_key(key_path)
+        except Exception as exc:  # pragma: no cover - depends on filesystem
+            logging.error(
+                "Failed to load WeatherKit key from WEATHERKIT_KEY_PATH: %s", exc
+            )
+            return None
+
+    if not signing_key:
+        logging.error(
+            "WeatherKit private key missing; set WEATHERKIT_KEY_PATH or WEATHERKIT_PRIVATE_KEY"
+        )
         return None
 
     now = datetime.datetime.utcnow()
@@ -126,7 +158,9 @@ def _generate_weatherkit_token() -> Optional[str]:
     }
 
     try:
-        _weather_token = jwt.encode(claims, WEATHERKIT_PRIVATE_KEY, algorithm="ES256", headers=headers)
+        _weather_token = jwt.encode(
+            claims, signing_key, algorithm="ES256", headers=headers
+        )
         _weather_token_expiration = now + datetime.timedelta(minutes=50)
         return _weather_token
     except Exception as exc:
