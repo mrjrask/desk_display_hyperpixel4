@@ -207,6 +207,12 @@ else:
 WEATHERKIT_TEAM_ID       = os.environ.get("WEATHERKIT_TEAM_ID")
 WEATHERKIT_KEY_ID        = os.environ.get("WEATHERKIT_KEY_ID")
 WEATHERKIT_SERVICE_ID    = os.environ.get("WEATHERKIT_SERVICE_ID")
+OWM_API_KEY              = _get_first_env_var(
+    "OWM_API_KEY",
+    "OWM_API_KEY_VERANO",
+    "OWM_API_KEY_WIFFY",
+    "OWM_API_KEY_DEFAULT",
+)
 
 
 def _load_weatherkit_private_key() -> Optional[str]:
