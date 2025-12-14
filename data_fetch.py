@@ -39,6 +39,7 @@ from config import (
     WEATHERKIT_SERVICE_ID,
     WEATHERKIT_TEAM_ID,
     WEATHER_REFRESH_MINUTES,
+    OWM_API_KEY,
 )
 
 # ─── Shared HTTP session ─────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ _STATSAPI_DNS_RECHECK_SECONDS = 600
 # -----------------------------------------------------------------------------
 _weather_token: Optional[str] = None
 _weather_token_expiration: Optional[datetime.datetime] = None
+_OWM_URL = "https://api.openweathermap.org/data/3.0/onecall"
 
 
 class _ConditionMapping:
@@ -272,21 +274,109 @@ def _map_alerts(payload: dict) -> list[dict]:
     return alerts
 
 
-def fetch_weather():
-    """Fetch weather exclusively from Apple WeatherKit."""
+def _map_owm_daily(payload: dict) -> list[dict]:
+    forecast: list[dict] = []
+    daily = payload.get("daily") if isinstance(payload, dict) else []
+    if not isinstance(daily, list):
+        return forecast
 
-    if not hasattr(fetch_weather, "_last_success"):
-        fetch_weather._last_success = None  # type: ignore[attr-defined]
-        fetch_weather._last_fetched = None  # type: ignore[attr-defined]
+    for day in daily:
+        if not isinstance(day, dict):
+            continue
+        temps = day.get("temp") if isinstance(day.get("temp"), dict) else {}
+        weather_list = day.get("weather") if isinstance(day.get("weather"), list) else []
+        condition = weather_list[0] if weather_list else {}
+        forecast.append(
+            {
+                "dt": day.get("dt"),
+                "sunrise": day.get("sunrise"),
+                "sunset": day.get("sunset"),
+                "temp": {
+                    "max": _convert_temperature(temps.get("max"), None),
+                    "min": _convert_temperature(temps.get("min"), None),
+                },
+                "rain": day.get("rain"),
+                "weather": [condition] if condition else [],
+            }
+        )
+    return forecast
 
-    now = datetime.datetime.utcnow()
-    last_fetched = getattr(fetch_weather, "_last_fetched", None)  # type: ignore[attr-defined]
-    if last_fetched and now - last_fetched < datetime.timedelta(minutes=WEATHER_REFRESH_MINUTES):
-        return fetch_weather._last_success  # type: ignore[attr-defined]
 
+def _map_owm_current(payload: dict, daily: list[dict]) -> dict:
+    current = payload.get("current", {}) if isinstance(payload, dict) else {}
+    weather_list = current.get("weather") if isinstance(current.get("weather"), list) else []
+    condition = weather_list[0] if weather_list else {}
+    sunrise = daily[0].get("sunrise") if daily else current.get("sunrise")
+    sunset = daily[0].get("sunset") if daily else current.get("sunset")
+
+    return {
+        "dt": current.get("dt"),
+        "temp": _convert_temperature(current.get("temp"), None),
+        "feels_like": _convert_temperature(current.get("feels_like"), None),
+        "humidity": current.get("humidity"),
+        "pressure": current.get("pressure"),
+        "wind_speed": _convert_speed(current.get("wind_speed"), None),
+        "wind_deg": current.get("wind_deg"),
+        "uvi": current.get("uvi"),
+        "sunrise": sunrise,
+        "sunset": sunset,
+        "weather": [condition] if condition else [],
+    }
+
+
+def _map_owm_hourly(payload: dict) -> list[dict]:
+    forecast: list[dict] = []
+    hourly = payload.get("hourly") if isinstance(payload, dict) else []
+    if not isinstance(hourly, list):
+        return forecast
+
+    for hour in hourly:
+        if not isinstance(hour, dict):
+            continue
+        weather_list = hour.get("weather") if isinstance(hour.get("weather"), list) else []
+        condition = weather_list[0] if weather_list else {}
+        forecast.append(
+            {
+                "dt": hour.get("dt"),
+                "temp": _convert_temperature(hour.get("temp"), None),
+                "feels_like": _convert_temperature(hour.get("feels_like"), None),
+                "humidity": hour.get("humidity"),
+                "pressure": hour.get("pressure"),
+                "wind_speed": _convert_speed(hour.get("wind_speed"), None),
+                "wind_deg": hour.get("wind_deg"),
+                "pop": hour.get("pop"),
+                "uvi": hour.get("uvi"),
+                "weather": [condition] if condition else [],
+            }
+        )
+    return forecast
+
+
+def _map_owm_alerts(payload: dict) -> list[dict]:
+    alerts_blob = payload.get("alerts") if isinstance(payload, dict) else []
+    alerts: list[dict] = []
+    if not isinstance(alerts_blob, list):
+        return alerts
+
+    for alert in alerts_blob:
+        if not isinstance(alert, dict):
+            continue
+        alerts.append(
+            {
+                "event": alert.get("event"),
+                "description": alert.get("description"),
+                "severity": alert.get("severity"),
+                "start": alert.get("start"),
+                "end": alert.get("end"),
+            }
+        )
+    return alerts
+
+
+def _fetch_weatherkit(now: datetime.datetime) -> Optional[dict]:
     token = _generate_weatherkit_token()
     if not token:
-        return fetch_weather._last_success  # type: ignore[attr-defined]
+        return None
 
     params = {
         "dataSets": "currentWeather,forecastDaily,forecastHourly,weatherAlerts",
@@ -305,7 +395,7 @@ def fetch_weather():
         payload = r.json()
 
         daily = _map_daily_forecast(payload)
-        mapped = {
+        return {
             "lat": LATITUDE,
             "lon": LONGITUDE,
             "daily": daily,
@@ -313,16 +403,70 @@ def fetch_weather():
             "current": _map_current_weather(payload, daily),
             "alerts": _map_alerts(payload),
         }
-
-        fetch_weather._last_success = mapped  # type: ignore[attr-defined]
-        fetch_weather._last_fetched = now  # type: ignore[attr-defined]
-        return mapped
     except requests.exceptions.HTTPError as http_err:
         logging.error("HTTP error fetching WeatherKit data: %s", http_err)
-        return fetch_weather._last_success  # type: ignore[attr-defined]
     except Exception as exc:
         logging.error("Error fetching WeatherKit data: %s", exc)
+
+    return None
+
+
+def _fetch_openweathermap(now: datetime.datetime) -> Optional[dict]:
+    if not OWM_API_KEY:
+        logging.error("OpenWeatherMap API key missing; cannot fetch backup weather data")
+        return None
+
+    params = {
+        "lat": LATITUDE,
+        "lon": LONGITUDE,
+        "appid": OWM_API_KEY,
+        "units": "imperial",
+        "lang": WEATHERKIT_LANGUAGE,
+        "exclude": "minutely",
+    }
+
+    try:
+        r = _session.get(_OWM_URL, params=params, timeout=10)
+        r.raise_for_status()
+        payload = r.json()
+
+        daily = _map_owm_daily(payload)
+        return {
+            "lat": payload.get("lat", LATITUDE),
+            "lon": payload.get("lon", LONGITUDE),
+            "daily": daily,
+            "hourly": _map_owm_hourly(payload),
+            "current": _map_owm_current(payload, daily),
+            "alerts": _map_owm_alerts(payload),
+        }
+    except requests.exceptions.HTTPError as http_err:
+        logging.error("HTTP error fetching OpenWeatherMap data: %s", http_err)
+    except Exception as exc:
+        logging.error("Error fetching OpenWeatherMap data: %s", exc)
+
+    return None
+
+
+def fetch_weather():
+    """Fetch weather from WeatherKit with OpenWeatherMap fallback."""
+
+    if not hasattr(fetch_weather, "_last_success"):
+        fetch_weather._last_success = None  # type: ignore[attr-defined]
+        fetch_weather._last_fetched = None  # type: ignore[attr-defined]
+
+    now = datetime.datetime.utcnow()
+    last_fetched = getattr(fetch_weather, "_last_fetched", None)  # type: ignore[attr-defined]
+    if last_fetched and now - last_fetched < datetime.timedelta(minutes=WEATHER_REFRESH_MINUTES):
         return fetch_weather._last_success  # type: ignore[attr-defined]
+
+    for fetcher in (_fetch_weatherkit, _fetch_openweathermap):
+        mapped = fetcher(now)
+        if mapped:
+            fetch_weather._last_success = mapped  # type: ignore[attr-defined]
+            fetch_weather._last_fetched = now  # type: ignore[attr-defined]
+            return mapped
+
+    return fetch_weather._last_success  # type: ignore[attr-defined]
 
 
 # -----------------------------------------------------------------------------
