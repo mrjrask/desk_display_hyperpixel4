@@ -191,6 +191,16 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
+        # Some environments require pointer movement before the cursor hides.
+        # Nudge the pointer and move it back to encourage the driver to apply
+        # the hidden cursor immediately.
+        try:
+            original_position = pygame.mouse.get_pos()
+            pygame.mouse.set_pos((original_position[0] + 1, original_position[1]))
+            pygame.mouse.set_pos(original_position)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
         try:
             pygame.event.set_grab(True)
         except Exception:  # pragma: no cover - optional dependency
