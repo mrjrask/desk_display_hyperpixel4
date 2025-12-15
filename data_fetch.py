@@ -288,7 +288,8 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
 
 
 def _map_alerts(payload: dict) -> list[dict]:
-    alerts_blob = (payload.get("weatherAlerts") or {}).get("alerts") if isinstance(payload, dict) else []
+    weather_alerts = payload.get("weatherAlerts") if isinstance(payload, dict) else {}
+    alerts_blob = weather_alerts.get("alerts") if isinstance(weather_alerts, dict) else []
     alerts: list[dict] = []
     if not isinstance(alerts_blob, list):
         return alerts
