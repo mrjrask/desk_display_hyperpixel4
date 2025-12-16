@@ -70,6 +70,20 @@ ALERT_ICON_COLORS = {
 }
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_round(value, default: int = 0) -> int:
+    try:
+        return int(round(float(value)))
+    except Exception:
+        return default
+
+
 def _pop_pct_from(entry):
     if not isinstance(entry, dict):
         return None
@@ -224,12 +238,12 @@ def draw_weather_screen_1(display, weather, transition=False):
     daily   = weather.get("daily", [{}])[0]
     hourly  = weather.get("hourly") if isinstance(weather.get("hourly"), list) else None
 
-    temp  = round(current.get("temp", 0))
+    temp  = _safe_round(current.get("temp"))
     desc  = current.get("weather", [{}])[0].get("description", "").title()
 
-    feels = round(current.get("feels_like", 0))
-    hi    = round(daily.get("temp", {}).get("max", 0))
-    lo    = round(daily.get("temp", {}).get("min", 0))
+    feels = _safe_round(current.get("feels_like"))
+    hi    = _safe_round(daily.get("temp", {}).get("max"))
+    lo    = _safe_round(daily.get("temp", {}).get("min"))
 
     clear_display(display)
     img  = Image.new("RGB", (WIDTH, HEIGHT), "black")
@@ -465,7 +479,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
         except Exception:
             uvi_val = None
         entry = {
-            "temp": round(hour.get("temp", 0)),
+            "temp": _safe_round(hour.get("temp")),
             "time": _format_hour_label(hour.get("dt"), index=len(forecast) + 1),
             "condition": _normalise_condition(hour),
             "icon": None,
@@ -718,7 +732,7 @@ def draw_weather_screen_2(display, weather, transition=False):
         items = []
 
     # Other details
-    wind_speed = round(current.get('wind_speed', 0))
+    wind_speed = _safe_round(current.get('wind_speed'))
     wind_dir = wind_direction(current.get('wind_deg'))
     wind_value = f"{wind_speed} mph"
     if wind_dir:
@@ -726,12 +740,15 @@ def draw_weather_screen_2(display, weather, transition=False):
 
     items += [
         ("Wind:",     wind_value),
-        ("Gust:",     f"{round(current.get('wind_gust',0))} mph"),
+        ("Gust:",     f"{_safe_round(current.get('wind_gust'))} mph"),
         ("Humidity:", f"{current.get('humidity',0)}%"),
-        ("Pressure:", f"{round(current.get('pressure',0)*0.0338639,2)} inHg"),
+        (
+            "Pressure:",
+            f"{round(_safe_float(current.get('pressure'))*0.0338639,2)} inHg",
+        ),
     ]
 
-    uvi = round(current.get("uvi", 0))
+    uvi = _safe_round(current.get("uvi"))
     uv_col = uv_index_color(uvi)
     items.append(("UV Index:", str(uvi), uv_col))
 
