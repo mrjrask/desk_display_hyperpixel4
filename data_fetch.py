@@ -193,6 +193,13 @@ def _convert_speed(value, unit_hint: Optional[str]):
     return round(val, 1)
 
 
+def _dict_section(payload: object, key: str) -> dict:
+    if not isinstance(payload, dict):
+        return {}
+    section = payload.get(key)
+    return section if isinstance(section, dict) else {}
+
+
 def _map_condition(code: Optional[str], is_daytime: bool) -> dict:
     if not code:
         return {"description": "Unknown", "icon": None}
@@ -209,11 +216,12 @@ def _map_condition(code: Optional[str], is_daytime: bool) -> dict:
 
 def _map_daily_forecast(payload: dict) -> list[dict]:
     forecast = []
-    days = (payload.get("forecastDaily") or {}).get("days") if isinstance(payload, dict) else []
+    forecast_daily = _dict_section(payload, "forecastDaily")
+    days = forecast_daily.get("days") if isinstance(forecast_daily.get("days"), list) else []
     if not isinstance(days, list):
         return forecast
 
-    metadata = (payload.get("forecastDaily") or {}).get("metadata") if isinstance(payload, dict) else {}
+    metadata = forecast_daily.get("metadata") if isinstance(forecast_daily.get("metadata"), dict) else {}
     units = metadata.get("units", {}) if isinstance(metadata, dict) else {}
     for day in days:
         if not isinstance(day, dict):
@@ -236,10 +244,11 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
 
 
 def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
-    current = payload.get("currentWeather", {}) if isinstance(payload, dict) else {}
-    metadata = current.get("metadata") if isinstance(current, dict) else {}
+    current = _dict_section(payload, "currentWeather")
+    metadata = current.get("metadata") if isinstance(current.get("metadata"), dict) else {}
     units = metadata.get("units", {}) if isinstance(metadata, dict) else {}
-    is_daylight = bool(current.get("isDaylight", True)) if isinstance(current, dict) else True
+    daylight_flag = current.get("isDaylight") if isinstance(current, dict) else True
+    is_daylight = bool(daylight_flag) if isinstance(daylight_flag, bool) else True
     sunrise = daily[0].get("sunrise") if daily else None
     sunset = daily[0].get("sunset") if daily else None
     condition = _map_condition(current.get("conditionCode"), is_daylight)
@@ -260,12 +269,13 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
 
 
 def _map_hourly_forecast(payload: dict) -> list[dict]:
-    hours = (payload.get("forecastHourly") or {}).get("hours") if isinstance(payload, dict) else []
+    forecast_hourly = _dict_section(payload, "forecastHourly")
+    hours = forecast_hourly.get("hours") if isinstance(forecast_hourly.get("hours"), list) else []
     forecast = []
     if not isinstance(hours, list):
         return forecast
 
-    metadata = (payload.get("forecastHourly") or {}).get("metadata") if isinstance(payload, dict) else {}
+    metadata = forecast_hourly.get("metadata") if isinstance(forecast_hourly.get("metadata"), dict) else {}
     units = metadata.get("units", {}) if isinstance(metadata, dict) else {}
 
     for hour in hours:
@@ -291,7 +301,7 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
 
 
 def _map_alerts(payload: dict) -> list[dict]:
-    weather_alerts = payload.get("weatherAlerts") if isinstance(payload, dict) else {}
+    weather_alerts = _dict_section(payload, "weatherAlerts")
     alerts_blob = weather_alerts.get("alerts") if isinstance(weather_alerts, dict) else []
     alerts: list[dict] = []
     if not isinstance(alerts_blob, list):
