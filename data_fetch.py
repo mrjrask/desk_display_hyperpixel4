@@ -213,7 +213,8 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
     if not isinstance(days, list):
         return forecast
 
-    units = ((payload.get("forecastDaily") or {}).get("metadata") or {}).get("units", {}) if isinstance(payload, dict) else {}
+    metadata = (payload.get("forecastDaily") or {}).get("metadata") if isinstance(payload, dict) else {}
+    units = metadata.get("units", {}) if isinstance(metadata, dict) else {}
     for day in days:
         if not isinstance(day, dict):
             continue
@@ -236,7 +237,8 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
 
 def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
     current = payload.get("currentWeather", {}) if isinstance(payload, dict) else {}
-    units = (current.get("metadata", {}) or {}).get("units", {}) if isinstance(current, dict) else {}
+    metadata = current.get("metadata") if isinstance(current, dict) else {}
+    units = metadata.get("units", {}) if isinstance(metadata, dict) else {}
     is_daylight = bool(current.get("isDaylight", True)) if isinstance(current, dict) else True
     sunrise = daily[0].get("sunrise") if daily else None
     sunset = daily[0].get("sunset") if daily else None
@@ -263,7 +265,8 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
     if not isinstance(hours, list):
         return forecast
 
-    units = ((payload.get("forecastHourly") or {}).get("metadata") or {}).get("units", {}) if isinstance(payload, dict) else {}
+    metadata = (payload.get("forecastHourly") or {}).get("metadata") if isinstance(payload, dict) else {}
+    units = metadata.get("units", {}) if isinstance(metadata, dict) else {}
 
     for hour in hours:
         if not isinstance(hour, dict):
