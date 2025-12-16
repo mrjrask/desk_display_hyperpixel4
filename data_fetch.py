@@ -59,6 +59,39 @@ _STATSAPI_DNS_RECHECK_SECONDS = 600
 _weather_token: Optional[str] = None
 _weather_token_expiration: Optional[datetime.datetime] = None
 _OWM_URL = "https://api.openweathermap.org/data/3.0/onecall"
+_WEATHER_BACKOFF_UNTIL: dict[str, datetime.datetime] = {}
+_WEATHER_BACKOFF_LOGGED: set[str] = set()
+_WEATHER_BACKOFF_DEFAULT = datetime.timedelta(minutes=10)
+_WEATHER_BACKOFF_RATELIMIT = datetime.timedelta(minutes=90)
+
+
+def _set_weather_backoff(source: str, until: datetime.datetime):
+    _WEATHER_BACKOFF_UNTIL[source] = until
+    _WEATHER_BACKOFF_LOGGED.discard(source)
+
+
+def _clear_weather_backoff(source: str):
+    _WEATHER_BACKOFF_UNTIL.pop(source, None)
+    _WEATHER_BACKOFF_LOGGED.discard(source)
+
+
+def _should_skip_weather_source(source: str, now: datetime.datetime) -> bool:
+    until = _WEATHER_BACKOFF_UNTIL.get(source)
+    if not until:
+        return False
+    if now >= until:
+        _WEATHER_BACKOFF_UNTIL.pop(source, None)
+        _WEATHER_BACKOFF_LOGGED.discard(source)
+        return False
+
+    if source not in _WEATHER_BACKOFF_LOGGED:
+        logging.warning(
+            "Skipping %s weather fetch until %s due to previous errors",
+            source,
+            until.isoformat(),
+        )
+        _WEATHER_BACKOFF_LOGGED.add(source)
+    return True
 
 
 def load_weatherkit_private_key(key_path: str):
@@ -442,6 +475,15 @@ def _fetch_weatherkit(now: datetime.datetime) -> Optional[dict]:
         r.raise_for_status()
         payload = r.json()
 
+        if not isinstance(payload, dict):
+            logging.error(
+                "WeatherKit response is not a JSON object (type %s); suppressing requests for %s minutes",
+                type(payload).__name__,
+                int(_WEATHER_BACKOFF_DEFAULT.total_seconds() // 60),
+            )
+            _set_weather_backoff("weatherkit", now + _WEATHER_BACKOFF_DEFAULT)
+            return None
+
         daily = _map_daily_forecast(payload)
         return {
             "lat": LATITUDE,
@@ -453,8 +495,11 @@ def _fetch_weatherkit(now: datetime.datetime) -> Optional[dict]:
         }
     except requests.exceptions.HTTPError as http_err:
         logging.error("HTTP error fetching WeatherKit data: %s", http_err)
+        retry_for = _WEATHER_BACKOFF_RATELIMIT if getattr(http_err.response, "status_code", None) == 429 else _WEATHER_BACKOFF_DEFAULT
+        _set_weather_backoff("weatherkit", now + retry_for)
     except Exception as exc:
         logging.error("Error fetching WeatherKit data: %s", exc)
+        _set_weather_backoff("weatherkit", now + _WEATHER_BACKOFF_DEFAULT)
 
     return None
 
@@ -480,6 +525,15 @@ def _fetch_openweathermap(now: datetime.datetime) -> Optional[dict]:
         r.raise_for_status()
         payload = r.json()
 
+        if not isinstance(payload, dict):
+            logging.error(
+                "OpenWeatherMap response is not a JSON object (type %s); suppressing requests for %s minutes",
+                type(payload).__name__,
+                int(_WEATHER_BACKOFF_DEFAULT.total_seconds() // 60),
+            )
+            _set_weather_backoff("openweathermap", now + _WEATHER_BACKOFF_DEFAULT)
+            return None
+
         daily = _map_owm_daily(payload)
         return {
             "lat": payload.get("lat", LATITUDE),
@@ -490,9 +544,20 @@ def _fetch_openweathermap(now: datetime.datetime) -> Optional[dict]:
             "alerts": _map_owm_alerts(payload),
         }
     except requests.exceptions.HTTPError as http_err:
-        logging.error("HTTP error fetching OpenWeatherMap data: %s", http_err)
+        status = getattr(http_err.response, "status_code", None)
+        if status == 429:
+            logging.error(
+                "HTTP error fetching OpenWeatherMap data: %s (suppressing for %s minutes)",
+                http_err,
+                int(_WEATHER_BACKOFF_RATELIMIT.total_seconds() // 60),
+            )
+            _set_weather_backoff("openweathermap", now + _WEATHER_BACKOFF_RATELIMIT)
+        else:
+            logging.error("HTTP error fetching OpenWeatherMap data: %s", http_err)
+            _set_weather_backoff("openweathermap", now + _WEATHER_BACKOFF_DEFAULT)
     except Exception as exc:
         logging.error("Error fetching OpenWeatherMap data: %s", exc)
+        _set_weather_backoff("openweathermap", now + _WEATHER_BACKOFF_DEFAULT)
 
     return None
 
@@ -509,9 +574,13 @@ def fetch_weather():
     if last_fetched and now - last_fetched < datetime.timedelta(minutes=WEATHER_REFRESH_MINUTES):
         return fetch_weather._last_success  # type: ignore[attr-defined]
 
-    for fetcher in (_fetch_weatherkit, _fetch_openweathermap):
+    for source, fetcher in (("weatherkit", _fetch_weatherkit), ("openweathermap", _fetch_openweathermap)):
+        if _should_skip_weather_source(source, now):
+            continue
+
         mapped = fetcher(now)
         if mapped:
+            _clear_weather_backoff(source)
             fetch_weather._last_success = mapped  # type: ignore[attr-defined]
             fetch_weather._last_fetched = now  # type: ignore[attr-defined]
             return mapped
@@ -609,6 +678,8 @@ _BULLS_TEAM_ID = str(NBA_TEAM_ID)
 _BULLS_TRICODE = (NBA_TEAM_TRICODE or "CHI").upper()
 _NBA_LOOKBACK_DAYS = 7
 _NBA_LOOKAHEAD_DAYS = 45
+_NBA_STANDINGS_BACKOFF_UNTIL: Optional[datetime.datetime] = None
+_NBA_STANDINGS_BACKOFF_LOGGED = False
 
 
 def _parse_nba_datetime(value):
@@ -1371,7 +1442,28 @@ def _fetch_nhl_team_standings_statsapi(team_abbr: str):
 # NBA — Bulls standings
 # -----------------------------------------------------------------------------
 def _fetch_nba_team_standings(team_tricode: str):
+    global _NBA_STANDINGS_BACKOFF_UNTIL, _NBA_STANDINGS_BACKOFF_LOGGED
+
+    now = datetime.datetime.utcnow()
+    if _NBA_STANDINGS_BACKOFF_UNTIL and now < _NBA_STANDINGS_BACKOFF_UNTIL:
+        if not _NBA_STANDINGS_BACKOFF_LOGGED:
+            logging.warning(
+                "Skipping NBA standings feed until %s; using ESPN fallback",
+                _NBA_STANDINGS_BACKOFF_UNTIL.isoformat(),
+            )
+            _NBA_STANDINGS_BACKOFF_LOGGED = True
+        fallback = _fetch_nba_team_standings_espn()
+        if fallback:
+            return fallback
+        logging.warning(
+            "NBA standings feed unavailable and ESPN fallback failed; returning placeholder"
+        )
+        return _empty_standings_record(team_tricode)
+
+    _NBA_STANDINGS_BACKOFF_LOGGED = False
+
     def _load_json() -> Optional[dict]:
+        nonlocal now
         for base in (
             "https://cdn.nba.com/static/json/liveData/standings",
             "https://nba-prod-us-east-1-media.s3.amazonaws.com/json/liveData/standings",
@@ -1395,8 +1487,21 @@ def _fetch_nba_team_standings(team_tricode: str):
                     logging.info(
                         "NBA standings fetched successfully from alternate base %s", base
                     )
+                _NBA_STANDINGS_BACKOFF_UNTIL = None
+                _NBA_STANDINGS_BACKOFF_LOGGED = False
                 return data
             except Exception as exc:
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status == 403:
+                    _NBA_STANDINGS_BACKOFF_UNTIL = now + datetime.timedelta(minutes=30)
+                    _NBA_STANDINGS_BACKOFF_LOGGED = False
+                    logging.warning(
+                        "NBA standings returned HTTP 403 from %s; suppressing until %s",
+                        base,
+                        _NBA_STANDINGS_BACKOFF_UNTIL.isoformat(),
+                    )
+                    return None
+
                 logging.error("Error fetching NBA standings from %s: %s", base, exc)
         return None
 
