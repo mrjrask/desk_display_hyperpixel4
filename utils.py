@@ -19,6 +19,7 @@ import subprocess
 import threading
 import time
 import queue
+from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -1318,60 +1319,164 @@ def get_mlb_abbreviation(team_name: str) -> str:
     return MLB_ABBREVIATIONS.get(team_name, team_name)
 
 # ─── Weather helpers ──────────────────────────────────────────────────────────
+_WEATHER_ICON_DIR = Path(__file__).resolve().parent / "images" / "WeatherKit"
+_WEATHER_ICON_FILENAME_MAP: dict[str, str] = {
+    "blizzard": "Blizzard.png",
+    "blowingsnow": "Snow.png",
+    "breezy": "Windy.png",
+    "clear": "Clear.png",
+    "cloudy": "Cloudy.png",
+    "drizzle": "Rain.png",
+    "dust": "Haze.png",
+    "extreme": "Clear.png",
+    "flurries": "Snow.png",
+    "fog": "Fog.png",
+    "freezingdrizzle": "Rain.png",
+    "freezingrain": "Rain.png",
+    "frigid": "Clear.png",
+    "hail": "Hail.png",
+    "haze": "Haze.png",
+    "heavyrain": "HeavyRain.png",
+    "heavysnow": "HeavySnow.png",
+    "hot": "Clear.png",
+    "hurricane": "Thunderstorms.png",
+    "isolatedthunderstorms": "Thunderstorms.png",
+    "mostlyclear": "MostlyClear.png",
+    "mostlycloudy": "Cloudy.png",
+    "partlycloudy": "PartlyCloudy.png",
+    "rain": "Rain.png",
+    "rainheavy": "HeavyRain.png",
+    "scatteredthunderstorms": "Thunderstorms.png",
+    "sleet": "Sleet.png",
+    "smoke": "Haze.png",
+    "snow": "Snow.png",
+    "snowheavy": "HeavySnow.png",
+    "strongstorms": "Thunderstorms.png",
+    "sunflurries": "Snow.png",
+    "sunshowers": "Rain.png",
+    "thunder": "Thunderstorms.png",
+    "thunderstorms": "Thunderstorms.png",
+    "tornado": "Thunderstorms.png",
+    "wind": "Windy.png",
+    "windy": "Windy.png",
+}
+
+_WEATHER_ICON_CACHE: dict[tuple[str, int], Image.Image | None] = {}
+
+
+def _normalize_weather_icon_key(icon_code: str) -> Optional[str]:
+    if not icon_code:
+        return None
+    key = str(icon_code).strip().lower()
+    if not key:
+        return None
+
+    for prefix in ("wk-",):
+        if key.startswith(prefix):
+            key = key[len(prefix) :]
+            break
+
+    for suffix in ("-day", "-night"):
+        if key.endswith(suffix):
+            key = key[: -len(suffix)]
+            break
+
+    return key.replace("_", "").replace("-", "").replace(" ", "")
+
+
+def _load_weatherkit_icon(icon_code: str, size: int) -> Image.Image | None:
+    normalized = _normalize_weather_icon_key(icon_code)
+    if not normalized:
+        return None
+
+    filename = _WEATHER_ICON_FILENAME_MAP.get(normalized)
+    if not filename:
+        return None
+
+    path = _WEATHER_ICON_DIR / filename
+    if not path.exists():
+        logging.warning("Weather icon %s not found at %s", icon_code, path)
+        return None
+
+    try:
+        icon = Image.open(path).convert("RGBA")
+        if icon.height != size:
+            ratio = size / float(icon.height)
+            icon = icon.resize((max(1, int(round(icon.width * ratio))), size), Image.ANTIALIAS)
+        return icon
+    except Exception as exc:  # pragma: no cover - image loading varies
+        logging.warning("Weather icon load failed for %s: %s", icon_code, exc)
+        return None
+
+
+def _render_weather_icon_placeholder(icon_code: str, size: int) -> Image.Image | None:
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    palette = [
+        (255, 223, 99),
+        (129, 199, 212),
+        (255, 179, 71),
+        (176, 196, 222),
+        (255, 140, 105),
+        (152, 251, 152),
+        (221, 160, 221),
+    ]
+    color = palette[hash(icon_code) % len(palette)]
+
+    inset = max(2, size // 12)
+    draw.rounded_rectangle(
+        [(inset, inset), (size - inset, size - inset)],
+        radius=size // 5,
+        fill=(0, 0, 0, 180),
+    )
+    circle_radius = size // 3
+    center = (size // 2, size // 2)
+    draw.ellipse(
+        [
+            (center[0] - circle_radius, center[1] - circle_radius),
+            (center[0] + circle_radius, center[1] + circle_radius),
+        ],
+        fill=color + (220,),
+    )
+
+    label = (icon_code.replace("wk-", "").replace("-", " ") or "?").split()[0]
+    font_size = max(12, size // 4)
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
+    except Exception:  # pragma: no cover - font availability varies
+        font = ImageFont.load_default()
+    text = label[:3].upper()
+    text_w, text_h = draw.textsize(text, font=font)
+    draw.text(
+        ((size - text_w) // 2, (size - text_h) // 2),
+        text,
+        font=font,
+        fill=(0, 0, 0),
+    )
+
+    return img
+
+
 @log_call
 def fetch_weather_icon(icon_code: str, size: int) -> Image.Image | None:
     if not icon_code:
         return None
-    try:
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
 
-        palette = [
-            (255, 223, 99),
-            (129, 199, 212),
-            (255, 179, 71),
-            (176, 196, 222),
-            (255, 140, 105),
-            (152, 251, 152),
-            (221, 160, 221),
-        ]
-        color = palette[hash(icon_code) % len(palette)]
+    cache_key = (icon_code, size)
+    if cache_key in _WEATHER_ICON_CACHE:
+        return _WEATHER_ICON_CACHE[cache_key]
 
-        inset = max(2, size // 12)
-        draw.rounded_rectangle(
-            [(inset, inset), (size - inset, size - inset)],
-            radius=size // 5,
-            fill=(0, 0, 0, 180),
-        )
-        circle_radius = size // 3
-        center = (size // 2, size // 2)
-        draw.ellipse(
-            [
-                (center[0] - circle_radius, center[1] - circle_radius),
-                (center[0] + circle_radius, center[1] + circle_radius),
-            ],
-            fill=color + (220,),
-        )
-
-        label = (icon_code.replace("wk-", "").replace("-", " ") or "?").split()[0]
-        font_size = max(12, size // 4)
+    icon = _load_weatherkit_icon(icon_code, size)
+    if icon is None:
         try:
-            font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
-        except Exception:  # pragma: no cover - font availability varies
-            font = ImageFont.load_default()
-        text = label[:3].upper()
-        text_w, text_h = draw.textsize(text, font=font)
-        draw.text(
-            ((size - text_w) // 2, (size - text_h) // 2),
-            text,
-            font=font,
-            fill=(0, 0, 0),
-        )
+            icon = _render_weather_icon_placeholder(icon_code, size)
+        except Exception as exc:  # pragma: no cover - drawing failures are non-fatal
+            logging.warning("Weather icon render failed: %s", exc)
+            icon = None
 
-        return img
-    except Exception as exc:  # pragma: no cover - drawing failures are non-fatal
-        logging.warning("Weather icon render failed: %s", exc)
-        return None
+    _WEATHER_ICON_CACHE[cache_key] = icon
+    return icon
 
 
 def uv_index_color(uvi: int) -> tuple[int, int, int]:

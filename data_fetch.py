@@ -249,7 +249,7 @@ def _map_condition(code: Optional[str], is_daytime: bool) -> dict:
         return {"description": "Unknown", "icon": None}
     mapping = _CONDITION_MAP.get(code) or _ConditionMapping(800, "Clear", code, "clear")
     suffix = "day" if is_daytime else "night"
-    icon_code = f"wk-{mapping.icon}-{suffix}"
+    icon_code = f"wk-{(code or mapping.icon)}-{suffix}"
     return {
         "id": mapping.weather_id,
         "main": mapping.main,
