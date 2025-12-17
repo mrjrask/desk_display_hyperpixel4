@@ -101,6 +101,25 @@ def _pop_pct_from(entry):
     return int(round(pop_val))
 
 
+def _is_snow_condition(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+
+    weather_list = entry.get("weather") if isinstance(entry.get("weather"), list) else []
+    weather = (weather_list or [{}])[0]
+    weather_id = weather.get("id")
+    weather_main = (weather.get("main") or "").strip().lower()
+
+    if weather_main == "snow":
+        return True
+    if isinstance(weather_id, int) and 600 <= weather_id < 700:
+        return True
+    if entry.get("snow"):
+        return True
+
+    return False
+
+
 def _normalise_alerts(weather: object) -> list:
     alerts = []
     if isinstance(weather, dict):
@@ -299,17 +318,10 @@ def draw_weather_screen_1(display, weather, transition=False):
 
     daily_weather_list = daily.get("weather") if isinstance(daily.get("weather"), list) else []
     daily_weather = (daily_weather_list or [{}])[0]
-    weather_id = daily_weather.get("id")
-    weather_main = (daily_weather.get("main") or "").strip().lower()
-    is_snow = False
-    if weather_main == "snow":
-        is_snow = True
-    elif isinstance(weather_id, int) and 600 <= weather_id < 700:
-        is_snow = True
-    elif daily.get("snow") or current.get("snow"):
-        is_snow = True
+    is_snow = _is_snow_condition(daily) or _is_snow_condition(current)
+    if not is_snow and next_hour:
+        is_snow = _is_snow_condition(next_hour)
 
-    precip_emoji = "❄" if is_snow else "💧"
     precip_percent = None
     if pop_pct is not None:
         precip_percent = f"{max(0, min(pop_pct, 100))}%"
@@ -361,9 +373,9 @@ def draw_weather_screen_1(display, weather, transition=False):
     side_font = FONT_WEATHER_DETAILS
     stack_gap = 2
     if precip_percent:
-        emoji_color = (173, 216, 230) if precip_emoji == "❄" else (135, 206, 250)
+        precip_color = (173, 216, 230) if is_snow else (135, 206, 250)
         icon_size = FONT_EMOJI.size if hasattr(FONT_EMOJI, "size") else 26
-        precip_icon = _render_precip_icon(is_snow, icon_size, emoji_color)
+        precip_icon = _render_precip_icon(is_snow, icon_size, precip_color)
         emoji_w, emoji_h = precip_icon.size
         pct_w, pct_h = draw.textsize(precip_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
@@ -375,7 +387,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         emoji_x = precip_x + (block_w - emoji_w) // 2
         pct_x = precip_x + (block_w - pct_w) // 2
         img.paste(precip_icon, (emoji_x, block_y), precip_icon)
-        draw.text((pct_x, block_y + emoji_h + stack_gap), precip_percent, font=side_font, fill=emoji_color)
+        draw.text((pct_x, block_y + emoji_h + stack_gap), precip_percent, font=side_font, fill=precip_color)
 
     if cloud_percent:
         cloud_emoji = "☁"
@@ -483,16 +495,15 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
             "time": _format_hour_label(hour.get("dt"), index=len(forecast) + 1),
             "condition": _normalise_condition(hour),
             "icon": None,
-            "weather_id": None,
             "pop": _pop_pct_from(hour),
             "wind_speed": wind_speed,
             "wind_dir": wind_dir,
             "uvi": uvi_val,
+            "is_snow": _is_snow_condition(hour),
         }
         weather_list = hour.get("weather") if isinstance(hour.get("weather"), list) else []
         if weather_list:
             entry["icon"] = weather_list[0].get("icon")
-            entry["weather_id"] = weather_list[0].get("id")
         forecast.append(entry)
     return forecast
 
@@ -515,8 +526,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     hours_to_show = len(forecast)
     title = f"Next {hours_to_show} Hours"
     title_w, title_h = draw.textsize(title, font=FONT_WEATHER_LABEL)
-    title_y = 6
-    draw.text(((WIDTH - title_w) // 2, title_y), title, font=FONT_WEATHER_LABEL, fill=(200, 200, 200))
+    draw.text(((WIDTH - title_w) // 2, 2), title, font=FONT_WEATHER_LABEL, fill=(200, 200, 200))
 
     gap = 4
     available_width = WIDTH - gap * (hours_to_show + 1)
@@ -524,7 +534,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     icon_cache: dict[str, Optional[Image.Image]] = {}
     icon_size = max(32, min(WEATHER_ICON_SIZE, col_w - 10))
 
-    card_top = title_y + title_h + 10
+    card_top = title_h + 6
     card_bottom = HEIGHT - 6
     card_height = card_bottom - card_top
     x_start = (WIDTH - (hours_to_show * col_w + gap * (hours_to_show - 1))) // 2
@@ -654,20 +664,9 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         pop = hour.get("pop")
         if pop is not None:
             clamped_pop = max(0, min(pop, 100))
-            pop_color = (135, 206, 250)
-            weather_id = hour.get("weather_id")
-            icon_code = hour.get("icon")
-            condition_text = hour.get("condition", "")
-            is_snow = False
-            if isinstance(weather_id, int) and 600 <= weather_id < 700:
-                is_snow = True
-            elif isinstance(icon_code, str) and icon_code.startswith("13"):
-                is_snow = True
-            elif isinstance(condition_text, str) and condition_text.lower().startswith("snow"):
-                is_snow = True
-
-            font_size = getattr(FONT_WEATHER_DETAILS_TINY, "size", 14)
-            pop_icon = _render_precip_icon(is_snow, font_size, pop_color)
+            is_snow = hour.get("is_snow", False)
+            pop_color = (173, 216, 230) if is_snow else (135, 206, 250)
+            pop_icon = _render_precip_icon(is_snow, 10, pop_color)
             pop_text = f"{clamped_pop}%"
             stat_items.append((pop_text, FONT_WEATHER_DETAILS_TINY, pop_color, pop_icon))
 
