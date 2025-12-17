@@ -429,8 +429,11 @@ def draw_weather_screen_1(display, weather, transition=False):
     return None
 
 
-def _format_hour_label(timestamp: Optional[int], *, index: int) -> str:
-    dt = timestamp_to_datetime(timestamp, CENTRAL_TIME)
+def _format_hour_label(timestamp: object | None, *, index: int) -> str:
+    if isinstance(timestamp, datetime.datetime):
+        dt = timestamp.astimezone(CENTRAL_TIME)
+    else:
+        dt = timestamp_to_datetime(timestamp, CENTRAL_TIME)
     if dt:
         return dt.strftime("%-I%p").lower()
     return f"+{index}h"
@@ -464,7 +467,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
     hourly = weather.get("hourly") if isinstance(weather.get("hourly"), list) else []
 
     now = datetime.datetime.now(CENTRAL_TIME)
-    fresh_hours: list[dict] = []
+    fresh_hours: list[tuple[Optional[datetime.datetime], dict]] = []
     for hour in hourly:
         if not isinstance(hour, dict):
             continue
@@ -473,10 +476,12 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
         if dt and dt < now - datetime.timedelta(minutes=30):
             continue
 
-        fresh_hours.append(hour)
+        fresh_hours.append((dt, hour))
+
+    fresh_hours.sort(key=lambda entry: entry[0] or (now + datetime.timedelta(days=1)))
 
     forecast = []
-    for hour in fresh_hours[:hours]:
+    for dt, hour in fresh_hours[:hours]:
         wind_speed = None
         try:
             wind_speed = int(round(float(hour.get("wind_speed", 0))))
@@ -492,7 +497,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
             uvi_val = None
         entry = {
             "temp": _safe_round(hour.get("temp")),
-            "time": _format_hour_label(hour.get("dt"), index=len(forecast) + 1),
+            "time": _format_hour_label(dt or hour.get("dt"), index=len(forecast) + 1),
             "condition": _normalise_condition(hour),
             "icon": None,
             "pop": _pop_pct_from(hour),
