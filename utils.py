@@ -1360,6 +1360,11 @@ _WEATHER_ICON_FILENAME_MAP: dict[str, str] = {
     "wind": "Windy.png",
     "windy": "Windy.png",
 }
+_WEATHER_ICON_NIGHT_OVERRIDES: dict[str, str] = {
+    "Clear.png": "Clear_night.png",
+    "MostlyClear.png": "MostlyClear_night.png",
+    "PartlyCloudy.png": "PartlyCloudy_night.png",
+}
 
 _WEATHER_ICON_CACHE: dict[tuple[str, int], Image.Image | None] = {}
 
@@ -1389,9 +1394,14 @@ def _load_weatherkit_icon(icon_code: str, size: int) -> Image.Image | None:
     if not normalized:
         return None
 
+    is_night = isinstance(icon_code, str) and icon_code.strip().lower().endswith("-night")
+
     filename = _WEATHER_ICON_FILENAME_MAP.get(normalized)
     if not filename:
         return None
+
+    if is_night:
+        filename = _WEATHER_ICON_NIGHT_OVERRIDES.get(filename, filename)
 
     path = _WEATHER_ICON_DIR / filename
     if not path.exists():

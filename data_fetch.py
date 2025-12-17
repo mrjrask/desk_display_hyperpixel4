@@ -42,6 +42,7 @@ from config import (
     WEATHERKIT_SERVICE_ID,
     WEATHERKIT_TEAM_ID,
     WEATHER_REFRESH_MINUTES,
+    WEATHER_MAX_STALE_MINUTES,
     OWM_API_KEY,
 )
 
@@ -594,7 +595,9 @@ def fetch_weather():
         fetch_weather._last_fetched = None  # type: ignore[attr-defined]
 
     now = datetime.datetime.utcnow()
+    max_stale = datetime.timedelta(minutes=WEATHER_MAX_STALE_MINUTES)
     last_fetched = getattr(fetch_weather, "_last_fetched", None)  # type: ignore[attr-defined]
+    last_success = getattr(fetch_weather, "_last_success", None)  # type: ignore[attr-defined]
     if last_fetched and now - last_fetched < datetime.timedelta(minutes=WEATHER_REFRESH_MINUTES):
         return fetch_weather._last_success  # type: ignore[attr-defined]
 
@@ -609,7 +612,17 @@ def fetch_weather():
             fetch_weather._last_fetched = now  # type: ignore[attr-defined]
             return mapped
 
-    return fetch_weather._last_success  # type: ignore[attr-defined]
+    if last_success and last_fetched:
+        age = now - last_fetched
+        if age <= max_stale:
+            return last_success
+        logging.warning(
+            "Weather data is stale (age %s > %s); discarding cached result",
+            age,
+            max_stale,
+        )
+
+    return None
 
 
 # -----------------------------------------------------------------------------

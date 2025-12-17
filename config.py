@@ -298,6 +298,7 @@ WEATHERKIT_API_URL      = os.environ.get(
 )
 WEATHERKIT_LANGUAGE     = os.environ.get("WEATHERKIT_LANGUAGE", "en")
 WEATHER_REFRESH_MINUTES = _int_from_env("WEATHER_REFRESH_MINUTES", 20)
+WEATHER_MAX_STALE_MINUTES = _int_from_env("WEATHER_MAX_STALE_MINUTES", 180)
 
 # Log weather location configuration for debugging sync issues
 logging.info(
