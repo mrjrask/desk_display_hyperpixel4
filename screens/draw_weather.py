@@ -48,8 +48,10 @@ from utils import (
     LED_INDICATOR_LEVEL,
     ScreenImage,
     clear_display,
+    fit_font,
     fetch_weather_icon,
     log_call,
+    measure_text,
     temporary_display_led,
     timestamp_to_datetime,
     uv_index_color,
@@ -642,10 +644,18 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         temp_y = layout.get("temp_y", trend_bottom)
 
         temp_val = hour.get("temp", 0)
-        temp_str = f"{temp_val}°"
-        temp_w, temp_h = draw.textsize(temp_str, font=FONT_CONDITION)
+        temp_str = f"{temp_val}°F"
+        temp_font = fit_font(
+            draw,
+            temp_str,
+            FONT_CONDITION,
+            max_width=max(1, col_w - 8),
+            max_height=max(1, trend_bottom - trend_top),
+            min_pt=10,
+        )
+        temp_w, temp_h = measure_text(draw, temp_str, temp_font)
         temp_text_y = max(trend_top, min(trend_bottom - temp_h, temp_y - temp_h // 2))
-        draw.text((cx - temp_w // 2, temp_text_y), temp_str, font=FONT_CONDITION, fill=(255, 255, 255))
+        draw.text((cx - temp_w // 2, temp_text_y), temp_str, font=temp_font, fill=(255, 255, 255))
 
         icon_code = hour.get("icon")
         icon_img = None
