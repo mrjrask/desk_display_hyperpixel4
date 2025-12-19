@@ -539,7 +539,16 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     hours_to_show = len(forecast)
     title = f"Next {hours_to_show} Hours"
     title_w, title_h = draw.textsize(title, font=FONT_WEATHER_LABEL)
-    draw.text(((WIDTH - title_w) // 2, 2), title, font=FONT_WEATHER_LABEL, fill=(200, 200, 200))
+
+    header_padding = 8
+    header_height = title_h + header_padding * 2
+    draw.rectangle((0, 0, WIDTH, header_height), fill=(8, 8, 12))
+    draw.text(
+        ((WIDTH - title_w) // 2, (header_height - title_h) // 2),
+        title,
+        font=FONT_WEATHER_LABEL,
+        fill=(200, 200, 200),
+    )
 
     gap = 4
     available_width = WIDTH - gap * (hours_to_show + 1)
@@ -547,7 +556,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     icon_cache: dict[str, Optional[Image.Image]] = {}
     icon_size = max(32, min(WEATHER_ICON_SIZE, col_w - 10))
 
-    card_top = title_h + 6
+    card_top = header_height + 6
     card_bottom = HEIGHT - 6
     card_height = card_bottom - card_top
     x_start = (WIDTH - (hours_to_show * col_w + gap * (hours_to_show - 1))) // 2
