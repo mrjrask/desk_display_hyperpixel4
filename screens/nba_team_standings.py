@@ -7,6 +7,25 @@ from screens.mlb_team_standings import (
 from utils import log_call
 
 
+def _preferred_rank(*ranks: object) -> object | None:
+    """Return the first positive, non-zero rank value."""
+    for rank in ranks:
+        try:
+            rank_int = int(rank)
+        except Exception:
+            rank_int = None
+
+        if rank_int is not None:
+            if rank_int > 0:
+                return rank_int
+            continue
+
+        if rank not in (None, ""):
+            return rank
+
+    return None
+
+
 @log_call
 def draw_nba_standings_screen1(
     display,
@@ -21,9 +40,18 @@ def draw_nba_standings_screen1(
     rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
     division_label = division_name or rec.get("division", {}).get("name")
     division_label = division_label or "Division"
+
+    division_rank = _preferred_rank(
+        rec.get("conferenceRank"),
+        rec.get("playoffRank"),
+        rec.get("divisionRank"),
+    )
+    if division_rank in (0, "0", None):
+        division_rank = "-"
+
     rec_for_display = {
         **rec,
-        "divisionRank": rec.get("divisionRank") or rec.get("conferenceRank"),
+        "divisionRank": division_rank,
     }
     return _base_screen1(
         display,

@@ -227,6 +227,23 @@ def _convert_speed(value, unit_hint: Optional[str]):
     return round(val, 1)
 
 
+def _convert_humidity(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        humidity = float(value)
+    except Exception:
+        return None
+    if humidity <= 1:
+        humidity *= 100
+    humidity = round(humidity)
+    if humidity < 0:
+        humidity = 0
+    if humidity > 100:
+        humidity = 100
+    return int(humidity)
+
+
 def _dict_section(payload: object, key: str) -> dict:
     if not isinstance(payload, dict):
         return {}
@@ -316,7 +333,7 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
                 "dt": hour.get("forecastStart"),
                 "temp": _convert_temperature(hour.get("temperature"), units.get("temperature")),
                 "feels_like": _convert_temperature(hour.get("temperatureApparent"), units.get("temperature")),
-                "humidity": hour.get("humidity"),
+                "humidity": _convert_humidity(hour.get("humidity")),
                 "pressure": hour.get("pressure"),
                 "wind_speed": _convert_speed(hour.get("windSpeed"), units.get("windSpeed")),
                 "wind_deg": hour.get("windDirection"),
@@ -347,7 +364,7 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
         "dt": current.get("asOf") or current.get("timestamp"),
         "temp": _convert_temperature(current.get("temperature"), units.get("temperature")),
         "feels_like": _convert_temperature(current.get("apparentTemperature"), units.get("temperature")),
-        "humidity": current.get("humidity"),
+        "humidity": _convert_humidity(current.get("humidity")),
         "pressure": current.get("pressure"),
         "wind_speed": _convert_speed(current.get("windSpeed"), units.get("windSpeed")),
         "wind_deg": current.get("windDirection"),
@@ -1486,6 +1503,24 @@ def _fetch_nhl_team_standings_statsapi(team_abbr: str):
 # -----------------------------------------------------------------------------
 # NBA — Bulls standings
 # -----------------------------------------------------------------------------
+def _best_standings_rank(*values: object) -> object | None:
+    for value in values:
+        try:
+            int_value = int(value)
+        except Exception:
+            int_value = None
+
+        if int_value is not None:
+            if int_value > 0:
+                return int_value
+            continue
+
+        if value not in (None, ""):
+            return value
+
+    return None
+
+
 def _fetch_nba_team_standings(team_tricode: str):
     global _NBA_STANDINGS_BACKOFF_UNTIL, _NBA_STANDINGS_BACKOFF_LOGGED
 
@@ -1574,11 +1609,17 @@ def _fetch_nba_team_standings(team_tricode: str):
                 or entry.get("gamesBehindDivision")
             )
 
-            conference_rank = (
-                entry.get("confRank")
-                or entry.get("playoffRank")
-                or (entry.get("teamConference") or {}).get("rank")
-                or entry.get("playoffSeed")
+            conference_rank = _best_standings_rank(
+                entry.get("confRank"),
+                entry.get("playoffRank"),
+                (entry.get("teamConference") or {}).get("rank"),
+                entry.get("playoffSeed"),
+            )
+
+            division_rank = _best_standings_rank(
+                entry.get("divisionRank"),
+                (entry.get("teamDivision") or {}).get("rank"),
+                conference_rank,
             )
 
             splits = _extract_split_records(
@@ -1589,9 +1630,7 @@ def _fetch_nba_team_standings(team_tricode: str):
 
             return {
                 "leagueRecord": record,
-                "divisionRank": entry.get("divisionRank")
-                or (entry.get("teamDivision") or {}).get("rank")
-                or conference_rank,
+                "divisionRank": division_rank,
                 "divisionGamesBack": division_gb,
                 "wildCardGamesBack": None,
                 "streak": {"streakCode": streak_code or "-"},

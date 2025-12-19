@@ -52,7 +52,7 @@ def draw_nhl_standings_screen1(
         conference_label=None,
         show_conference_rank=False,
         record_details_fn=_record_line,
-        rank_font=rank_font,
+        last_place_rank=None,
         transition=transition,
     )
 
