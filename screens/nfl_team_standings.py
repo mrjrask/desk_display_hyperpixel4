@@ -14,6 +14,7 @@ def draw_nfl_standings_screen1(display, rec, logo_path, division_name, *, transi
         rec,
         logo_path,
         division_name,
+        wl_font_scale=1.3,
         show_games_back=False,
         show_wild_card=False,
         transition=transition,

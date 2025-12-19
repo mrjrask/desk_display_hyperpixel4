@@ -13,7 +13,7 @@ import os
 import time
 from typing import Any, Mapping, Sequence
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from config import (
     WIDTH,
@@ -97,6 +97,27 @@ def _format_record_values(record: Mapping[str, Any], *, ot_label: str = "OT") ->
     return f"{base}{ot_txt}"
 
 
+def _scaled_font(font: ImageFont.ImageFont, scale: float | None) -> ImageFont.ImageFont:
+    """Return ``font`` scaled by ``scale`` when possible."""
+
+    if scale in (None, 1):
+        return font
+
+    try:
+        base_size = getattr(font, "size", None)
+        path = getattr(font, "path", None)
+        if not base_size or not path or scale is None or scale <= 0:
+            return font
+
+        scaled_size = max(1, int(round(base_size * scale)))
+        if scaled_size == base_size:
+            return font
+
+        return ImageFont.truetype(path, scaled_size)
+    except Exception:
+        return font
+
+
 def format_games_back(gb: Any) -> str:
     """
     Convert raw games-back (float) into display string:
@@ -122,6 +143,8 @@ def draw_standings_screen1(
     logo_path: str,
     division_name: str,
     *,
+    wl_font: ImageFont.ImageFont | None = None,
+    wl_font_scale: float | None = None,
     show_games_back: bool = True,
     show_wild_card: bool = True,
     show_streak: bool = False,
@@ -212,8 +235,9 @@ def draw_standings_screen1(
                 wc_txt = f"{base} WCGB"
 
     # Lines to draw
+    wl_font = wl_font or _scaled_font(FONT_STAND1_WL, wl_font_scale)
     lines: list[tuple[str, Any]] = [
-        (wl_txt, FONT_STAND1_WL),
+        (wl_txt, wl_font),
     ]
     if points_txt:
         lines.append((points_txt, FONT_STAND1_GB_VALUE))
