@@ -809,6 +809,9 @@ FONT_STOCK_TEXT = _load_screen_font("vrnof", "text", "DejaVuSans.ttf", 17)
 # Standings fonts...
 FONT_STAND1_WL = _load_screen_font("mlb_standings", "stand1_wl", "DejaVuSans-Bold.ttf", 34)
 FONT_STAND1_RANK = _load_screen_font("mlb_standings", "stand1_rank", "DejaVuSans.ttf", 28)
+FONT_STAND1_RANK_COMPACT = _load_screen_font(
+    "mlb_standings", "stand1_rank_compact", "DejaVuSans.ttf", 20
+)
 FONT_STAND1_GB_LABEL = _load_screen_font("mlb_standings", "stand1_gb_label", "DejaVuSans.ttf", 22)
 FONT_STAND1_WCGB_LABEL = _load_screen_font(
     "mlb_standings", "stand1_wcgb_label", "DejaVuSans.ttf", 22
