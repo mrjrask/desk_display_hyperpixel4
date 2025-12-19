@@ -153,6 +153,42 @@ def test_weather_missing_values_use_fallbacks(monkeypatch):
     assert all(text != "0°" for text in temp_texts)
 
 
+def test_weatherkit_uses_alternate_daily_temp_fields(monkeypatch):
+    payload = {
+        "currentWeather": {
+            "asOf": 1730000000,
+            "temperature": 22,
+            "apparentTemperature": 24,
+            "humidity": 50,
+            "pressure": 1010,
+            "windSpeed": 6,
+            "windDirection": 200,
+            "uvIndex": 5,
+            "conditionCode": "Cloudy",
+            "isDaylight": True,
+        },
+        "forecastDaily": {
+            "days": [
+                {
+                    "forecastStart": 1730000000,
+                    "sunriseTime": 1730022000,
+                    "sunsetTime": 1730061600,
+                    "conditionCode": "Cloudy",
+                    "temperatureMax": 25,
+                    "temperatureMin": 15,
+                }
+            ]
+        },
+    }
+
+    daily = data_fetch._map_daily_forecast(payload)
+    current = data_fetch._map_current_weather(payload, daily)
+
+    assert daily[0]["temp"]["max"] == pytest.approx(77.0)
+    assert daily[0]["temp"]["min"] == pytest.approx(59.0)
+    assert current["feels_like"] == pytest.approx(75.2)
+
+
 def test_weather_screen_two_formats_decimal_humidity(monkeypatch):
     recorded_text = []
     original_text = ImageDraw.ImageDraw.text
