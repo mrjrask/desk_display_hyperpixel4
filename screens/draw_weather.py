@@ -176,12 +176,16 @@ def _render_precip_icon(is_snow: bool, size: int, color: Tuple[int, int, int]) -
     icon_draw = ImageDraw.Draw(icon)
 
     if not is_snow:
-        # First try to render the Noto Color Emoji droplet for a polished look.
+        # Optionally draw the emoji glyph when it exists, but always render the vector
+        # droplet to guarantee a visible icon when emoji fonts are missing or blank.
         try:
-            icon_draw.text((size / 2, size / 2), "💧", font=FONT_EMOJI, anchor="mm")
-            return icon
+            bbox = icon_draw.textbbox((size / 2, size / 2), "💧", font=FONT_EMOJI, anchor="mm")
+            glyph_width = (bbox[2] - bbox[0]) if bbox else 0
+            glyph_height = (bbox[3] - bbox[1]) if bbox else 0
+            if glyph_width > 0 and glyph_height > 0:
+                icon_draw.text((size / 2, size / 2), "💧", font=FONT_EMOJI, anchor="mm")
         except Exception:
-            # Fall back to a vector droplet if emoji rendering isn't available.
+            # Ignore emoji rendering issues and fall back to vector only.
             pass
 
     if is_snow:
@@ -374,9 +378,13 @@ def draw_weather_screen_1(display, weather, transition=False):
     stack_gap = 2
     if precip_percent:
         precip_color = (173, 216, 230) if is_snow else (135, 206, 250)
-        icon_size = FONT_EMOJI.size if hasattr(FONT_EMOJI, "size") else 26
+        fallback_icon_size = 26
+        icon_size_attr = FONT_EMOJI.size if hasattr(FONT_EMOJI, "size") else fallback_icon_size
+        icon_size = icon_size_attr or fallback_icon_size
         precip_icon = _render_precip_icon(is_snow, icon_size, precip_color)
         emoji_w, emoji_h = precip_icon.size
+        if emoji_w <= 0 or emoji_h <= 0:
+            emoji_w = emoji_h = icon_size
         pct_w, pct_h = draw.textsize(precip_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
