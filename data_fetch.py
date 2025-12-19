@@ -364,6 +364,15 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
 
     condition = _map_condition(current.get("conditionCode"), is_daylight)
 
+    cloud_cover = current.get("cloudCover")
+    clouds: float | None
+    try:
+        clouds = float(cloud_cover) * 100
+    except (TypeError, ValueError):
+        clouds = None
+    if clouds is not None:
+        clouds = max(0.0, min(clouds, 100.0))
+
     return {
         "dt": current.get("asOf") or current.get("timestamp"),
         "temp": _convert_temperature(current.get("temperature"), temp_unit),
@@ -373,6 +382,7 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
         "wind_speed": _convert_speed(current.get("windSpeed"), units.get("windSpeed")),
         "wind_deg": current.get("windDirection"),
         "uvi": current.get("uvIndex"),
+        "clouds": clouds,
         "sunrise": sunrise,
         "sunset": sunset,
         "weather": [condition],
@@ -436,6 +446,14 @@ def _map_owm_current(payload: dict, daily: list[dict]) -> dict:
     sunrise = daily[0].get("sunrise") if daily else current.get("sunrise")
     sunset = daily[0].get("sunset") if daily else current.get("sunset")
 
+    clouds: float | None
+    try:
+        clouds = float(current.get("clouds"))
+    except (TypeError, ValueError):
+        clouds = None
+    if clouds is not None:
+        clouds = max(0.0, min(clouds, 100.0))
+
     return {
         "dt": current.get("dt"),
         "temp": _convert_temperature(current.get("temp"), None),
@@ -445,6 +463,7 @@ def _map_owm_current(payload: dict, daily: list[dict]) -> dict:
         "wind_speed": _convert_speed(current.get("wind_speed"), None),
         "wind_deg": current.get("wind_deg"),
         "uvi": current.get("uvi"),
+        "clouds": clouds,
         "sunrise": sunrise,
         "sunset": sunset,
         "weather": [condition] if condition else [],
