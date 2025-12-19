@@ -147,6 +147,8 @@ def draw_standings_screen1(
     wl_font_scale: float | None = None,
     show_games_back: bool = True,
     show_wild_card: bool = True,
+    gb_label: str | None = "GB",
+    wild_card_label: str | None = "WCGB",
     show_streak: bool = False,
     ot_label: str = "OT",
     points_label: str | None = None,
@@ -213,7 +215,12 @@ def draw_standings_screen1(
     gb_txt = None
     if show_games_back:
         gb_raw = rec.get("divisionGamesBack", "-")
-        gb_txt = f"{format_games_back(gb_raw)} GB" if gb_raw != "-" else "- GB"
+        gb_label_txt = f" {gb_label}" if gb_label else ""
+        gb_txt = (
+            f"{format_games_back(gb_raw)}{gb_label_txt}"
+            if gb_raw != "-"
+            else f"-{gb_label_txt}"
+        )
 
     # WCGB
     wc_txt = None
@@ -222,17 +229,18 @@ def draw_standings_screen1(
         wc_rank = rec.get("wildCardRank")
         if wc_raw is not None:
             base = format_games_back(wc_raw)
+            wc_label_txt = f" {wild_card_label}" if wild_card_label else ""
             try:
                 rank_int = int(wc_rank)
             except Exception:
                 rank_int = None
 
             if wc_raw == 0:
-                wc_txt = "-- WCGB"
+                wc_txt = f"--{wc_label_txt}"
             elif rank_int and rank_int <= 3:
-                wc_txt = f"+{base} WCGB"
+                wc_txt = f"+{base}{wc_label_txt}"
             else:
-                wc_txt = f"{base} WCGB"
+                wc_txt = f"{base}{wc_label_txt}"
 
     # Lines to draw
     wl_font = wl_font or _scaled_font(FONT_STAND1_WL, wl_font_scale)
