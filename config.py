@@ -702,6 +702,9 @@ FONT_WEATHER_DETAILS_SMALL_BOLD = _load_screen_font(
 FONT_WEATHER_DETAILS_TINY = _load_screen_font(
     "weather", "details_tiny", "DejaVuSans.ttf", 12
 )
+FONT_WEATHER_DETAILS_MICRO = _load_screen_font(
+    "weather", "details_micro", "DejaVuSans.ttf", 11
+)
 FONT_WEATHER_LABEL = _load_screen_font("weather", "label", "DejaVuSans.ttf", 18)
 FONT_EMOJI_SMALL = _load_screen_emoji_font("shared", "emoji_small", 18)
 

@@ -35,6 +35,7 @@ from config import (
     FONT_WEATHER_DETAILS_BOLD,
     FONT_WEATHER_DETAILS_SMALL,
     FONT_WEATHER_DETAILS_TINY,
+    FONT_WEATHER_DETAILS_MICRO,
     FONT_WEATHER_DETAILS_SMALL_BOLD,
     FONT_EMOJI,
     FONT_EMOJI_SMALL,
@@ -691,7 +692,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
             wind_text = f"{wind_speed} mph"
             if wind_dir:
                 wind_text = f"{wind_text} {wind_dir}"
-            stat_items.append((wind_text, FONT_WEATHER_DETAILS_TINY, (180, 225, 255), None))
+            stat_items.append((wind_text, FONT_WEATHER_DETAILS_MICRO, (180, 225, 255), None))
 
         pop = hour.get("pop")
         if pop is not None:
