@@ -45,6 +45,7 @@ def draw_nhl_standings_screen1(
         rec_for_display,
         logo_path,
         conference_name,
+        rank_font=rank_font,
         show_games_back=False,
         show_wild_card=False,
         ot_label=None,

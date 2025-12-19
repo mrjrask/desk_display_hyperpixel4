@@ -143,6 +143,7 @@ def draw_standings_screen1(
     logo_path: str,
     division_name: str,
     *,
+    rank_font: ImageFont.ImageFont | None = None,
     wl_font: ImageFont.ImageFont | None = None,
     wl_font_scale: float | None = None,
     show_games_back: bool = True,
