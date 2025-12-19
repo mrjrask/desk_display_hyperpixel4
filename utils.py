@@ -202,6 +202,20 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
+        # SDL 2.30+ (Debian Trixie) can delay applying the hidden cursor until
+        # it sees at least one motion event. Inject a no-op motion event so the
+        # cursor hides immediately even if the user never touches the mouse.
+        try:
+            pygame.event.post(
+                pygame.event.Event(
+                    pygame.MOUSEMOTION,
+                    {"pos": pygame.mouse.get_pos(), "rel": (0, 0), "buttons": (0, 0, 0)},
+                )
+            )
+            pygame.event.pump()
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
         try:
             pygame.event.set_grab(True)
         except Exception:  # pragma: no cover - optional dependency
