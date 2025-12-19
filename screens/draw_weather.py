@@ -698,8 +698,14 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
             icon_img = icon_cache[icon_code]
 
         if icon_img:
-            icon_y = icon_area_top + max(0, (icon_area_bottom - icon_area_top - icon_size) // 2)
-            img.paste(icon_img, (cx - icon_size // 2, icon_y), icon_img)
+            if icon_img.size != (icon_size, icon_size) and icon_code:
+                icon_img = icon_img.resize((icon_size, icon_size), Image.LANCZOS)
+                icon_cache[icon_code] = icon_img
+
+            icon_w, icon_h = icon_img.size
+            icon_y = icon_area_top + max(0, (icon_area_bottom - icon_area_top - icon_h) // 2)
+            icon_x = cx - icon_w // 2
+            img.paste(icon_img, (icon_x, icon_y), icon_img)
         else:
             condition = hour.get("condition", "")
             if condition:
