@@ -1,4 +1,5 @@
 """NBA team standings screens."""
+from config import FONT_STAND1_RANK_COMPACT, IS_SQUARE_DISPLAY
 from screens.mlb_team_standings import (
     draw_standings_screen1 as _base_screen1,
     draw_standings_screen2 as _base_screen2,
@@ -17,6 +18,7 @@ def draw_nba_standings_screen1(
 ):
     """Wrap the generic standings screen for NBA teams (shows games back)."""
     rec = rec or {}
+    rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
     division_label = division_name or rec.get("division", {}).get("name")
     division_label = division_label or "Division"
     rec_for_display = {
@@ -36,6 +38,7 @@ def draw_nba_standings_screen1(
         show_streak=True,
         gb_label=None,
         wild_card_label=None,
+        rank_font=rank_font,
         transition=transition,
     )
 
