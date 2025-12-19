@@ -11,7 +11,7 @@ Screen 2: logo at top center, then overall record and splits.
 """
 import os
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -158,6 +158,7 @@ def draw_standings_screen1(
     show_pct: bool = False,
     pct_precision: int | None = None,
     record_details_fn=None,
+    rank_font: Optional[ImageFont.ImageFont] = None,
     transition: bool = False,
 ):
     """
@@ -204,6 +205,7 @@ def draw_standings_screen1(
         points_txt = f"{pts_val} {points_label}"
 
     # Division rank
+    rank_font = rank_font or FONT_STAND1_RANK
     dr = rec.get("divisionRank", "-")
     try:
         dr_lbl = "Last" if int(dr) == 5 else _ord(dr)
@@ -251,7 +253,7 @@ def draw_standings_screen1(
         lines.append((points_txt, FONT_STAND1_GB_VALUE))
     if gb_txt and place_gb_before_rank:
         lines.append((gb_txt, FONT_STAND1_GB_VALUE))
-    lines.append((rank_txt, FONT_STAND1_RANK))
+    lines.append((rank_txt, rank_font))
     if conference_label and show_conference_rank:
         conf_rank = rec.get("conferenceRank", "-")
         try:
@@ -259,14 +261,14 @@ def draw_standings_screen1(
         except Exception:
             conf_lbl = conf_rank
         conf_name = rec.get("conferenceName") or rec.get("conferenceAbbrev") or "conference"
-        lines.append((f"{conf_lbl} in {conf_name}", FONT_STAND1_RANK))
+        lines.append((f"{conf_lbl} in {conf_name}", rank_font))
     if gb_txt and not place_gb_before_rank:
         lines.append((gb_txt, FONT_STAND1_GB_VALUE))
     if wc_txt:
         lines.append((wc_txt, FONT_STAND1_WCGB_VALUE))
     if show_streak:
         streak_raw = (rec.get("streak") or {}).get("streakCode", "-")
-        lines.append((f"Streak: {_format_streak(streak_raw)}", FONT_STAND1_RANK))
+        lines.append((f"Streak: {_format_streak(streak_raw)}", rank_font))
 
     # Layout text
     heights = [draw.textsize(txt, font)[1] for txt, font in lines]
