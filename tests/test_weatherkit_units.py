@@ -30,6 +30,7 @@ def test_weatherkit_defaults_to_celsius_when_units_missing(monkeypatch):
             "uvIndex": 3,
             "conditionCode": "Cloudy",
             "isDaylight": True,
+            "cloudCover": 0.42,
         },
         "forecastDaily": {
             "days": [
@@ -53,6 +54,7 @@ def test_weatherkit_defaults_to_celsius_when_units_missing(monkeypatch):
     assert daily[0]["temp"]["min"] == pytest.approx(50.0)
     assert current["temp"] == pytest.approx(69.8)
     assert current["feels_like"] == pytest.approx(66.2)
+    assert current["clouds"] == pytest.approx(42.0)
 
     recorded_text = []
     original_text = ImageDraw.ImageDraw.text
@@ -79,3 +81,4 @@ def test_weatherkit_defaults_to_celsius_when_units_missing(monkeypatch):
     assert "66°" in recorded_text
     assert "68°" in recorded_text
     assert "50°" in recorded_text
+    assert "42%" in recorded_text
