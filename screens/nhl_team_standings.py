@@ -1,4 +1,5 @@
 """NHL team standings screens."""
+from config import FONT_STAND1_RANK_COMPACT, IS_SQUARE_DISPLAY
 from screens.mlb_team_standings import (
     draw_standings_screen1 as _base_screen1,
     draw_standings_screen2 as _base_screen2,
@@ -21,6 +22,7 @@ def draw_nhl_standings_screen1(
     conference_name = (rec.get("conference") or {}).get("name")
     conference_name = conference_name or rec.get("conferenceName")
     conference_name = conference_name or division_name or "Conference"
+    rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
 
     def _record_line(record_obj, base_rec):
         record_data = record_obj.get("leagueRecord", {}) if isinstance(record_obj, dict) else {}
