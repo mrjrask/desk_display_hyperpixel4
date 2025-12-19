@@ -234,15 +234,16 @@ def _dict_section(payload: object, key: str) -> dict:
     return section if isinstance(section, dict) else {}
 
 
-def _units_dict(metadata: object) -> dict:
+def _units_dict(metadata: object, default: Optional[dict] = None) -> dict:
     """WeatherKit sections usually include metadata.units as a dict.
-    If it's missing or malformed (e.g., string), return {} so callers
-    don't crash on units.get(...).
+    If it's missing or malformed (e.g., string), return a provided default
+    so callers don't crash on units.get(...).
     """
+    fallback = dict(default or {})
     if not isinstance(metadata, dict):
-        return {}
+        return fallback
     units = metadata.get("units")
-    return units if isinstance(units, dict) else {}
+    return units if isinstance(units, dict) else fallback
 
 
 def _map_condition(code: Optional[str], is_daytime: bool) -> dict:
@@ -268,7 +269,8 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
         return forecast
 
     metadata = forecast_daily.get("metadata")
-    units = _units_dict(metadata)
+    units = _units_dict(metadata, {"temperature": "celsius"})
+    temp_unit = units.get("temperature") or "celsius"
 
     for day in days:
         if not isinstance(day, dict):
@@ -281,8 +283,8 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
                 "sunrise": day.get("sunriseTime") or day.get("sunrise"),
                 "sunset": day.get("sunsetTime") or day.get("sunset"),
                 "temp": {
-                    "max": _convert_temperature(day.get("highTemperature"), units.get("temperature")),
-                    "min": _convert_temperature(day.get("lowTemperature"), units.get("temperature")),
+                    "max": _convert_temperature(day.get("highTemperature"), temp_unit),
+                    "min": _convert_temperature(day.get("lowTemperature"), temp_unit),
                 },
                 "rain": day.get("precipitationAmount"),
                 "weather": [condition],
@@ -301,7 +303,8 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
         return forecast
 
     metadata = forecast_hourly.get("metadata")
-    units = _units_dict(metadata)
+    units = _units_dict(metadata, {"temperature": "celsius"})
+    temp_unit = units.get("temperature") or "celsius"
 
     for hour in hours:
         if not isinstance(hour, dict):
@@ -314,8 +317,8 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
         forecast.append(
             {
                 "dt": hour.get("forecastStart"),
-                "temp": _convert_temperature(hour.get("temperature"), units.get("temperature")),
-                "feels_like": _convert_temperature(hour.get("temperatureApparent"), units.get("temperature")),
+                "temp": _convert_temperature(hour.get("temperature"), temp_unit),
+                "feels_like": _convert_temperature(hour.get("temperatureApparent"), temp_unit),
                 "humidity": hour.get("humidity"),
                 "pressure": hour.get("pressure"),
                 "wind_speed": _convert_speed(hour.get("windSpeed"), units.get("windSpeed")),
@@ -333,7 +336,8 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
     current = _dict_section(payload, "currentWeather")
 
     metadata = current.get("metadata")
-    units = _units_dict(metadata)
+    units = _units_dict(metadata, {"temperature": "celsius"})
+    temp_unit = units.get("temperature") or "celsius"
 
     daylight_flag = current.get("isDaylight")
     is_daylight = bool(daylight_flag) if isinstance(daylight_flag, bool) else True
@@ -345,8 +349,8 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
 
     return {
         "dt": current.get("asOf") or current.get("timestamp"),
-        "temp": _convert_temperature(current.get("temperature"), units.get("temperature")),
-        "feels_like": _convert_temperature(current.get("apparentTemperature"), units.get("temperature")),
+        "temp": _convert_temperature(current.get("temperature"), temp_unit),
+        "feels_like": _convert_temperature(current.get("apparentTemperature"), temp_unit),
         "humidity": current.get("humidity"),
         "pressure": current.get("pressure"),
         "wind_speed": _convert_speed(current.get("windSpeed"), units.get("windSpeed")),
