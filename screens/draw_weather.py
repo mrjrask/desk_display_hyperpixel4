@@ -94,6 +94,19 @@ def _safe_round_optional(value) -> Optional[int]:
         return None
 
 
+def _format_humidity(value: object) -> str:
+    try:
+        humidity = float(value)
+    except Exception:
+        return "0.0%"
+
+    if humidity <= 1:
+        humidity *= 100
+
+    humidity = max(0.0, min(humidity, 100.0))
+    return f"{humidity:.1f}%"
+
+
 def _pop_pct_from(entry):
     if not isinstance(entry, dict):
         return None
@@ -792,7 +805,7 @@ def draw_weather_screen_2(display, weather, transition=False):
     items += [
         ("Wind:",     wind_value),
         ("Gust:",     f"{_safe_round(current.get('wind_gust'))} mph"),
-        ("Humidity:", f"{_safe_round(current.get('humidity'))}%"),
+        ("Humidity:", _format_humidity(current.get("humidity"))),
         (
             "Pressure:",
             f"{round(_safe_float(current.get('pressure'))*0.0338639,2)} inHg",
