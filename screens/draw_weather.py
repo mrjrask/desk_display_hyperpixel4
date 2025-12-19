@@ -745,7 +745,7 @@ def draw_weather_screen_2(display, weather, transition=False):
     items += [
         ("Wind:",     wind_value),
         ("Gust:",     f"{_safe_round(current.get('wind_gust'))} mph"),
-        ("Humidity:", f"{current.get('humidity',0)}%"),
+        ("Humidity:", f"{_safe_round(current.get('humidity'))}%"),
         (
             "Pressure:",
             f"{round(_safe_float(current.get('pressure'))*0.0338639,2)} inHg",
