@@ -291,13 +291,39 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
     last_max: float | None = None
     last_min: float | None = None
 
+    def _first_available(day: dict, keys: tuple[str, ...]):
+        for key in keys:
+            if day.get(key) is not None:
+                return day.get(key)
+        return None
+
     for day in days:
         if not isinstance(day, dict):
             continue
 
         condition = _map_condition(day.get("conditionCode"), True)
-        high_temp = _convert_temperature(day.get("highTemperature"), temp_unit)
-        low_temp = _convert_temperature(day.get("lowTemperature"), temp_unit)
+        high_temp = _convert_temperature(
+            _first_available(
+                day,
+                (
+                    "highTemperature",
+                    "temperatureMax",
+                    "daytimeHighTemperature",
+                ),
+            ),
+            temp_unit,
+        )
+        low_temp = _convert_temperature(
+            _first_available(
+                day,
+                (
+                    "lowTemperature",
+                    "temperatureMin",
+                    "overnightLowTemperature",
+                ),
+            ),
+            temp_unit,
+        )
 
         if high_temp is None and last_max is not None:
             high_temp = last_max
