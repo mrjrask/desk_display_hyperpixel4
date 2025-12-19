@@ -367,9 +367,18 @@ def draw_weather_screen_1(display, weather, transition=False):
         groups.append((lbl, lw, lh, val, vw, vh, gw))
 
     # horizontal layout
-    SPACING_X = 12
-    total_w   = sum(g[6] for g in groups) + SPACING_X * (len(groups)-1)
-    x0        = (WIDTH - total_w)//2
+    groups_width = sum(g[6] for g in groups)
+    gaps = max(1, len(groups) - 1)
+    available_width = max(0, WIDTH - groups_width)
+    derived_spacing = available_width // (len(groups) + 1)
+    target_spacing = max(24, min(48, derived_spacing))
+    max_spacing = available_width // gaps if gaps else target_spacing
+    if available_width == 0:
+        SPACING_X = 0
+    else:
+        SPACING_X = min(target_spacing, max_spacing) if max_spacing > 0 else target_spacing
+    total_w   = groups_width + SPACING_X * gaps
+    x0        = (WIDTH - total_w) // 2
 
     # vertical positions
     max_val_h = max(g[5] for g in groups)
