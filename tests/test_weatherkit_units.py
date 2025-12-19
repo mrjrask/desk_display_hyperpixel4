@@ -151,3 +151,31 @@ def test_weather_missing_values_use_fallbacks(monkeypatch):
     temp_texts = [text for text in recorded_text if "°" in text]
     assert any("68°F" in text or "68°" == text for text in temp_texts)
     assert all(text != "0°" for text in temp_texts)
+
+
+def test_weather_screen_two_formats_decimal_humidity(monkeypatch):
+    recorded_text = []
+    original_text = ImageDraw.ImageDraw.text
+
+    def _recording_text(self, xy, text, *args, **kwargs):
+        recorded_text.append(str(text))
+        return original_text(self, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", _recording_text)
+
+    weather = {
+        "current": {
+            "wind_speed": 5,
+            "wind_deg": 90,
+            "wind_gust": 7,
+            "humidity": 0.553,
+            "pressure": 1020,
+            "uvi": 2,
+        },
+        "daily": [{}],
+    }
+
+    screen = draw_weather.draw_weather_screen_2(_DummyDisplay(), weather, transition=True)
+
+    assert isinstance(screen, ScreenImage)
+    assert any(text == "55.3%" for text in recorded_text)
