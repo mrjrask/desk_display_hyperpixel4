@@ -227,6 +227,23 @@ def _convert_speed(value, unit_hint: Optional[str]):
     return round(val, 1)
 
 
+def _convert_humidity(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        humidity = float(value)
+    except Exception:
+        return None
+    if humidity <= 1:
+        humidity *= 100
+    humidity = round(humidity)
+    if humidity < 0:
+        humidity = 0
+    if humidity > 100:
+        humidity = 100
+    return int(humidity)
+
+
 def _dict_section(payload: object, key: str) -> dict:
     if not isinstance(payload, dict):
         return {}
@@ -316,7 +333,7 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
                 "dt": hour.get("forecastStart"),
                 "temp": _convert_temperature(hour.get("temperature"), units.get("temperature")),
                 "feels_like": _convert_temperature(hour.get("temperatureApparent"), units.get("temperature")),
-                "humidity": hour.get("humidity"),
+                "humidity": _convert_humidity(hour.get("humidity")),
                 "pressure": hour.get("pressure"),
                 "wind_speed": _convert_speed(hour.get("windSpeed"), units.get("windSpeed")),
                 "wind_deg": hour.get("windDirection"),
@@ -347,7 +364,7 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
         "dt": current.get("asOf") or current.get("timestamp"),
         "temp": _convert_temperature(current.get("temperature"), units.get("temperature")),
         "feels_like": _convert_temperature(current.get("apparentTemperature"), units.get("temperature")),
-        "humidity": current.get("humidity"),
+        "humidity": _convert_humidity(current.get("humidity")),
         "pressure": current.get("pressure"),
         "wind_speed": _convert_speed(current.get("windSpeed"), units.get("windSpeed")),
         "wind_deg": current.get("windDirection"),
