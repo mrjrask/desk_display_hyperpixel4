@@ -1,4 +1,5 @@
 """NFL team standings screens."""
+from config import FONT_STAND1_RANK_COMPACT, IS_SQUARE_DISPLAY
 from screens.mlb_team_standings import (
     draw_standings_screen1 as _base_screen1,
     draw_standings_screen2 as _base_screen2,
@@ -9,11 +10,13 @@ from utils import log_call
 @log_call
 def draw_nfl_standings_screen1(display, rec, logo_path, division_name, *, transition=False):
     """Wrap the generic standings screen for NFL teams (no GB/WC columns)."""
+    rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
     return _base_screen1(
         display,
         rec,
         logo_path,
         division_name,
+        rank_font=rank_font,
         wl_font_scale=1.3,
         show_games_back=False,
         show_wild_card=False,
