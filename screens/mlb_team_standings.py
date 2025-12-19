@@ -158,6 +158,7 @@ def draw_standings_screen1(
     show_pct: bool = False,
     pct_precision: int | None = None,
     record_details_fn=None,
+    last_place_rank: int | None = 5,
     transition: bool = False,
 ):
     """
@@ -206,7 +207,11 @@ def draw_standings_screen1(
     # Division rank
     dr = rec.get("divisionRank", "-")
     try:
-        dr_lbl = "Last" if int(dr) == 5 else _ord(dr)
+        dr_int = int(dr)
+        if last_place_rank is not None and dr_int == last_place_rank:
+            dr_lbl = "Last"
+        else:
+            dr_lbl = _ord(dr_int)
     except Exception:
         dr_lbl = dr
     rank_txt = f"{dr_lbl} in {division_name}"
