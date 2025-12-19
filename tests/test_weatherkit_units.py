@@ -82,3 +82,72 @@ def test_weatherkit_defaults_to_celsius_when_units_missing(monkeypatch):
     assert "68°" in recorded_text
     assert "50°" in recorded_text
     assert "42%" in recorded_text
+
+
+def test_weather_missing_values_use_fallbacks(monkeypatch):
+    payload = {
+        "currentWeather": {
+            "asOf": 1725000000,
+            "temperature": 20,
+            "apparentTemperature": None,
+            "humidity": 55,
+            "pressure": 1015,
+            "windSpeed": 4,
+            "windDirection": 120,
+            "uvIndex": 1,
+            "conditionCode": "Cloudy",
+            "isDaylight": True,
+        },
+        "forecastDaily": {
+            "days": [
+                {
+                    "forecastStart": 1725000000,
+                    "sunriseTime": 1725021600,
+                    "sunsetTime": 1725061200,
+                    "conditionCode": "PartlyCloudy",
+                    "precipitationAmount": 0,
+                },
+                {
+                    "forecastStart": 1725086400,
+                    "sunriseTime": 1725108000,
+                    "sunsetTime": 1725147600,
+                    "conditionCode": "Clear",
+                    "highTemperature": 22,
+                    "lowTemperature": 12,
+                    "precipitationAmount": 0,
+                },
+            ]
+        },
+    }
+
+    daily = data_fetch._map_daily_forecast(payload)
+    current = data_fetch._map_current_weather(payload, daily)
+
+    assert current["feels_like"] == pytest.approx(current["temp"])
+    assert daily[0]["temp"]["max"] == pytest.approx(71.6)
+    assert daily[0]["temp"]["min"] == pytest.approx(53.6)
+
+    recorded_text = []
+    original_text = ImageDraw.ImageDraw.text
+
+    def _recording_text(self, xy, text, *args, **kwargs):
+        recorded_text.append(str(text))
+        return original_text(self, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", _recording_text)
+    monkeypatch.setattr(
+        draw_weather,
+        "fetch_weather_icon",
+        lambda *_, **__: Image.new(
+            "RGBA", (draw_weather.WEATHER_ICON_SIZE, draw_weather.WEATHER_ICON_SIZE), (0, 0, 0, 0)
+        ),
+    )
+
+    screen = draw_weather.draw_weather_screen_1(
+        _DummyDisplay(), {"current": current, "daily": daily, "hourly": []}, transition=True
+    )
+
+    assert isinstance(screen, ScreenImage)
+    temp_texts = [text for text in recorded_text if "°" in text]
+    assert any("68°F" in text or "68°" == text for text in temp_texts)
+    assert all(text != "0°" for text in temp_texts)

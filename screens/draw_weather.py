@@ -86,6 +86,13 @@ def _safe_round(value, default: int = 0) -> int:
         return default
 
 
+def _safe_round_optional(value) -> Optional[int]:
+    try:
+        return int(round(float(value)))
+    except Exception:
+        return None
+
+
 def _pop_pct_from(entry):
     if not isinstance(entry, dict):
         return None
@@ -263,19 +270,19 @@ def draw_weather_screen_1(display, weather, transition=False):
     daily   = weather.get("daily", [{}])[0]
     hourly  = weather.get("hourly") if isinstance(weather.get("hourly"), list) else None
 
-    temp  = _safe_round(current.get("temp"))
+    temp  = _safe_round_optional(current.get("temp"))
     desc  = current.get("weather", [{}])[0].get("description", "").title()
 
-    feels = _safe_round(current.get("feels_like"))
-    hi    = _safe_round(daily.get("temp", {}).get("max"))
-    lo    = _safe_round(daily.get("temp", {}).get("min"))
+    feels = _safe_round_optional(current.get("feels_like"))
+    hi    = _safe_round_optional(daily.get("temp", {}).get("max"))
+    lo    = _safe_round_optional(daily.get("temp", {}).get("min"))
 
     clear_display(display)
     img  = Image.new("RGB", (WIDTH, HEIGHT), "black")
     draw = ImageDraw.Draw(img)
 
     # Temperature
-    temp_str = f"{temp}°F"
+    temp_str = f"{temp}°F" if temp is not None else "—"
     w_temp, h_temp = draw.textsize(temp_str, font=FONT_TEMP)
     draw.text(((WIDTH - w_temp)//2, 0), temp_str, font=FONT_TEMP, fill=(255,255,255))
 
@@ -338,11 +345,14 @@ def draw_weather_screen_1(display, weather, transition=False):
 
     # Feels/Hi/Lo groups
     labels    = ["Feels", "Hi", "Lo"]
-    values    = [f"{feels}°", f"{hi}°", f"{lo}°"]
+    def _fmt_temp(value: Optional[int]) -> str:
+        return f"{value}°" if value is not None else "—"
+
+    values    = [_fmt_temp(feels), _fmt_temp(hi), _fmt_temp(lo)]
     # dynamic colors
-    if feels > hi:
+    if feels is not None and hi is not None and feels > hi:
         feels_col = (255,165,0)
-    elif feels < lo:
+    elif feels is not None and lo is not None and feels < lo:
         feels_col = uv_index_color(2)
     else:
         feels_col = (255,255,255)

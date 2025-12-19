@@ -288,20 +288,34 @@ def _map_daily_forecast(payload: dict) -> list[dict]:
     metadata = forecast_daily.get("metadata")
     units = _units_dict(metadata, {"temperature": "celsius"})
     temp_unit = units.get("temperature") or "celsius"
+    last_max: float | None = None
+    last_min: float | None = None
 
     for day in days:
         if not isinstance(day, dict):
             continue
 
         condition = _map_condition(day.get("conditionCode"), True)
+        high_temp = _convert_temperature(day.get("highTemperature"), temp_unit)
+        low_temp = _convert_temperature(day.get("lowTemperature"), temp_unit)
+
+        if high_temp is None and last_max is not None:
+            high_temp = last_max
+        if low_temp is None and last_min is not None:
+            low_temp = last_min
+        if high_temp is not None:
+            last_max = high_temp
+        if low_temp is not None:
+            last_min = low_temp
+
         forecast.append(
             {
                 "dt": day.get("forecastStart"),
                 "sunrise": day.get("sunriseTime") or day.get("sunrise"),
                 "sunset": day.get("sunsetTime") or day.get("sunset"),
                 "temp": {
-                    "max": _convert_temperature(day.get("highTemperature"), temp_unit),
-                    "min": _convert_temperature(day.get("lowTemperature"), temp_unit),
+                    "max": high_temp,
+                    "min": low_temp,
                 },
                 "rain": day.get("precipitationAmount"),
                 "weather": [condition],
@@ -349,6 +363,41 @@ def _map_hourly_forecast(payload: dict) -> list[dict]:
     return forecast
 
 
+def _fill_primary_daily_temperatures(daily: list[dict], fallback_temp: float | None) -> None:
+    """Ensure today's hi/lo are populated using previous entries or current temp."""
+    if not isinstance(daily, list) or not daily:
+        return
+
+    last_max: float | None = None
+    last_min: float | None = None
+    for day in daily:
+        if not isinstance(day, dict):
+            continue
+        temps = day.get("temp") if isinstance(day.get("temp"), dict) else {}
+        day["temp"] = temps
+        if temps.get("max") is None and last_max is not None:
+            temps["max"] = last_max
+        if temps.get("min") is None and last_min is not None:
+            temps["min"] = last_min
+        if temps.get("max") is not None:
+            last_max = temps["max"]
+        if temps.get("min") is not None:
+            last_min = temps["min"]
+
+    primary_temps = daily[0].get("temp") if isinstance(daily[0], dict) else None
+    if isinstance(primary_temps, dict):
+        if primary_temps.get("max") is None:
+            if last_max is not None:
+                primary_temps["max"] = last_max
+            elif fallback_temp is not None:
+                primary_temps["max"] = fallback_temp
+        if primary_temps.get("min") is None:
+            if last_min is not None:
+                primary_temps["min"] = last_min
+            elif fallback_temp is not None:
+                primary_temps["min"] = fallback_temp
+
+
 def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
     current = _dict_section(payload, "currentWeather")
 
@@ -373,10 +422,15 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
     if clouds is not None:
         clouds = max(0.0, min(clouds, 100.0))
 
-    return {
+    mapped_temp = _convert_temperature(current.get("temperature"), temp_unit)
+    feels_like = _convert_temperature(current.get("apparentTemperature"), temp_unit)
+    if feels_like is None:
+        feels_like = mapped_temp
+
+    mapped = {
         "dt": current.get("asOf") or current.get("timestamp"),
-        "temp": _convert_temperature(current.get("temperature"), temp_unit),
-        "feels_like": _convert_temperature(current.get("apparentTemperature"), temp_unit),
+        "temp": mapped_temp,
+        "feels_like": feels_like,
         "humidity": current.get("humidity"),
         "pressure": current.get("pressure"),
         "wind_speed": _convert_speed(current.get("windSpeed"), units.get("windSpeed")),
@@ -387,6 +441,9 @@ def _map_current_weather(payload: dict, daily: list[dict]) -> dict:
         "sunset": sunset,
         "weather": [condition],
     }
+
+    _fill_primary_daily_temperatures(daily, mapped_temp)
+    return mapped
 
 
 def _map_alerts(payload: dict) -> list[dict]:
@@ -417,20 +474,33 @@ def _map_owm_daily(payload: dict) -> list[dict]:
     if not isinstance(daily, list):
         return forecast
 
+    last_max: float | None = None
+    last_min: float | None = None
+
     for day in daily:
         if not isinstance(day, dict):
             continue
         temps = day.get("temp") if isinstance(day.get("temp"), dict) else {}
         weather_list = day.get("weather") if isinstance(day.get("weather"), list) else []
         condition = weather_list[0] if weather_list else {}
+        max_temp = _convert_temperature(temps.get("max"), None)
+        min_temp = _convert_temperature(temps.get("min"), None)
+        if max_temp is None and last_max is not None:
+            max_temp = last_max
+        if min_temp is None and last_min is not None:
+            min_temp = last_min
+        if max_temp is not None:
+            last_max = max_temp
+        if min_temp is not None:
+            last_min = min_temp
         forecast.append(
             {
                 "dt": day.get("dt"),
                 "sunrise": day.get("sunrise"),
                 "sunset": day.get("sunset"),
                 "temp": {
-                    "max": _convert_temperature(temps.get("max"), None),
-                    "min": _convert_temperature(temps.get("min"), None),
+                    "max": max_temp,
+                    "min": min_temp,
                 },
                 "rain": day.get("rain"),
                 "weather": [condition] if condition else [],
@@ -454,10 +524,15 @@ def _map_owm_current(payload: dict, daily: list[dict]) -> dict:
     if clouds is not None:
         clouds = max(0.0, min(clouds, 100.0))
 
-    return {
+    temp = _convert_temperature(current.get("temp"), None)
+    feels_like = _convert_temperature(current.get("feels_like"), None)
+    if feels_like is None:
+        feels_like = temp
+
+    mapped = {
         "dt": current.get("dt"),
-        "temp": _convert_temperature(current.get("temp"), None),
-        "feels_like": _convert_temperature(current.get("feels_like"), None),
+        "temp": temp,
+        "feels_like": feels_like,
         "humidity": current.get("humidity"),
         "pressure": current.get("pressure"),
         "wind_speed": _convert_speed(current.get("wind_speed"), None),
@@ -468,6 +543,9 @@ def _map_owm_current(payload: dict, daily: list[dict]) -> dict:
         "sunset": sunset,
         "weather": [condition] if condition else [],
     }
+
+    _fill_primary_daily_temperatures(daily, temp)
+    return mapped
 
 
 def _map_owm_hourly(payload: dict) -> list[dict]:
