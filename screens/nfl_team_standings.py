@@ -1,5 +1,5 @@
 """NFL team standings screens."""
-from config import FONT_STAND1_RANK_COMPACT, IS_SQUARE_DISPLAY
+from config import FONT_NFL_STAND1_RECORD, FONT_STAND1_RANK_COMPACT, IS_SQUARE_DISPLAY
 from screens.mlb_team_standings import (
     draw_standings_screen1 as _base_screen1,
     draw_standings_screen2 as _base_screen2,
@@ -17,7 +17,7 @@ def draw_nfl_standings_screen1(display, rec, logo_path, division_name, *, transi
         logo_path,
         division_name,
         rank_font=rank_font,
-        wl_font_scale=1.3,
+        wl_font=FONT_NFL_STAND1_RECORD,
         show_games_back=False,
         show_wild_card=False,
         transition=transition,
