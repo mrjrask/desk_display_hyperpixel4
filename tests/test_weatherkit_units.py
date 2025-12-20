@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 from PIL import Image, ImageDraw
 
@@ -215,3 +217,65 @@ def test_weather_screen_two_formats_decimal_humidity(monkeypatch):
 
     assert isinstance(screen, ScreenImage)
     assert any(text == "55.3%" for text in recorded_text)
+
+
+def test_weather_screen_two_shows_next_solar_event(monkeypatch):
+    central = draw_weather.CENTRAL_TIME
+    sunrise_today = central.localize(datetime.datetime(2024, 8, 1, 6, 0))
+    sunset_today = central.localize(datetime.datetime(2024, 8, 1, 20, 30))
+    sunrise_tomorrow = central.localize(datetime.datetime(2024, 8, 2, 6, 1))
+    sunset_tomorrow = central.localize(datetime.datetime(2024, 8, 2, 20, 29))
+
+    weather = {
+        "current": {
+            "wind_speed": 6,
+            "wind_deg": 45,
+            "wind_gust": 9,
+            "humidity": 0.42,
+            "pressure": 1012,
+            "uvi": 4,
+        },
+        "daily": [
+            {"sunrise": int(sunrise_today.timestamp()), "sunset": int(sunset_today.timestamp())},
+            {"sunrise": int(sunrise_tomorrow.timestamp()), "sunset": int(sunset_tomorrow.timestamp())},
+        ],
+    }
+
+    recorded_text = []
+    original_text = ImageDraw.ImageDraw.text
+
+    def _recording_text(self, xy, text, *args, **kwargs):
+        recorded_text.append(str(text))
+        return original_text(self, xy, text, *args, **kwargs)
+
+    def _freeze_time(frozen_dt: datetime.datetime) -> None:
+        class _FrozenDatetime(datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen_dt.astimezone(tz) if tz else frozen_dt
+
+            @classmethod
+            def today(cls):
+                return frozen_dt
+
+        monkeypatch.setattr(draw_weather.datetime, "datetime", _FrozenDatetime)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", _recording_text)
+
+    cases = [
+        (sunrise_today - datetime.timedelta(minutes=10), "Sunrise:", sunrise_today),
+        (sunrise_today + datetime.timedelta(minutes=10), "Sunrise:", sunrise_today),
+        (sunrise_today + datetime.timedelta(hours=6), "Sunset:", sunset_today),
+        (sunset_today + datetime.timedelta(minutes=15), "Sunset:", sunset_today),
+        (sunset_today + datetime.timedelta(minutes=25), "Sunrise:", sunrise_tomorrow),
+    ]
+
+    for frozen_dt, expected_label, expected_time in cases:
+        recorded_text.clear()
+        _freeze_time(frozen_dt)
+
+        screen = draw_weather.draw_weather_screen_2(_DummyDisplay(), weather, transition=True)
+
+        assert isinstance(screen, ScreenImage)
+        assert recorded_text[0] == expected_label
+        assert expected_time.strftime("%-I:%M %p") in recorded_text
