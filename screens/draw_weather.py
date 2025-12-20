@@ -787,19 +787,33 @@ def draw_weather_screen_2(display, weather, transition=False):
     severity, led_color = _detect_weather_alert(weather)
 
     current = weather.get("current", {})
-    daily   = weather.get("daily", [{}])[0]
+    daily_forecasts = weather.get("daily") if isinstance(weather.get("daily"), list) else []
+    today = daily_forecasts[0] if daily_forecasts else {}
+    tomorrow = daily_forecasts[1] if len(daily_forecasts) > 1 else {}
 
     now = datetime.datetime.now(CENTRAL_TIME)
-    s_r = timestamp_to_datetime(daily.get("sunrise"), CENTRAL_TIME)
-    s_s = timestamp_to_datetime(daily.get("sunset"), CENTRAL_TIME)
+    grace_period = datetime.timedelta(minutes=20)
 
-    # Sunrise or Sunset first
-    if s_r and now < s_r:
-        items = [("Sunrise:", s_r.strftime("%-I:%M %p"))]
-    elif s_s:
-        items = [("Sunset:",  s_s.strftime("%-I:%M %p"))]
-    else:
-        items = []
+    events: list[tuple[str, datetime.datetime]] = []
+    for label, ts in (
+        ("Sunrise:", today.get("sunrise")),
+        ("Sunset:", today.get("sunset")),
+        ("Sunrise:", tomorrow.get("sunrise")),
+        ("Sunset:", tomorrow.get("sunset")),
+    ):
+        dt = timestamp_to_datetime(ts, CENTRAL_TIME)
+        if dt:
+            events.append((label, dt))
+
+    items = []
+    for label, dt in sorted(events, key=lambda it: it[1]):
+        if now < dt + grace_period:
+            items = [(label, dt.strftime("%-I:%M %p"))]
+            break
+
+    if not items and events:
+        label, dt = max(events, key=lambda it: it[1])
+        items = [(label, dt.strftime("%-I:%M %p"))]
 
     # Other details
     wind_speed = _safe_round(current.get('wind_speed'))
