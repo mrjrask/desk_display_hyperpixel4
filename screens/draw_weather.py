@@ -44,6 +44,7 @@ from config import (
     HOURLY_FORECAST_HOURS,
     LATITUDE,
     LONGITUDE,
+    FONT_WEATHER_HOURLY_TIME,
 )
 from utils import (
     LED_INDICATOR_LEVEL,
@@ -412,6 +413,21 @@ def draw_weather_screen_1(display, weather, transition=False):
     side_font = FONT_WEATHER_DETAILS
     stack_gap = 2
     side_margin = 8
+
+    def _center_block(start: int, end: int, block_width: int) -> int:
+        """Return an x position that centers ``block_width`` between ``start`` and ``end``.
+
+        The placement respects ``side_margin`` padding; when the available space is too
+        small, it falls back to the closest fit that keeps the block on screen.
+        """
+
+        region_width = max(0, end - start)
+        ideal_x = start + max((region_width - block_width) // 2, 0)
+        min_x = start + side_margin
+        max_x = end - side_margin - block_width
+        if max_x < min_x:
+            return max(start, min(ideal_x, end - block_width))
+        return max(min_x, min(ideal_x, max_x))
     if precip_percent:
         precip_color = (173, 216, 230) if is_snow else (135, 206, 250)
         fallback_icon_size = 26
@@ -424,7 +440,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         pct_w, pct_h = draw.textsize(precip_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
-        precip_x = max(side_margin, 0)
+        precip_x = _center_block(0, icon_x, block_w)
         block_y = icon_center_y - block_h // 2
         emoji_x = precip_x + (block_w - emoji_w) // 2
         pct_x = precip_x + (block_w - pct_w) // 2
@@ -437,7 +453,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         pct_w, pct_h = draw.textsize(cloud_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
-        cloud_x = max(WIDTH - block_w - side_margin, 0)
+        cloud_x = _center_block(icon_x + WEATHER_ICON_SIZE, WIDTH, block_w)
         block_y = icon_center_y - block_h // 2
         emoji_x = cloud_x + (block_w - emoji_w) // 2
         pct_x = cloud_x + (block_w - pct_w) // 2
@@ -609,7 +625,8 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         )
 
         time_label = hour.get("time", "")
-        time_w, time_h = draw.textsize(time_label, font=FONT_WEATHER_DETAILS_BOLD)
+        time_font = FONT_WEATHER_HOURLY_TIME
+        time_w, time_h = draw.textsize(time_label, font=time_font)
 
         trend_area_top = card_top + 6 + time_h + 6
         trend_area_bottom = card_top + int(card_height * 0.4)
@@ -630,6 +647,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
                 "cx": cx,
                 "time_label": time_label,
                 "time_size": (time_w, time_h),
+                "time_font": time_font,
                 "trend_area": (trend_area_top, trend_area_bottom),
                 "icon_area": (icon_area_top, icon_area_bottom),
                 "stat_area": (stat_area_top, stat_area_bottom),
@@ -651,6 +669,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         cx = layout["cx"]
         time_label = layout["time_label"]
         time_w, time_h = layout["time_size"]
+        time_font = layout["time_font"]
         trend_top, trend_bottom = layout["trend_area"]
         icon_area_top, icon_area_bottom = layout["icon_area"]
         stat_area_top, stat_area_bottom = layout["stat_area"]
@@ -661,7 +680,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         temp_y = int(trend_bottom - temp_frac * (trend_bottom - trend_top))
         layout["temp_y"] = temp_y
 
-        draw.text((cx - time_w // 2, card_top + 6), time_label, font=FONT_WEATHER_DETAILS_BOLD, fill=(235, 235, 235))
+        draw.text((cx - time_w // 2, card_top + 6), time_label, font=time_font, fill=(235, 235, 235))
 
     for layout in card_layouts:
         hour = layout["hour"]
