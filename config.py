@@ -693,6 +693,9 @@ FONT_WEATHER_DETAILS = _load_screen_font("weather", "details", "DejaVuSans.ttf",
 FONT_WEATHER_DETAILS_BOLD = _load_screen_font(
     "weather", "details_bold", "DejaVuSans-Bold.ttf", 18
 )
+FONT_WEATHER_HOURLY_TIME = _load_screen_font(
+    "weather", "hourly_time", "DejaVuSans-Bold.ttf", 10
+)
 FONT_WEATHER_DETAILS_SMALL = _load_screen_font(
     "weather", "details_small", "DejaVuSans.ttf", 14
 )
