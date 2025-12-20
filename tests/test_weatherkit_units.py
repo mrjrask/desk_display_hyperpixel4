@@ -191,6 +191,44 @@ def test_weatherkit_uses_alternate_daily_temp_fields(monkeypatch):
     assert current["feels_like"] == pytest.approx(75.2)
 
 
+def test_weatherkit_maps_wind_gusts():
+    payload = {
+        "currentWeather": {
+            "asOf": 1740000000,
+            "temperature": 18,
+            "apparentTemperature": 18,
+            "humidity": 55,
+            "pressure": 1015,
+            "windSpeed": 10,
+            "windGust": 15,
+            "windDirection": 135,
+            "uvIndex": 2,
+            "conditionCode": "Cloudy",
+            "isDaylight": True,
+            "metadata": {"units": {"temperature": "celsius", "windSpeed": "mps"}},
+        },
+        "forecastDaily": {
+            "metadata": {"units": {"temperature": "celsius"}},
+            "days": [
+                {
+                    "forecastStart": 1740000000,
+                    "sunriseTime": 1740021600,
+                    "sunsetTime": 1740061200,
+                    "conditionCode": "Clear",
+                    "highTemperature": 20,
+                    "lowTemperature": 10,
+                }
+            ],
+        },
+    }
+
+    daily = data_fetch._map_daily_forecast(payload)
+    current = data_fetch._map_current_weather(payload, daily)
+
+    assert current["wind_speed"] == pytest.approx(22.4)
+    assert current["wind_gust"] == pytest.approx(33.6)
+
+
 def test_weather_screen_two_formats_decimal_humidity(monkeypatch):
     recorded_text = []
     original_text = ImageDraw.ImageDraw.text
