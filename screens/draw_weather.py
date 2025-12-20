@@ -411,6 +411,7 @@ def draw_weather_screen_1(display, weather, transition=False):
 
     side_font = FONT_WEATHER_DETAILS
     stack_gap = 2
+    side_margin = 8
     if precip_percent:
         precip_color = (173, 216, 230) if is_snow else (135, 206, 250)
         fallback_icon_size = 26
@@ -423,9 +424,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         pct_w, pct_h = draw.textsize(precip_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
-        precip_x = icon_x - 6 - block_w
-        if precip_x < 0:
-            precip_x = 0
+        precip_x = max(side_margin, 0)
         block_y = icon_center_y - block_h // 2
         emoji_x = precip_x + (block_w - emoji_w) // 2
         pct_x = precip_x + (block_w - pct_w) // 2
@@ -438,9 +437,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         pct_w, pct_h = draw.textsize(cloud_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
-        cloud_x = icon_x + WEATHER_ICON_SIZE + 6
-        if cloud_x + block_w > WIDTH:
-            cloud_x = WIDTH - block_w
+        cloud_x = max(WIDTH - block_w - side_margin, 0)
         block_y = icon_center_y - block_h // 2
         emoji_x = cloud_x + (block_w - emoji_w) // 2
         pct_x = cloud_x + (block_w - pct_w) // 2
