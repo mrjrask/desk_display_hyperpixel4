@@ -82,6 +82,17 @@
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 1.5rem;
     }
+    .screen-card__media {
+      display: grid;
+      grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+      gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 960px) {
+      .screen-card__media {
+        grid-template-columns: 1fr;
+      }
+    }
     .screen-card {
       position: relative;
       background: rgba(15, 23, 42, 0.85);
@@ -119,6 +130,16 @@
       color: #94a3b8;
       font-size: 0.9rem;
     }
+    .screenshot-button {
+      all: unset;
+      width: 100%;
+      cursor: pointer;
+    }
+    .screenshot-button:focus-visible {
+      outline: 2px solid #38bdf8;
+      outline-offset: 6px;
+      border-radius: 16px;
+    }
     .screenshot {
       width: 100%;
       aspect-ratio: 1 / 1;
@@ -133,6 +154,112 @@
       font-style: italic;
       color: #94a3b8;
       font-size: 0.9rem;
+    }
+    .font-panel {
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 16px;
+      padding: 1rem;
+      background: rgba(15, 23, 42, 0.5);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-height: 100%;
+    }
+    .font-panel__header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .font-panel__header h3 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #f8fafc;
+    }
+    .font-panel__header span {
+      color: #94a3b8;
+      font-size: 0.85rem;
+    }
+    .font-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .font-entry__name {
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+    .font-entry__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+    .font-entry__path {
+      color: #64748b;
+      font-size: 0.85rem;
+      word-break: break-all;
+    }
+    .font-panel__empty {
+      margin: 0;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      z-index: 20;
+    }
+    .lightbox[hidden] {
+      display: none;
+    }
+    .lightbox__content {
+      position: relative;
+      max-width: min(1200px, 95vw);
+      max-height: 90vh;
+    }
+    .lightbox__image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 14px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+      background: #0b1220;
+    }
+    .lightbox__close {
+      position: absolute;
+      top: -14px;
+      right: -14px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      border-radius: 999px;
+      width: 36px;
+      height: 36px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .lightbox__close:hover {
+      background: #1e293b;
+    }
+    .lightbox__backdrop {
+      position: fixed;
+      inset: 0;
+    }
+    body.no-scroll {
+      overflow: hidden;
     }
     .timestamp {
       font-size: 0.85rem;
@@ -214,13 +341,54 @@
             <h2>{{ screen.id }}</h2>
             <span>Every {{ screen.frequency }} loop{{ '' if screen.frequency == 1 else 's' }}</span>
           </div>
-          {% if screen.last_screenshot %}
-            <img class="screenshot" src="{{ url_for('static', filename=screen.last_screenshot) }}" alt="Latest screenshot for {{ screen.id }}">
-            {% if screen.last_captured %}
-              <div class="timestamp">Captured {{ screen.last_captured }}</div>
-            {% endif %}
-          {% else %}
-            <div class="screenshot screenshot--empty">No screenshot captured yet</div>
+          <div class="screen-card__media">
+            <button
+              type="button"
+              class="screenshot-button"
+              aria-label="Open screenshot for {{ screen.id }}"
+              {% if screen.last_screenshot %}
+                data-full-src="{{ url_for('static', filename=screen.last_screenshot) }}"
+              {% endif %}
+            >
+              {% if screen.last_screenshot %}
+                <img
+                  class="screenshot"
+                  src="{{ url_for('static', filename=screen.last_screenshot) }}"
+                  alt="Latest screenshot for {{ screen.id }}"
+                >
+              {% else %}
+                <div class="screenshot screenshot--empty">No screenshot captured yet</div>
+              {% endif %}
+            </button>
+            <section class="font-panel" aria-label="Fonts used on {{ screen.id }}">
+              <div class="font-panel__header">
+                <h3>Fonts</h3>
+                <span>Defined in config</span>
+              </div>
+              {% if screen.fonts %}
+                <ul class="font-list">
+                  {% for font in screen.fonts %}
+                    <li class="font-entry">
+                      <div class="font-entry__name">{{ font.name }}</div>
+                      <div class="font-entry__meta">
+                        <span class="font-entry__group">{{ font.group }}{% if font.key %} • {{ font.key }}{% endif %}</span>
+                        {% if font.size is not none %}
+                          <span class="font-entry__size">{{ font.size }}{% if font.size is not string %} pt{% endif %}</span>
+                        {% endif %}
+                        {% if font.path %}
+                          <span class="font-entry__path" title="{{ font.path }}">{{ font.path }}</span>
+                        {% endif %}
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="font-panel__empty">No font definitions recorded for this screen.</p>
+              {% endif %}
+            </section>
+          </div>
+          {% if screen.last_screenshot and screen.last_captured %}
+            <div class="timestamp">Captured {{ screen.last_captured }}</div>
           {% endif %}
           <div class="override-groups">
             {% set defaults = screen.overrides.defaults %}
@@ -315,12 +483,21 @@
       {% endfor %}
     </section>
   </main>
+  <div class="lightbox" id="lightbox" hidden aria-hidden="true">
+    <div class="lightbox__backdrop" data-lightbox-dismiss></div>
+    <div class="lightbox__content">
+      <button class="lightbox__close" type="button" aria-label="Close full-size screenshot" data-lightbox-dismiss>&times;</button>
+      <img id="lightbox-image" class="lightbox__image" alt="Full-size screenshot">
+    </div>
+  </div>
   <script>
     (() => {
       const initial = {{ overrides | tojson }};
       const pending = Object.create(null);
       const saveBtn = document.getElementById('save-all');
       const statusEl = document.getElementById('status');
+      const lightbox = document.getElementById('lightbox');
+      const lightboxImage = document.getElementById('lightbox-image');
 
       function getInitial(screenId, profileKey, field) {
         const screen = initial[screenId];
@@ -468,6 +645,44 @@
       document.querySelectorAll('.override-input').forEach((input) => {
         input.addEventListener('input', handleInput);
         input.addEventListener('change', handleInput);
+      });
+
+      function closeLightbox() {
+        lightbox.hidden = true;
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('no-scroll');
+        lightboxImage.src = '';
+      }
+
+      function openLightbox(src, label) {
+        if (!src) {
+          return;
+        }
+        lightboxImage.src = src;
+        lightboxImage.alt = label || 'Full-size screenshot';
+        lightbox.hidden = false;
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('no-scroll');
+      }
+
+      document.querySelectorAll('.screenshot-button').forEach((button) => {
+        button.addEventListener('click', () => {
+          const src = button.dataset.fullSrc;
+          if (!src) {
+            return;
+          }
+          openLightbox(src, button.getAttribute('aria-label'));
+        });
+      });
+
+      document.querySelectorAll('[data-lightbox-dismiss]').forEach((el) => {
+        el.addEventListener('click', closeLightbox);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !lightbox.hidden) {
+          closeLightbox();
+        }
       });
 
       function serializePending() {
