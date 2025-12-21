@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import subprocess
+from copy import deepcopy
 from cryptography.hazmat.primitives import serialization
 from pathlib import Path
 from typing import Optional, Tuple
@@ -487,13 +488,23 @@ def _font_pixels(screen_key: str, font_key: str, default_size: float) -> int:
 def _load_screen_font(
     screen_key: str, font_key: str, font_name: str, default_size: float
 ) -> ImageFont.ImageFont:
-    return _load_font(font_name, _font_pixels(screen_key, font_key, default_size))
+    size = _font_pixels(screen_key, font_key, default_size)
+    font = _load_font(font_name, size)
+    _record_font_definition(
+        screen_key=screen_key,
+        font_key=font_key,
+        path=os.path.join(FONTS_DIR, font_name),
+        size=size,
+    )
+    return font
 
 
 def _load_emoji_font(size: int) -> ImageFont.ImageFont:
     for noto_path in _iter_font_paths("NotoColorEmoji.ttf"):
         try:
-            return ImageFont.truetype(noto_path, size)
+            font = ImageFont.truetype(noto_path, size)
+            font.path = noto_path
+            return font
         except OSError as exc:
             logging.debug("Unable to load emoji font %s: %s", noto_path, exc)
             for native_size in (109, 128, 160):
@@ -512,16 +523,36 @@ def _load_emoji_font(size: int) -> ImageFont.ImageFont:
         if "symbola" not in path.lower():
             continue
         try:
-            return ImageFont.truetype(path, size)
+            font = ImageFont.truetype(path, size)
+            font.path = path
+            return font
         except OSError as exc:
             logging.debug("Unable to load fallback emoji font %s: %s", path, exc)
 
     logging.warning("Emoji font not found; falling back to PIL default font")
-    return ImageFont.load_default()
+    font = ImageFont.load_default()
+    font.path = "Pillow default font"
+    return font
 
 
 def _load_screen_emoji_font(screen_key: str, font_key: str, default_size: float):
-    return _load_emoji_font(_font_pixels(screen_key, font_key, default_size))
+    size = _font_pixels(screen_key, font_key, default_size)
+    font = _load_emoji_font(size)
+    _record_font_definition(
+        screen_key=screen_key,
+        font_key=font_key,
+        path=getattr(font, "path", None),
+        size=size,
+    )
+    return font
+
+
+def get_font_definitions() -> dict[str, dict[str, dict[str, object]]]:
+    """Return a copy of the known font definitions keyed by screen group."""
+    return {
+        screen_key: {font_key: deepcopy(meta) for font_key, meta in fonts.items()}
+        for screen_key, fonts in _FONT_REGISTRY.items()
+    }
 
 
 DISPLAY_BACKEND = os.environ.get("DISPLAY_BACKEND", "auto").strip().lower() or "auto"
@@ -566,6 +597,7 @@ if DISPLAY_ROTATION not in {0, 90, 180, 270}:
 # folder named `fonts` alongside this file. Noto Color Emoji is installed via
 # the system package `fonts-noto-color-emoji`.
 FONTS_DIR = os.path.join(SCRIPT_DIR, "fonts")
+_FONT_REGISTRY: dict[str, dict[str, dict[str, object]]] = {}
 
 
 def _iter_font_paths(*names: str):
@@ -584,6 +616,17 @@ def _iter_font_paths(*names: str):
                 if path not in seen and os.path.isfile(path):
                     seen.add(path)
                     yield path
+
+
+def _record_font_definition(
+    *, screen_key: str, font_key: str, path: Optional[str], size: float
+) -> None:
+    record = _FONT_REGISTRY.setdefault(screen_key, {})
+    record[font_key] = {
+        "name": os.path.basename(path) if path else "Unknown font",
+        "path": path or "",
+        "size": size,
+    }
 
 
 def _load_font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -610,6 +653,7 @@ class _BitmapEmojiFont(ImageFont.ImageFont):
 
     def __init__(self, path: str, native_size: int, size: int):
         super().__init__()
+        self.path = path
         self._native_size = native_size
         self.size = size
         self._scale = size / native_size

@@ -15,6 +15,7 @@ from flask import Flask, jsonify, render_template, request
 from schedule import build_scheduler
 from paths import resolve_storage_paths
 from screen_overrides import load_overrides as load_screen_overrides, save_overrides as save_screen_overrides
+from screen_fonts import font_definitions_for_screen
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
@@ -50,6 +51,7 @@ class ScreenInfo:
     last_screenshot: Optional[str]
     last_captured: Optional[str]
     overrides: Dict[str, Any] = field(default_factory=dict)
+    fonts: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _sanitize_directory_name(name: str) -> str:
@@ -286,9 +288,10 @@ def _collect_screen_info(
             frequency = 0
         latest = _latest_screenshot(screen_id)
         screen_overrides = _normalise_override_entry(overrides.get(screen_id))
+        font_info = font_definitions_for_screen(screen_id)
         if latest is None:
             screens.append(
-                ScreenInfo(screen_id, frequency, None, None, screen_overrides)
+                ScreenInfo(screen_id, frequency, None, None, screen_overrides, font_info)
             )
         else:
             rel_path, captured = latest
@@ -299,6 +302,7 @@ def _collect_screen_info(
                     rel_path,
                     captured.isoformat(timespec="seconds"),
                     screen_overrides,
+                    font_info,
                 )
             )
     return screens
