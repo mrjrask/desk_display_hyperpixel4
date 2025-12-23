@@ -559,6 +559,28 @@ the standard rectangular HyperPixel boards commonly appear on bus `13`. If you
 omit the variable entirely the app will scan every detected bus but still prefer
 the HyperPixel candidates first.
 
+### Admin service helper scripts
+
+Systemd helpers for `admin.py` live under `scripts/`:
+
+- Install and start the admin web service: `./scripts/install_admin_service.sh`
+- Update files, refresh the virtual environment, and restart the service: `./scripts/update_admin_service.sh`
+- Remove the admin systemd unit (keeps the repo and venv): `./scripts/uninstall_admin_service.sh`
+
+Each script accepts the following overrides via environment variables:
+
+- `INSTALL_USER` (default: `pi`)
+- `INSTALL_DIR` (default: `/home/$INSTALL_USER/desk_display_hyperpixel4`)
+- `VENV_PATH` (default: `$INSTALL_DIR/venv`)
+- `SERVICE_NAME` (default: `desk_display_admin.service`)
+- `ADMIN_HOST` / `ADMIN_PORT` (default: `0.0.0.0:5001`)
+
+For example, to run the admin service on port `8081` under a different install root:
+
+```bash
+ADMIN_PORT=8081 INSTALL_USER=display ./scripts/install_admin_service.sh
+```
+
 `ExecStop` runs `cleanup.sh` on every shutdown so the LCD blanks immediately and any lingering screenshots or videos are swept
 into the archive folders. The service is marked `Restart=always`, so crashes or manual restarts via `systemctl restart` will
 trigger a fresh boot after cleanup completes.
