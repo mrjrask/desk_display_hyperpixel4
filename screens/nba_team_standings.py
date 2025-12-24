@@ -38,14 +38,22 @@ def draw_nba_standings_screen1(
     """Wrap the generic standings screen for NBA teams (shows games back)."""
     rec = rec or {}
     rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
-    division_label = division_name or rec.get("division", {}).get("name")
-    division_label = division_label or "Division"
+    conference_info = rec.get("conference") or {}
+    conference_label = conference_info.get("name") or conference_info.get("abbreviation")
+    division_label = (
+        conference_label
+        or division_name
+        or rec.get("division", {}).get("name")
+        or "Conference"
+    )
 
-    division_rank = _preferred_rank(
+    conference_rank = _preferred_rank(
         rec.get("conferenceRank"),
         rec.get("playoffRank"),
-        rec.get("divisionRank"),
     )
+    division_rank = conference_rank if conference_rank not in (0, "0", None) else None
+    if division_rank is None:
+        division_rank = _preferred_rank(rec.get("divisionRank"))
     if division_rank in (0, "0", None):
         division_rank = "-"
 
@@ -58,7 +66,7 @@ def draw_nba_standings_screen1(
         rec_for_display,
         logo_path,
         division_label,
-        conference_label=None,
+        conference_label=conference_label,
         place_gb_before_rank=True,
         show_pct=True,
         show_games_back=False,
