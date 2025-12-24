@@ -538,7 +538,18 @@ def draw_mlb_scoreboard(display, transition: bool = False) -> ScreenImage:
             tx = (WIDTH - tw) // 2
             ty = title_top
         draw.text((tx, ty), TITLE, font=TITLE_FONT, fill=(255, 255, 255))
-        _center_text(draw, "No games today", STATUS_FONT, 0, WIDTH, HEIGHT // 2 - STATUS_ROW_H // 2, STATUS_ROW_H)
+
+        header_bottom = title_top + th + TITLE_GAP
+        status_area_height = max(STATUS_ROW_H, HEIGHT - header_bottom)
+        _center_text(
+            draw,
+            "No games today",
+            STATUS_FONT,
+            0,
+            WIDTH,
+            header_bottom,
+            status_area_height,
+        )
         if transition:
             return ScreenImage(img, displayed=False)
         display.image(img)
