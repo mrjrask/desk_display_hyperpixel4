@@ -1,5 +1,7 @@
 """Tests for Bulls next home game selection logic."""
 
+import datetime
+
 import data_fetch
 
 
@@ -42,3 +44,41 @@ def test_bulls_next_home_returns_first_non_final_home_game(monkeypatch):
     monkeypatch.setattr(data_fetch, "_future_bulls_games", _fake_future)
 
     assert data_fetch.fetch_bulls_next_home_game() is fallback
+
+
+def test_bulls_next_home_falls_back_to_ics(monkeypatch):
+    monkeypatch.setattr(data_fetch, "_future_bulls_games", lambda _days_forward: iter(()))
+
+    ics_game = {"teams": {"home": {"team": {"id": str(data_fetch.NBA_TEAM_ID)}}}}
+
+    monkeypatch.setattr(
+        data_fetch, "_future_bulls_home_games_from_ics", lambda _days_forward: iter((ics_game,))
+    )
+
+    assert data_fetch.fetch_bulls_next_home_game() is ics_game
+
+
+def test_parse_bulls_ics_shapes_game_correctly():
+    feed = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Chicago Bulls vs. Miami Heat
+DTSTART;TZID=America/Chicago:20241005T190000
+LOCATION:United Center
+END:VEVENT
+END:VCALENDAR
+"""
+
+    events = data_fetch._parse_bulls_ics(feed)
+    assert len(events) == 1
+
+    game = data_fetch._ics_event_to_game(events[0])
+    assert game
+
+    assert game["teams"]["home"]["team"]["id"] == str(data_fetch.NBA_TEAM_ID)
+    assert game["teams"]["away"]["team"]["triCode"] == "MIA"
+
+    start = game.get("_start_local")
+    assert isinstance(start, datetime.datetime)
+    assert start.hour == 19
+    assert start.tzinfo
+    assert start.astimezone(data_fetch.CENTRAL_TIME).hour == 19
