@@ -11,6 +11,7 @@ import datetime
 import io
 import logging
 import os
+import re
 import socket
 import time
 from typing import Optional
@@ -864,6 +865,136 @@ _NBA_LOOKAHEAD_DAYS = 45
 _NBA_STANDINGS_BACKOFF_UNTIL: Optional[datetime.datetime] = None
 _NBA_STANDINGS_BACKOFF_LOGGED = False
 
+_BULLS_ICS_URL = "https://chibullsdigital.com/schedule/ics/bulls_calendar.ics"
+
+_NBA_TEAM_ALIASES = {
+    "atl": ("ATL", "1610612737", "Atlanta Hawks"),
+    "atlanta": ("ATL", "1610612737", "Atlanta Hawks"),
+    "atlantahawks": ("ATL", "1610612737", "Atlanta Hawks"),
+    "hawks": ("ATL", "1610612737", "Atlanta Hawks"),
+    "bos": ("BOS", "1610612738", "Boston Celtics"),
+    "celtics": ("BOS", "1610612738", "Boston Celtics"),
+    "boston": ("BOS", "1610612738", "Boston Celtics"),
+    "bostonceltics": ("BOS", "1610612738", "Boston Celtics"),
+    "bkn": ("BKN", "1610612751", "Brooklyn Nets"),
+    "brk": ("BKN", "1610612751", "Brooklyn Nets"),
+    "brooklyn": ("BKN", "1610612751", "Brooklyn Nets"),
+    "brooklynnets": ("BKN", "1610612751", "Brooklyn Nets"),
+    "nets": ("BKN", "1610612751", "Brooklyn Nets"),
+    "cha": ("CHA", "1610612766", "Charlotte Hornets"),
+    "charlotte": ("CHA", "1610612766", "Charlotte Hornets"),
+    "charlottehornets": ("CHA", "1610612766", "Charlotte Hornets"),
+    "hornets": ("CHA", "1610612766", "Charlotte Hornets"),
+    "chi": ("CHI", _BULLS_TEAM_ID, "Chicago Bulls"),
+    "chicago": ("CHI", _BULLS_TEAM_ID, "Chicago Bulls"),
+    "chicagobulls": ("CHI", _BULLS_TEAM_ID, "Chicago Bulls"),
+    "bulls": ("CHI", _BULLS_TEAM_ID, "Chicago Bulls"),
+    "cle": ("CLE", "1610612739", "Cleveland Cavaliers"),
+    "cavaliers": ("CLE", "1610612739", "Cleveland Cavaliers"),
+    "cavs": ("CLE", "1610612739", "Cleveland Cavaliers"),
+    "cleveland": ("CLE", "1610612739", "Cleveland Cavaliers"),
+    "clevelandcavaliers": ("CLE", "1610612739", "Cleveland Cavaliers"),
+    "dal": ("DAL", "1610612742", "Dallas Mavericks"),
+    "dallas": ("DAL", "1610612742", "Dallas Mavericks"),
+    "dallasmavericks": ("DAL", "1610612742", "Dallas Mavericks"),
+    "den": ("DEN", "1610612743", "Denver Nuggets"),
+    "nuggets": ("DEN", "1610612743", "Denver Nuggets"),
+    "denver": ("DEN", "1610612743", "Denver Nuggets"),
+    "denvernuggets": ("DEN", "1610612743", "Denver Nuggets"),
+    "det": ("DET", "1610612765", "Detroit Pistons"),
+    "detroit": ("DET", "1610612765", "Detroit Pistons"),
+    "detroitpistons": ("DET", "1610612765", "Detroit Pistons"),
+    "pistons": ("DET", "1610612765", "Detroit Pistons"),
+    "gs": ("GSW", "1610612744", "Golden State Warriors"),
+    "gsw": ("GSW", "1610612744", "Golden State Warriors"),
+    "goldenstate": ("GSW", "1610612744", "Golden State Warriors"),
+    "goldenstatewarriors": ("GSW", "1610612744", "Golden State Warriors"),
+    "warriors": ("GSW", "1610612744", "Golden State Warriors"),
+    "hou": ("HOU", "1610612745", "Houston Rockets"),
+    "rockets": ("HOU", "1610612745", "Houston Rockets"),
+    "houston": ("HOU", "1610612745", "Houston Rockets"),
+    "houstonrockets": ("HOU", "1610612745", "Houston Rockets"),
+    "ind": ("IND", "1610612754", "Indiana Pacers"),
+    "pacers": ("IND", "1610612754", "Indiana Pacers"),
+    "indiana": ("IND", "1610612754", "Indiana Pacers"),
+    "indianapacers": ("IND", "1610612754", "Indiana Pacers"),
+    "lac": ("LAC", "1610612746", "LA Clippers"),
+    "laclippers": ("LAC", "1610612746", "LA Clippers"),
+    "losangelesclippers": ("LAC", "1610612746", "LA Clippers"),
+    "clippers": ("LAC", "1610612746", "LA Clippers"),
+    "lal": ("LAL", "1610612747", "Los Angeles Lakers"),
+    "lalakers": ("LAL", "1610612747", "Los Angeles Lakers"),
+    "losangeleslakers": ("LAL", "1610612747", "Los Angeles Lakers"),
+    "lakers": ("LAL", "1610612747", "Los Angeles Lakers"),
+    "mem": ("MEM", "1610612763", "Memphis Grizzlies"),
+    "memphis": ("MEM", "1610612763", "Memphis Grizzlies"),
+    "memphisgrizzlies": ("MEM", "1610612763", "Memphis Grizzlies"),
+    "mia": ("MIA", "1610612748", "Miami Heat"),
+    "miami": ("MIA", "1610612748", "Miami Heat"),
+    "miamiheat": ("MIA", "1610612748", "Miami Heat"),
+    "heat": ("MIA", "1610612748", "Miami Heat"),
+    "mil": ("MIL", "1610612749", "Milwaukee Bucks"),
+    "milwaukee": ("MIL", "1610612749", "Milwaukee Bucks"),
+    "milwaukeebucks": ("MIL", "1610612749", "Milwaukee Bucks"),
+    "bucks": ("MIL", "1610612749", "Milwaukee Bucks"),
+    "min": ("MIN", "1610612750", "Minnesota Timberwolves"),
+    "minnesota": ("MIN", "1610612750", "Minnesota Timberwolves"),
+    "minnesotatimberwolves": ("MIN", "1610612750", "Minnesota Timberwolves"),
+    "timberwolves": ("MIN", "1610612750", "Minnesota Timberwolves"),
+    "nop": ("NOP", "1610612740", "New Orleans Pelicans"),
+    "no": ("NOP", "1610612740", "New Orleans Pelicans"),
+    "neworleans": ("NOP", "1610612740", "New Orleans Pelicans"),
+    "neworleanspelicans": ("NOP", "1610612740", "New Orleans Pelicans"),
+    "pelicans": ("NOP", "1610612740", "New Orleans Pelicans"),
+    "ny": ("NYK", "1610612752", "New York Knicks"),
+    "nyk": ("NYK", "1610612752", "New York Knicks"),
+    "newyork": ("NYK", "1610612752", "New York Knicks"),
+    "newyorkknicks": ("NYK", "1610612752", "New York Knicks"),
+    "knicks": ("NYK", "1610612752", "New York Knicks"),
+    "okc": ("OKC", "1610612760", "Oklahoma City Thunder"),
+    "oklahomacity": ("OKC", "1610612760", "Oklahoma City Thunder"),
+    "oklahomacitythunder": ("OKC", "1610612760", "Oklahoma City Thunder"),
+    "thunder": ("OKC", "1610612760", "Oklahoma City Thunder"),
+    "orl": ("ORL", "1610612753", "Orlando Magic"),
+    "orlando": ("ORL", "1610612753", "Orlando Magic"),
+    "orlandomagic": ("ORL", "1610612753", "Orlando Magic"),
+    "magic": ("ORL", "1610612753", "Orlando Magic"),
+    "phi": ("PHI", "1610612755", "Philadelphia 76ers"),
+    "philadelphia": ("PHI", "1610612755", "Philadelphia 76ers"),
+    "philadelphia76ers": ("PHI", "1610612755", "Philadelphia 76ers"),
+    "sixers": ("PHI", "1610612755", "Philadelphia 76ers"),
+    "phx": ("PHX", "1610612756", "Phoenix Suns"),
+    "phoenix": ("PHX", "1610612756", "Phoenix Suns"),
+    "phoenixsuns": ("PHX", "1610612756", "Phoenix Suns"),
+    "suns": ("PHX", "1610612756", "Phoenix Suns"),
+    "por": ("POR", "1610612757", "Portland Trail Blazers"),
+    "portland": ("POR", "1610612757", "Portland Trail Blazers"),
+    "portlandtrailblazers": ("POR", "1610612757", "Portland Trail Blazers"),
+    "trailblazers": ("POR", "1610612757", "Portland Trail Blazers"),
+    "blazers": ("POR", "1610612757", "Portland Trail Blazers"),
+    "sac": ("SAC", "1610612758", "Sacramento Kings"),
+    "sacramento": ("SAC", "1610612758", "Sacramento Kings"),
+    "sacramentokings": ("SAC", "1610612758", "Sacramento Kings"),
+    "kings": ("SAC", "1610612758", "Sacramento Kings"),
+    "sas": ("SAS", "1610612759", "San Antonio Spurs"),
+    "sanantonio": ("SAS", "1610612759", "San Antonio Spurs"),
+    "sanantoniospurs": ("SAS", "1610612759", "San Antonio Spurs"),
+    "spurs": ("SAS", "1610612759", "San Antonio Spurs"),
+    "tor": ("TOR", "1610612761", "Toronto Raptors"),
+    "toronto": ("TOR", "1610612761", "Toronto Raptors"),
+    "torontoraptors": ("TOR", "1610612761", "Toronto Raptors"),
+    "raptors": ("TOR", "1610612761", "Toronto Raptors"),
+    "uta": ("UTA", "1610612762", "Utah Jazz"),
+    "utah": ("UTA", "1610612762", "Utah Jazz"),
+    "utahjazz": ("UTA", "1610612762", "Utah Jazz"),
+    "jazz": ("UTA", "1610612762", "Utah Jazz"),
+    "wsh": ("WAS", "1610612764", "Washington Wizards"),
+    "was": ("WAS", "1610612764", "Washington Wizards"),
+    "washington": ("WAS", "1610612764", "Washington Wizards"),
+    "washingtonwizards": ("WAS", "1610612764", "Washington Wizards"),
+    "wizards": ("WAS", "1610612764", "Washington Wizards"),
+}
+
 
 def _parse_nba_datetime(value):
     if not value:
@@ -887,6 +1018,15 @@ def _parse_nba_datetime(value):
     return parsed.astimezone(CENTRAL_TIME)
 
 
+def _normalize_team_key(name: str) -> str:
+    return "".join(ch.lower() for ch in str(name) if ch.isalnum())
+
+
+def _lookup_nba_team_alias(name: str):
+    key = _normalize_team_key(name)
+    return _NBA_TEAM_ALIASES.get(key)
+
+
 def _copy_nba_team(entry):
     if not isinstance(entry, dict):
         return {}
@@ -895,6 +1035,199 @@ def _copy_nba_team(entry):
     if isinstance(team_info, dict):
         cloned["team"] = dict(team_info)
     return cloned
+
+
+def _ics_team_entry(name: str):
+    alias = _lookup_nba_team_alias(name)
+    if alias:
+        tri, team_id, full_name = alias
+    else:
+        clean = name.strip() or "TBD"
+        tri = (clean[:3] or "TBD").upper()
+        team_id = None
+        full_name = clean
+    return {"team": {"triCode": tri, "abbreviation": tri, "id": team_id, "name": full_name}}
+
+
+def _bulls_team_entry():
+    return {"team": {"id": _BULLS_TEAM_ID, "triCode": _BULLS_TRICODE, "abbreviation": _BULLS_TRICODE, "name": "Chicago Bulls"}}
+
+
+def _parse_ics_datetime(value: str, tzid: Optional[str] = None):
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    tzinfo = None
+    if tzid:
+        try:
+            tzinfo = pytz.timezone(tzid)
+        except Exception:
+            tzinfo = None
+    try:
+        if text.endswith("Z"):
+            dt_obj = datetime.datetime.strptime(text, "%Y%m%dT%H%M%SZ")
+            dt_obj = dt_obj.replace(tzinfo=datetime.timezone.utc)
+        elif "T" in text:
+            dt_obj = datetime.datetime.strptime(text, "%Y%m%dT%H%M%S")
+            if tzinfo:
+                dt_obj = tzinfo.localize(dt_obj)
+        else:
+            dt_obj = datetime.datetime.strptime(text, "%Y%m%d")
+            if tzinfo:
+                dt_obj = tzinfo.localize(dt_obj)
+    except Exception:
+        return None
+    if dt_obj.tzinfo is None:
+        dt_obj = (tzinfo or CENTRAL_TIME).localize(dt_obj)
+    return dt_obj.astimezone(CENTRAL_TIME)
+
+
+def _unfold_ics_lines(text: str):
+    unfolded = []
+    for raw in text.splitlines():
+        if raw.startswith((" ", "\t")) and unfolded:
+            unfolded[-1] += raw[1:]
+        else:
+            unfolded.append(raw)
+    return unfolded
+
+
+def _split_ics_property(line: str):
+    if ":" not in line:
+        return None, None, {}
+    lhs, rhs = line.split(":", 1)
+    parts = lhs.split(";")
+    name = parts[0].upper()
+    params = {}
+    for param in parts[1:]:
+        if "=" in param:
+            key, val = param.split("=", 1)
+            params[key.upper()] = val
+    return name, rhs, params
+
+
+def _parse_bulls_ics(text: str):
+    events = []
+    current = {}
+    in_event = False
+    for line in _unfold_ics_lines(text):
+        line = line.strip()
+        if not line:
+            continue
+        if line.upper() == "BEGIN:VEVENT":
+            current = {}
+            in_event = True
+            continue
+        if line.upper() == "END:VEVENT":
+            if current:
+                events.append(current)
+            current = {}
+            in_event = False
+            continue
+        if not in_event:
+            continue
+        name, value, params = _split_ics_property(line)
+        if name and value is not None:
+            current[name] = (value, params)
+    return events
+
+
+def _opponent_from_summary(summary: str):
+    if not summary:
+        return None, None
+    lowered = summary.lower()
+    if "bulls" not in lowered:
+        return None, None
+    vs_match = re.split(r"(?i)\bvs\.?\b", summary, maxsplit=1)
+    if len(vs_match) == 2:
+        left, right = vs_match
+        if "bulls" in left.lower():
+            return right.strip(), True
+        if "bulls" in right.lower():
+            return left.strip(), False
+    at_match = re.split(r"(?i)\s@\s|(?i)\bat\b", summary, maxsplit=1)
+    if len(at_match) == 2:
+        left, right = at_match
+        if "bulls" in left.lower():
+            return right.strip(), False
+        if "bulls" in right.lower():
+            return left.strip(), True
+    parts = [piece.strip() for piece in re.split(r"[-–]|\s+", summary) if piece.strip()]
+    for part in parts:
+        if "bulls" not in part.lower():
+            return part, None
+    return None, None
+
+
+def _ics_event_to_game(event):
+    dt_value, dt_params = event.get("DTSTART", (None, {}))
+    start_local = _parse_ics_datetime(dt_value, dt_params.get("TZID"))
+    if not isinstance(start_local, datetime.datetime):
+        return None
+    summary, _ = event.get("SUMMARY", ("", {}))
+    location, _ = event.get("LOCATION", ("", {}))
+    opponent_name, home_flag = _opponent_from_summary(summary)
+    if not opponent_name:
+        return None
+    if home_flag is None and isinstance(location, str) and location:
+        if "united center" in location.lower():
+            home_flag = True
+    opponent_team = _ics_team_entry(opponent_name)
+    bulls_team = _bulls_team_entry()
+    if home_flag is True:
+        home = bulls_team
+        away = opponent_team
+    elif home_flag is False:
+        home = opponent_team
+        away = bulls_team
+    else:
+        home = bulls_team
+        away = opponent_team
+    utc_start = start_local.astimezone(datetime.timezone.utc)
+    game_date = utc_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    game = {
+        "teams": {"home": home, "away": away},
+        "status": {"detailedState": "Scheduled", "abstractGameState": "preview", "statusCode": "1"},
+        "gameDate": game_date,
+        "officialDate": start_local.date().isoformat(),
+        "_start_local": start_local,
+    }
+    return game
+
+
+def _fetch_bulls_ics_games():
+    try:
+        headers = {"Accept": "text/calendar,text/plain,*/*"}
+        resp = _session.get(_BULLS_ICS_URL, timeout=10, headers=headers)
+        resp.raise_for_status()
+    except Exception as exc:
+        logging.error("Failed to fetch Bulls ICS feed: %s", exc)
+        return []
+    games = []
+    for event in _parse_bulls_ics(resp.text):
+        game = _ics_event_to_game(event)
+        if game:
+            games.append(game)
+    games.sort(key=lambda g: g.get("_start_local") or datetime.datetime.max)
+    return games
+
+
+def _future_bulls_home_games_from_ics(days_forward):
+    today = datetime.datetime.now(CENTRAL_TIME).date()
+    last_day = today + datetime.timedelta(days=days_forward)
+    for game in _fetch_bulls_ics_games():
+        start = game.get("_start_local")
+        if not isinstance(start, datetime.datetime):
+            continue
+        game_day = start.date()
+        if game_day < today or game_day > last_day:
+            continue
+        teams = game.get("teams") or {}
+        if not _is_bulls_team(teams.get("home")):
+            continue
+        yield game
 
 
 def _augment_nba_game(game):
@@ -1002,22 +1335,39 @@ def fetch_bulls_next_game():
     return None
 
 
+def _next_bulls_home_game_from_nba():
+    fallback_game = None
+    for game in _future_bulls_games(_NBA_LOOKAHEAD_DAYS):
+        teams = game.get("teams") or {}
+        if not _is_bulls_team(teams.get("home")):
+            continue
+
+        state = _nba_game_state(game)
+        if state in {"preview", "scheduled", "pregame"}:
+            return game
+        if fallback_game is None and state not in {"final", "postponed"}:
+            fallback_game = game
+    return fallback_game
+
+
+def _next_bulls_home_game_from_ics():
+    for game in _future_bulls_home_games_from_ics(_NBA_LOOKAHEAD_DAYS):
+        return game
+    return None
+
+
 def fetch_bulls_next_home_game():
     try:
-        fallback_game = None
-        for game in _future_bulls_games(_NBA_LOOKAHEAD_DAYS):
-            teams = game.get("teams") or {}
-            if not _is_bulls_team(teams.get("home")):
-                continue
-
-            state = _nba_game_state(game)
-            if state in {"preview", "scheduled", "pregame"}:
-                return game
-            if fallback_game is None and state not in {"final", "postponed"}:
-                fallback_game = game
-        return fallback_game
+        nba_game = _next_bulls_home_game_from_nba()
+        if nba_game:
+            return nba_game
     except Exception as exc:
-        logging.error("Error fetching next Bulls home game: %s", exc)
+        logging.error("Error fetching next Bulls home game from NBA: %s", exc)
+
+    try:
+        return _next_bulls_home_game_from_ics()
+    except Exception as exc:
+        logging.error("Error fetching next Bulls home game from ICS: %s", exc)
     return None
 
 
