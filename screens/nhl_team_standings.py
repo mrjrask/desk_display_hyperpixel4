@@ -21,7 +21,7 @@ def draw_nhl_standings_screen1(
     rec = rec or {}
     conference_name = (rec.get("conference") or {}).get("name")
     conference_name = conference_name or rec.get("conferenceName")
-    conference_name = conference_name or division_name or "Conference"
+    conference_name = conference_name or "Conference"
     rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
 
     def _record_line(record_obj, base_rec):
