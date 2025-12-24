@@ -42,6 +42,7 @@ from config import (
     FONT_DATE_SPORTS,
     FONT_TEAM_SPORTS,
     FONT_TITLE_SPORTS,
+    IS_SQUARE_DISPLAY,
     NHL_API_ENDPOINTS,
     NHL_FALLBACK_LOGO,
     NHL_IMAGES_DIR,
@@ -628,10 +629,21 @@ def _draw_scoreboard(
 ) -> int:
     """Draw a large 2×3 scoreboard that fills the available space."""
 
-    col1_w = min(WIDTH - 40, max(120, int(WIDTH * 0.7)))
-    remaining = max(40, WIDTH - col1_w)
-    col2_w = max(48, int(round(remaining * 0.55)))
-    col3_w = max(32, WIDTH - col1_w - col2_w)
+    size_scale = 0.85 if IS_SQUARE_DISPLAY else 1.0
+    min_col2 = 56 if IS_SQUARE_DISPLAY else 48
+    min_col3 = 48 if IS_SQUARE_DISPLAY else 32
+
+    col1_ratio = 0.58 if IS_SQUARE_DISPLAY else 0.7
+    col2_ratio = 0.56 if IS_SQUARE_DISPLAY else 0.55
+
+    col1_w = int(round(WIDTH * col1_ratio))
+    col1_w = max(120, min(col1_w, WIDTH - (min_col2 + min_col3)))
+
+    remaining = WIDTH - col1_w
+    col2_w = max(min_col2, int(round(remaining * col2_ratio)))
+    col2_w = min(col2_w, WIDTH - col1_w - min_col3)
+
+    col3_w = max(min_col3, WIDTH - col1_w - col2_w)
     if col1_w + col2_w + col3_w != WIDTH:
         col3_w = WIDTH - col1_w - col2_w
     x0, x1, x2, x3 = 0, col1_w, col1_w + col2_w, WIDTH
@@ -653,10 +665,10 @@ def _draw_scoreboard(
         row_h = max(64, available_for_rows // 2)
 
     def _font_sizes(row_height: int) -> tuple[int, int, int, int]:
-        name_size = max(36, int(round(row_height * 0.45)))
-        score_size = max(44, int(round(row_height * 0.65)))
-        sog_size = max(32, int(round(row_height * 0.45)))
-        header_size = max(24, int(round(row_height * 0.28))) if put_sog_label else 0
+        name_size = max(36, int(round(row_height * 0.45 * size_scale)))
+        score_size = max(44, int(round(row_height * 0.65 * size_scale)))
+        sog_size = max(32, int(round(row_height * 0.45 * size_scale)))
+        header_size = max(24, int(round(row_height * 0.28 * size_scale))) if put_sog_label else 0
         return name_size, score_size, sog_size, header_size
 
     name_size, score_size, sog_size, header_size = _font_sizes(row_h)
@@ -706,7 +718,8 @@ def _draw_scoreboard(
         underline_y = header_y + text_h
         d.line([(label_x, underline_y), (label_x + sog_w, underline_y)], fill="white")
 
-    logo_target = max(48, int(round(max(row1_h, row2_h) * 0.85)))
+    logo_min = 42 if IS_SQUARE_DISPLAY else 48
+    logo_target = max(logo_min, int(round(max(row1_h, row2_h) * 0.85 * size_scale)))
 
     def _prepare_row(
         row_top: int,
