@@ -972,21 +972,33 @@ def get_mlb_abbreviation(team_name: str) -> str:
 
 def next_game_from_schedule(schedule: List[Dict[str, Any]], today: Optional[datetime.date] = None) -> Optional[Dict[str, Any]]:
     today = today or datetime.date.today()
-    year = today.year
-    upcoming: List[tuple[datetime.date, Dict[str, Any]]] = []
+
+    def _game_no(entry: Dict[str, Any]) -> float:
+        try:
+            return float(entry.get("game_no", "0"))
+        except Exception:
+            return 0.0
+
+    upcoming: List[tuple[datetime.date, float, Dict[str, Any]]] = []
     for entry in schedule:
         if entry.get("opponent") == "—" or str(entry.get("time", "")).upper() == "TBD":
             continue
         try:
             parsed = datetime.datetime.strptime(entry.get("date", ""), "%a, %b %d")
-            game_date = datetime.date(year, parsed.month, parsed.day)
         except Exception:
             continue
-        if game_date >= today:
-            upcoming.append((game_date, entry))
+
+        game_date = datetime.date(today.year, parsed.month, parsed.day)
+        if game_date < today:
+            game_date = datetime.date(today.year + 1, parsed.month, parsed.day)
+
+        upcoming.append((game_date, _game_no(entry), entry))
+
     if not upcoming:
         return None
-    return sorted(upcoming, key=lambda item: item[0])[0][1]
+
+    upcoming.sort(key=lambda item: (item[0], item[1]))
+    return upcoming[0][2]
 
 
 _LOGO_BRIGHTNESS_OVERRIDES: dict[tuple[str, str], float] = {
