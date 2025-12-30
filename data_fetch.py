@@ -1805,13 +1805,21 @@ def fetch_bears_standings():
 # NHL — Blackhawks standings
 # -----------------------------------------------------------------------------
 def _fetch_nhl_team_standings(team_abbr: str):
+    fallback = None
     try:
         url = "https://api-web.nhle.com/v1/standings/now"
         resp = _session.get(url, timeout=10, headers=NHL_HEADERS)
         resp.raise_for_status()
         payload = resp.json() or {}
         standings = payload.get("standings", []) or []
-        entry = next((row for row in standings if row.get("teamAbbrev") == team_abbr), None)
+        entry = next(
+            (
+                row
+                for row in standings
+                if (row.get("teamAbbrev") or "").upper() == team_abbr.upper()
+            ),
+            None,
+        )
         if entry:
             record = {
                 "wins": _safe_int(entry.get("wins")),
@@ -1851,7 +1859,6 @@ def _fetch_nhl_team_standings(team_abbr: str):
                 "conferenceName": entry.get("conferenceName")
                 or entry.get("conferenceAbbrev"),
             }
-        logging.warning("Team %s not found in NHL standings; trying fallback", team_abbr)
     except Exception as exc:
         logging.error("Error fetching NHL standings for %s: %s", team_abbr, exc)
     fallback = _fetch_nhl_team_standings_espn(team_abbr)
@@ -1859,8 +1866,13 @@ def _fetch_nhl_team_standings(team_abbr: str):
         return fallback
     if not _statsapi_available():
         logging.info("Skipping statsapi NHL standings fallback due to DNS failure")
+        logging.warning("Team %s not found in NHL standings", team_abbr)
         return None
-    return _fetch_nhl_team_standings_statsapi(team_abbr)
+    fallback = _fetch_nhl_team_standings_statsapi(team_abbr)
+    if fallback:
+        return fallback
+    logging.warning("Team %s not found in NHL standings", team_abbr)
+    return None
 
 
 def fetch_blackhawks_standings():
@@ -2061,6 +2073,12 @@ def _fetch_nba_team_standings(team_tricode: str):
                     )
                     return None
 
+                if status == 404:
+                    logging.info(
+                        "NBA standings returned HTTP 404 from %s; trying fallback", base
+                    )
+                    continue
+
                 logging.error("Error fetching NBA standings from %s: %s", base, exc)
         return None
 
@@ -2068,7 +2086,14 @@ def _fetch_nba_team_standings(team_tricode: str):
     teams = payload.get("league", {}).get("standard", {}).get("teams", [])
 
     try:
-        entry = next((row for row in teams if row.get("teamTricode") == team_tricode), None)
+        entry = next(
+            (
+                row
+                for row in teams
+                if (row.get("teamTricode") or "").upper() == team_tricode.upper()
+            ),
+            None,
+        )
         if entry:
             record = {
                 "wins": _safe_int(entry.get("wins") or entry.get("win")),
@@ -2116,13 +2141,17 @@ def _fetch_nba_team_standings(team_tricode: str):
                 "records": {"splitRecords": splits},
                 "conferenceRank": conference_rank,
             }
-        logging.warning("Team %s not found in NBA standings", team_tricode)
     except Exception as exc:
         logging.error("Error fetching NBA standings for %s: %s", team_tricode, exc)
     fallback = _fetch_nba_team_standings_espn()
     if fallback:
         return fallback
-    logging.warning("Using placeholder NBA standings for %s due to fetch errors", team_tricode)
+    if teams:
+        logging.warning("Team %s not found in NBA standings", team_tricode)
+    else:
+        logging.warning(
+            "Using placeholder NBA standings for %s due to fetch errors", team_tricode
+        )
     return _empty_standings_record(team_tricode)
 
 

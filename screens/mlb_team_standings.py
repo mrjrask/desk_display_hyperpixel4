@@ -153,6 +153,7 @@ def draw_standings_screen1(
     show_streak: bool = False,
     ot_label: str = "OT",
     points_label: str | None = None,
+    points_font: ImageFont.ImageFont | None = None,
     conference_label: str | None = None,
     show_conference_rank: bool = True,
     place_gb_before_rank: bool = False,
@@ -255,7 +256,7 @@ def draw_standings_screen1(
         (wl_txt, wl_font),
     ]
     if points_txt:
-        lines.append((points_txt, FONT_STAND1_GB_VALUE))
+        lines.append((points_txt, points_font or FONT_STAND1_GB_VALUE))
     if gb_txt and place_gb_before_rank:
         lines.append((gb_txt, FONT_STAND1_GB_VALUE))
     lines.append((rank_txt, rank_font))
