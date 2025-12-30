@@ -7,23 +7,27 @@ from screens.mlb_team_standings import (
 from utils import log_call
 
 
-def _preferred_rank(*ranks: object) -> object | None:
-    """Return the first positive, non-zero rank value."""
-    for rank in ranks:
-        try:
-            rank_int = int(rank)
-        except Exception:
-            rank_int = None
+def _strip_pct_leading_zero(rec, *, precision=3):
+    """Return a copy of the record with pct formatted without a leading zero."""
 
-        if rank_int is not None:
-            if rank_int > 0:
-                return rank_int
-            continue
+    if not rec:
+        return rec
 
-        if rank not in (None, ""):
-            return rank
+    league_record = rec.get("leagueRecord")
+    if not isinstance(league_record, dict):
+        return rec
 
-    return None
+    pct_val = league_record.get("pct")
+    if pct_val in (None, ""):
+        return rec
+
+    try:
+        pct_txt = f"{float(pct_val):.{precision}f}".lstrip("0")
+    except Exception:
+        pct_txt = str(pct_val).lstrip("0")
+
+    updated_record = {**league_record, "pct": pct_txt}
+    return {**rec, "leagueRecord": updated_record}
 
 
 @log_call
@@ -36,31 +40,44 @@ def draw_nba_standings_screen1(
     transition=False,
 ):
     """Wrap the generic standings screen for NBA teams (shows games back)."""
-    rec = rec or {}
-    rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
-    conference_info = rec.get("conference") or {}
-    conference_label = conference_info.get("name") or conference_info.get("abbreviation")
+
+    rec_clean = _strip_pct_leading_zero(rec)
+    conference_info = rec_clean.get("conference") if isinstance(rec_clean, dict) else {}
+    conference_label = None
+    if isinstance(conference_info, dict):
+        conference_label = conference_info.get("name") or conference_info.get("abbreviation")
+
+    conference_label = (
+        conference_label
+        or (rec_clean or {}).get("conferenceName")
+        or (rec_clean or {}).get("conferenceAbbrev")
+        or "conference"
+    )
     division_label = (
         conference_label
         or division_name
-        or rec.get("division", {}).get("name")
+        or (rec_clean or {}).get("division", {}).get("name")
         or "Conference"
     )
 
-    conference_rank = _preferred_rank(
-        rec.get("conferenceRank"),
-        rec.get("playoffRank"),
-    )
-    division_rank = conference_rank if conference_rank not in (0, "0", None) else None
-    if division_rank is None:
-        division_rank = _preferred_rank(rec.get("divisionRank"))
-    if division_rank in (0, "0", None):
-        division_rank = "-"
+    conference_rank = None
+    if isinstance(rec_clean, dict):
+        conference_rank = (
+            rec_clean.get("conferenceRank")
+            or rec_clean.get("playoffRank")
+            or rec_clean.get("divisionRank")
+        )
+    conference_rank = conference_rank if conference_rank not in (None, "") else "-"
+
+    rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
 
     rec_for_display = {
-        **rec,
-        "divisionRank": division_rank,
+        **(rec_clean or {}),
+        "divisionRank": conference_rank,
+        "conferenceRank": conference_rank,
+        "conferenceName": conference_label,
     }
+
     return _base_screen1(
         display,
         rec_for_display,
@@ -85,7 +102,7 @@ def draw_nba_standings_screen2(display, rec, logo_path, *, transition=False):
 
     return _base_screen2(
         display,
-        rec,
+        _strip_pct_leading_zero(rec),
         logo_path,
         pct_precision=3,
         transition=transition,
