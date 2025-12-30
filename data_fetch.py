@@ -1650,6 +1650,19 @@ def _safe_int(value):
         return value
 
 
+def _coerce_abbreviation(value) -> str:
+    """Return a best-effort uppercase abbreviation string."""
+
+    if isinstance(value, str):
+        return value.strip().upper()
+    if isinstance(value, dict):
+        for key in ("default", "en", "english", "abbr", "abbrev", "code", "name", "value"):
+            inner = value.get(key)
+            if isinstance(inner, str) and inner.strip():
+                return inner.strip().upper()
+    return ""
+
+
 def _format_streak_code(prefix, count):
     try:
         c = int(count)
@@ -1816,7 +1829,7 @@ def _fetch_nhl_team_standings(team_abbr: str):
             (
                 row
                 for row in standings
-                if (row.get("teamAbbrev") or "").upper() == team_abbr.upper()
+                if _coerce_abbreviation(row.get("teamAbbrev")) == team_abbr.upper()
             ),
             None,
         )
