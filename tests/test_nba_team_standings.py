@@ -30,9 +30,9 @@ def test_nba_standings_uses_conference_rank(monkeypatch):
         transition=True,
     )
 
-    assert captured["divisionRank"] == 5
+    assert captured["divisionRank"] == 3
     assert captured["conferenceRank"] == 5
-    assert captured["division_label"] == "Eastern"
+    assert captured["division_label"] == "Central"
     assert captured["conference_label"] == "Eastern"
     assert captured["pct"] == ".600"
 
@@ -63,5 +63,5 @@ def test_nba_standings_defaults_when_missing(monkeypatch):
 
     assert captured["divisionRank"] == "-"
     assert captured["conferenceRank"] == "-"
-    assert captured["division_label"] == "conference"
+    assert captured["division_label"] == "Central"
     assert captured["conference_label"] == "conference"

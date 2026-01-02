@@ -54,26 +54,31 @@ def draw_nba_standings_screen1(
         or "conference"
     )
     division_label = (
-        conference_label
-        or division_name
+        division_name
         or (rec_clean or {}).get("division", {}).get("name")
-        or "Conference"
+        or (rec_clean or {}).get("divisionName")
+        or (rec_clean or {}).get("divisionAbbrev")
+        or "division"
     )
 
     conference_rank = None
+    division_rank = None
     if isinstance(rec_clean, dict):
         conference_rank = (
             rec_clean.get("conferenceRank")
             or rec_clean.get("playoffRank")
             or rec_clean.get("divisionRank")
         )
+        division_rank = rec_clean.get("divisionRank")
+
     conference_rank = conference_rank if conference_rank not in (None, "") else "-"
+    division_rank = division_rank if division_rank not in (None, "") else "-"
 
     rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
 
     rec_for_display = {
         **(rec_clean or {}),
-        "divisionRank": conference_rank,
+        "divisionRank": division_rank,
         "conferenceRank": conference_rank,
         "conferenceName": conference_label,
     }
