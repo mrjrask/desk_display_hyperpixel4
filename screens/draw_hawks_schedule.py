@@ -629,7 +629,7 @@ def _draw_scoreboard(
 ) -> int:
     """Draw a large 2×3 scoreboard that fills the available space."""
 
-    size_scale = 0.85 if IS_SQUARE_DISPLAY else 1.0
+    size_scale = 0.6 if IS_SQUARE_DISPLAY else 1.0
     min_col2 = 56 if IS_SQUARE_DISPLAY else 48
     min_col3 = 48 if IS_SQUARE_DISPLAY else 32
 
@@ -664,10 +664,13 @@ def _draw_scoreboard(
     if available_for_rows and row_h * 2 > available_for_rows:
         row_h = max(64, available_for_rows // 2)
 
+    min_name_size = int(round(36 * size_scale)) if IS_SQUARE_DISPLAY else 36
+    min_sog_size = int(round(32 * size_scale)) if IS_SQUARE_DISPLAY else 32
+
     def _font_sizes(row_height: int) -> tuple[int, int, int, int]:
-        name_size = max(36, int(round(row_height * 0.45 * size_scale)))
+        name_size = max(min_name_size, int(round(row_height * 0.45 * size_scale)))
         score_size = max(44, int(round(row_height * 0.65 * size_scale)))
-        sog_size = max(32, int(round(row_height * 0.45 * size_scale)))
+        sog_size = max(min_sog_size, int(round(row_height * 0.45 * size_scale)))
         header_size = max(24, int(round(row_height * 0.28 * size_scale))) if put_sog_label else 0
         return name_size, score_size, sog_size, header_size
 
@@ -718,7 +721,7 @@ def _draw_scoreboard(
         underline_y = header_y + text_h
         d.line([(label_x, underline_y), (label_x + sog_w, underline_y)], fill="white")
 
-    logo_min = 42 if IS_SQUARE_DISPLAY else 48
+    logo_min = 40 if IS_SQUARE_DISPLAY else 48
     logo_target = max(logo_min, int(round(max(row1_h, row2_h) * 0.85 * size_scale)))
 
     def _prepare_row(
