@@ -862,6 +862,7 @@ _BULLS_TEAM_ID = str(NBA_TEAM_ID)
 _BULLS_TRICODE = (NBA_TEAM_TRICODE or "CHI").upper()
 _NBA_LOOKBACK_DAYS = 7
 _NBA_LOOKAHEAD_DAYS = 45
+_NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS = 365
 _NBA_STANDINGS_BACKOFF_UNTIL: Optional[datetime.datetime] = None
 _NBA_STANDINGS_BACKOFF_LOGGED = False
 
@@ -1350,8 +1351,8 @@ def _next_bulls_home_game_from_nba():
     return fallback_game
 
 
-def _next_bulls_home_game_from_ics():
-    for game in _future_bulls_home_games_from_ics(_NBA_LOOKAHEAD_DAYS):
+def _next_bulls_home_game_from_ics(days_forward=_NBA_LOOKAHEAD_DAYS):
+    for game in _future_bulls_home_games_from_ics(days_forward):
         return game
     return None
 
@@ -1365,7 +1366,13 @@ def fetch_bulls_next_home_game():
         logging.error("Error fetching next Bulls home game from NBA: %s", exc)
 
     try:
-        return _next_bulls_home_game_from_ics()
+        game = _next_bulls_home_game_from_ics(_NBA_LOOKAHEAD_DAYS)
+        if game:
+            return game
+        if _NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS > _NBA_LOOKAHEAD_DAYS:
+            return _next_bulls_home_game_from_ics(
+                _NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS
+            )
     except Exception as exc:
         logging.error("Error fetching next Bulls home game from ICS: %s", exc)
     return None

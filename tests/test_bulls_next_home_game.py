@@ -58,6 +58,24 @@ def test_bulls_next_home_falls_back_to_ics(monkeypatch):
     assert data_fetch.fetch_bulls_next_home_game() is ics_game
 
 
+def test_bulls_next_home_extends_ics_window(monkeypatch):
+    monkeypatch.setattr(data_fetch, "_future_bulls_games", lambda _days_forward: iter(()))
+
+    target_game = {"teams": {"home": {"team": {"id": str(data_fetch.NBA_TEAM_ID)}}}}
+    seen_windows = []
+
+    def _fake_ics(days_forward):
+        seen_windows.append(days_forward)
+        if days_forward == data_fetch._NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS:
+            return iter((target_game,))
+        return iter(())
+
+    monkeypatch.setattr(data_fetch, "_future_bulls_home_games_from_ics", _fake_ics)
+
+    assert data_fetch.fetch_bulls_next_home_game() is target_game
+    assert seen_windows == [data_fetch._NBA_LOOKAHEAD_DAYS, data_fetch._NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS]
+
+
 def test_parse_bulls_ics_shapes_game_correctly():
     feed = """BEGIN:VCALENDAR
 BEGIN:VEVENT
