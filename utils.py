@@ -216,6 +216,18 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
+        # Some KMS/DRM stacks (e.g., HyperPixel 4 on Debian Trixie) keep the
+        # hardware cursor visible until relative mouse mode is toggled. Flip it
+        # briefly to encourage the cursor plane to disappear, then re-apply the
+        # hidden cursor state once more.
+        try:
+            if hasattr(pygame.mouse, "set_relative"):
+                pygame.mouse.set_relative(True)
+                pygame.mouse.set_relative(False)
+            pygame.mouse.set_visible(False)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
         try:
             pygame.event.set_grab(True)
         except Exception:  # pragma: no cover - optional dependency
