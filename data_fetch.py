@@ -1859,16 +1859,31 @@ def _fetch_nhl_team_standings(team_abbr: str):
 
             streak_code = entry.get("streakCode") or _format_streak_code(entry.get("streakType"), entry.get("streakNumber"))
 
+            division_rank = _safe_int(
+                entry.get("divisionSeq")
+                or entry.get("divisionRank")
+                or entry.get("divisionSequence")
+                or (entry.get("division") or {}).get("rank")
+                or (entry.get("division") or {}).get("sequence")
+            )
+
+            conference_rank = _safe_int(
+                entry.get("conferenceSeq")
+                or entry.get("conferenceRank")
+                or entry.get("conferenceSequence")
+                or (entry.get("conference") or {}).get("rank")
+                or (entry.get("conference") or {}).get("sequence")
+            )
+
             return {
                 "leagueRecord": record,
-                "divisionRank": entry.get("divisionSeq") or entry.get("divisionRank"),
+                "divisionRank": division_rank,
                 "divisionGamesBack": None,
                 "wildCardGamesBack": None,
                 "streak": {"streakCode": streak_code or "-"},
                 "records": {"splitRecords": splits},
                 "points": entry.get("points"),
-                "conferenceRank": entry.get("conferenceSeq")
-                or entry.get("conferenceRank"),
+                "conferenceRank": conference_rank,
                 "conferenceName": entry.get("conferenceName")
                 or entry.get("conferenceAbbrev"),
             }
