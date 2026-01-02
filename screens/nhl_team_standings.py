@@ -69,7 +69,17 @@ def _format_conference_name(rec):
     lower_name = str(name).lower()
     if "conference" in lower_name:
         trimmed = str(name).replace("Conference", "").strip()
-        return f"{trimmed} Conf." if trimmed else "conference"
+        if not trimmed:
+            return "conference"
+
+        if IS_SQUARE_DISPLAY:
+            trimmed_lower = trimmed.lower()
+            if trimmed_lower.startswith("western"):
+                return "West"
+            if trimmed_lower.startswith("eastern"):
+                return "East"
+
+        return f"{trimmed} Conf."
 
     if "conf" in lower_name:
         return name
