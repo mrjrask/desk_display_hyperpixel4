@@ -148,6 +148,21 @@ COLUMN_HEADERS: List[tuple[str, str, str]] = [
     ("T", "ties", "right"),
 ]
 
+PLAYOFF_INDICATOR_DESCRIPTIONS = {
+    "Z": (
+        "Clinched Division: The team has secured first place in its division; no other "
+        "team in the division can overtake them."
+    ),
+    "Y": (
+        "Clinched Wild Card: The team has secured a playoff spot via a wild-card berth "
+        "(not as a division winner)."
+    ),
+    "X": (
+        "Clinched Playoff Berth: The team has guaranteed a playoff spot, either by winning "
+        "the division or locking in a wild-card position."
+    ),
+}
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _text_size(text: str, font) -> tuple[int, int]:
