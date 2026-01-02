@@ -571,7 +571,8 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
 
 @log_call
 def draw_weather_hourly(display, weather, transition: bool = False, hours: int = HOURLY_FORECAST_HOURS):
-    forecast = _gather_hourly_forecast(weather, hours)
+    forecast = _gather_hourly_forecast(weather, hours * 2)
+    forecast = forecast[::2]
     if not forecast:
         img = Image.new("RGB", (WIDTH, HEIGHT), "black")
         draw = ImageDraw.Draw(img)
@@ -585,7 +586,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
     draw = ImageDraw.Draw(img)
 
     hours_to_show = len(forecast)
-    title = f"Next {hours_to_show} Hours"
+    title = "Next 10 hours..."
     title_w, title_h = draw.textsize(title, font=FONT_WEATHER_LABEL)
 
     header_padding = 8
