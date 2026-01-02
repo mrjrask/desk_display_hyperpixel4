@@ -199,19 +199,6 @@ def _render_precip_icon(is_snow: bool, size: int, color: Tuple[int, int, int]) -
     icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     icon_draw = ImageDraw.Draw(icon)
 
-    if not is_snow:
-        # Optionally draw the emoji glyph when it exists, but always render the vector
-        # droplet to guarantee a visible icon when emoji fonts are missing or blank.
-        try:
-            bbox = icon_draw.textbbox((size / 2, size / 2), "💧", font=FONT_EMOJI, anchor="mm")
-            glyph_width = (bbox[2] - bbox[0]) if bbox else 0
-            glyph_height = (bbox[3] - bbox[1]) if bbox else 0
-            if glyph_width > 0 and glyph_height > 0:
-                icon_draw.text((size / 2, size / 2), "💧", font=FONT_EMOJI, anchor="mm")
-        except Exception:
-            # Ignore emoji rendering issues and fall back to vector only.
-            pass
-
     if is_snow:
         center = size / 2
         radius = size * 0.42
@@ -441,7 +428,10 @@ def draw_weather_screen_1(display, weather, transition=False):
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
         precip_x = _center_block(0, icon_x, block_w)
-        block_y = icon_center_y - block_h // 2
+        block_y = max(
+            side_margin,
+            min(icon_center_y - block_h // 2, y_lbl - block_h - side_margin),
+        )
         emoji_x = precip_x + (block_w - emoji_w) // 2
         pct_x = precip_x + (block_w - pct_w) // 2
         img.paste(precip_icon, (emoji_x, block_y), precip_icon)
@@ -454,7 +444,10 @@ def draw_weather_screen_1(display, weather, transition=False):
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
         cloud_x = _center_block(icon_x + WEATHER_ICON_SIZE, WIDTH, block_w)
-        block_y = icon_center_y - block_h // 2
+        block_y = max(
+            side_margin,
+            min(icon_center_y - block_h // 2, y_lbl - block_h - side_margin),
+        )
         emoji_x = cloud_x + (block_w - emoji_w) // 2
         pct_x = cloud_x + (block_w - pct_w) // 2
         draw.text((emoji_x, block_y), cloud_emoji, font=FONT_EMOJI, fill=(211, 211, 211))

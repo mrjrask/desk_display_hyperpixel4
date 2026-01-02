@@ -893,7 +893,7 @@ FONT_EMOJI = _load_screen_emoji_font("shared", "emoji", 30)
 # ─── Screen-specific configuration ─────────────────────────────────────────────
 
 # Weather screen
-WEATHER_ICON_SIZE = scale(218)
+WEATHER_ICON_SIZE = scale(188)
 WEATHER_DESC_GAP  = scale_y(8)
 
 # Date/time screen
