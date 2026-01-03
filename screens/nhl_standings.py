@@ -41,6 +41,7 @@ CONFERENCE_EAST_KEY = "Eastern"
 
 LOGO_DIR = NHL_IMAGES_DIR
 LOGO_HEIGHT = 130  # larger logos for standings rows
+LOGO_MAX_ASPECT_RATIO = 1.2
 LEFT_MARGIN = 10
 RIGHT_MARGIN = 12
 TEAM_COLUMN_GAP = 10
@@ -291,6 +292,7 @@ def _load_overview_logo(abbr: str, height: int) -> Optional[Image.Image]:
         from utils import load_team_logo
 
         logo = load_team_logo(LOGO_DIR, abbr_key, height=height)
+        logo = _constrain_logo_width(logo, height)
     except Exception as exc:  # pragma: no cover - defensive guard
         logging.debug("NHL overview logo load failed for %s@%s: %s", abbr_key, height, exc)
         logo = None
@@ -303,10 +305,24 @@ def _load_logo(abbr: str) -> Optional[Image.Image]:
     try:
         from utils import load_team_logo
 
-        return load_team_logo(LOGO_DIR, abbr, height=LOGO_HEIGHT)
+        logo = load_team_logo(LOGO_DIR, abbr, height=LOGO_HEIGHT)
+        return _constrain_logo_width(logo, LOGO_HEIGHT)
     except Exception as exc:  # pragma: no cover - defensive guard
         logging.debug("NHL logo load failed for %s: %s", abbr, exc)
         return None
+
+
+def _constrain_logo_width(logo: Optional[Image.Image], target_height: int) -> Optional[Image.Image]:
+    if logo is None:
+        return None
+
+    max_width = int(round(target_height * LOGO_MAX_ASPECT_RATIO))
+    if max_width <= 0 or logo.width <= max_width:
+        return logo
+
+    ratio = max_width / float(logo.width)
+    new_height = max(1, int(round(logo.height * ratio)))
+    return logo.resize((max_width, new_height), Image.ANTIALIAS)
 
 
 def _team_abbreviation(team: dict) -> str:
