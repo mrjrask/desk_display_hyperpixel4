@@ -7,6 +7,29 @@ from screens.mlb_team_standings import (
 from utils import log_call
 
 
+def _normalize_rank(value):
+    """Return a positive integer rank or ``None`` when not available.
+
+    NBA feeds occasionally surface placeholders (``0``, ``0.0``, ``None``)
+    when rank details are unavailable. Returning ``None`` ensures the screen
+    renders "-" instead of an incorrect "0th" label.
+    """
+
+    if value in (None, "", "-"):
+        return None
+
+    try:
+        number = float(value)
+    except Exception:
+        return value
+
+    if not number.is_integer():
+        return None
+
+    number = int(number)
+    return number if number > 0 else None
+
+
 def _strip_pct_leading_zero(rec, *, precision=3):
     """Return a copy of the record with pct formatted without a leading zero."""
 
@@ -71,8 +94,8 @@ def draw_nba_standings_screen1(
         )
         division_rank = rec_clean.get("divisionRank")
 
-    conference_rank = conference_rank if conference_rank not in (None, "") else "-"
-    division_rank = division_rank if division_rank not in (None, "") else "-"
+    conference_rank = _normalize_rank(conference_rank) or "-"
+    division_rank = _normalize_rank(division_rank) or "-"
 
     rank_font = FONT_STAND1_RANK_COMPACT if IS_SQUARE_DISPLAY else None
 
