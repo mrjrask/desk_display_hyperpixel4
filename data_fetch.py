@@ -2233,6 +2233,19 @@ def _fetch_nba_team_standings_espn() -> Optional[dict]:
             except Exception:
                 pass
 
+            playoff_seed = _stat(stats, "playoffSeed")
+            conference_rank = _best_standings_rank(
+                _stat(stats, "overallRank"),
+                playoff_seed,
+                _stat(stats, "rank"),
+            )
+            division_rank = _best_standings_rank(
+                _stat(stats, "divisionStanding"),
+                _stat(stats, "divisionRank"),
+                _stat(stats, "divisionSeed"),
+                playoff_seed,
+            )
+
             logging.info("Using ESPN NBA standings fallback for %s", NBA_TEAM_TRICODE)
             return {
                 "leagueRecord": {
@@ -2240,12 +2253,12 @@ def _fetch_nba_team_standings_espn() -> Optional[dict]:
                     "losses": _safe_int(_stat(stats, "losses")),
                     "pct": pct,
                 },
-                "divisionRank": _stat(stats, "divisionWinPercent")
-                or _stat(stats, "playoffSeed"),
+                "divisionRank": division_rank,
                 "divisionGamesBack": _stat(stats, "divisionGamesBehind"),
                 "wildCardGamesBack": None,
                 "streak": {"streakCode": streak_code or "-"},
                 "records": {"splitRecords": []},
+                "conferenceRank": conference_rank,
             }
     except Exception as exc:
         logging.error("Error fetching NBA standings (ESPN fallback) for %s: %s", NBA_TEAM_TRICODE, exc)
