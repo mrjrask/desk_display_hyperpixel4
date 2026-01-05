@@ -478,8 +478,40 @@ def draw_sports_screen(display, game, title, transition=False):
             return None
         return load_team_logo(MLB_LOGOS_DIR, ab, height=height)
 
-    # Desired logo height mirrors the Hawks "Next Game" layout for consistency.
-    desired_logo_h = standard_next_game_logo_height(HEIGHT)
+    def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
+        if size <= 0:
+            return None
+
+        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        if logo is not None:
+            ratio = 1.0
+            try:
+                ratio = min(size / float(logo.height or 1), size / float(logo.width or 1))
+            except Exception:
+                ratio = 1.0
+            if ratio and abs(ratio - 1.0) > 1e-3:
+                logo = logo.resize(
+                    (
+                        max(1, int(round(logo.width * ratio))),
+                        max(1, int(round(logo.height * ratio))),
+                    ),
+                    Image.LANCZOS,
+                )
+            x_off = (size - logo.width) // 2
+            y_off = (size - logo.height) // 2
+            frame.paste(logo, (x_off, y_off), logo)
+            return frame
+
+        if fallback:
+            drawer = ImageDraw.Draw(frame)
+            tw, th = drawer.textsize(fallback, font=FONT_TEAM_SPORTS)
+            drawer.text(
+                ((size - tw) // 2, (size - th) // 2),
+                fallback,
+                font=FONT_TEAM_SPORTS,
+                fill=(255, 255, 255),
+            )
+        return frame
 
     raw_date = game.get('officialDate','') or game.get('gameDate','')[:10]
     raw_time = game.get('startTimeCentral','TBD')
@@ -488,38 +520,71 @@ def draw_sports_screen(display, game, title, transition=False):
     bottom_y   = HEIGHT - bl_h - BOTTOM_MARGIN
 
     available_h = max(10, bottom_y - (y_text + 2))
-    logo_h = min(desired_logo_h, available_h)
+    max_logo_height = max(36, min(available_h, int(round(HEIGHT * 0.6))))
+    preferred_logo_h = standard_next_game_logo_height(HEIGHT)
+    frame_ceiling = min(max_logo_height, preferred_logo_h)
 
-    logo_away = load_logo_for_tm(away_tm, logo_h)
-    logo_home = load_logo_for_tm(home_tm, logo_h)
+    base_away_logo = load_logo_for_tm(away_tm, max_logo_height)
+    base_home_logo = load_logo_for_tm(home_tm, max_logo_height)
 
-    elems = []
-    if logo_away: elems.append(("img", logo_away))
+    at_w, _ = draw.textsize("@", font=FONT_TEAM_SPORTS)
+    max_width = WIDTH - 24
+    spacing_ratio = 0.16
+
+    min_height = 34
+    best_layout: Optional[tuple[int, int, Optional[Image.Image], Optional[Image.Image]]] = None
+    starting_height = max(
+        min_height,
+        min(frame_ceiling if frame_ceiling > 0 else max_logo_height, available_h),
+    )
+    for test_h in range(int(starting_height), min_height - 1, -2):
+        spacing = max(12, int(round(test_h * spacing_ratio)))
+        total = at_w + spacing * 2 + test_h * 2
+        if total <= max_width:
+            best_layout = (
+                test_h,
+                spacing,
+                _logo_frame(base_away_logo, get_mlb_abbreviation(get_team_display_name(away_tm)).upper(), test_h),
+                _logo_frame(base_home_logo, get_mlb_abbreviation(get_team_display_name(home_tm)).upper(), test_h),
+            )
+            break
+
+    if best_layout is None:
+        fallback_h = max(min_height, int(round(starting_height * 0.85)))
+        spacing = max(10, int(round(fallback_h * spacing_ratio)))
+        best_layout = (
+            fallback_h,
+            spacing,
+            _logo_frame(base_away_logo, get_mlb_abbreviation(get_team_display_name(away_tm)).upper(), fallback_h),
+            _logo_frame(base_home_logo, get_mlb_abbreviation(get_team_display_name(home_tm)).upper(), fallback_h),
+        )
+
+    logo_h, spacing, logo_away, logo_home = best_layout
+    block_h = logo_h
+    space_top = y_text
+    space_bottom = bottom_y
+    available_space = max(0, space_bottom - space_top)
+    y_logo = space_top + max(0, (available_space - block_h) // 2)
+
+    elems: list[tuple[str, object]] = []
+    elems.append(("img", logo_away))
     elems.append(("text", "@"))
-    if logo_home: elems.append(("img", logo_home))
+    elems.append(("img", logo_home))
 
-    spacing  = 8
-    widths_el = [
-        (obj.width if tp=="img" else draw.textsize(obj, font=FONT_TEAM_SPORTS)[0])
-        for tp,obj in elems
-    ]
-    total_el_w = sum(widths_el) + spacing*(len(widths_el)-1)
-    x0 = (WIDTH - total_el_w)//2
+    total_w = sum(
+        el.width if isinstance(el, Image.Image) else draw.textsize("@", font=FONT_TEAM_SPORTS)[0]
+        for _, el in elems
+    ) + spacing * (len(elems) - 1)
+    x = max(0, (WIDTH - total_w) // 2)
 
-    block_h = logo_h if elems else draw.textsize("@", font=FONT_TEAM_SPORTS)[1]
-    centered_top = (HEIGHT - block_h) // 2
-    row_y = max(y_text + 1, min(centered_top, bottom_y - block_h - 1))
-
-    x = x0
     for tp, obj in elems:
-        if tp=="img":
-            paste_y = row_y + (block_h - obj.height)//2
-            img.paste(obj, (x, paste_y), obj)
+        if tp == "img":
+            img.paste(obj, (x, y_logo), obj)
             x += obj.width + spacing
         else:
             w_t, h_t = draw.textsize(obj, font=FONT_TEAM_SPORTS)
-            y_o = row_y + (block_h - h_t)//2
-            draw.text((x, y_o), obj, font=FONT_TEAM_SPORTS, fill=(255,255,255))
+            y_o = y_logo + (block_h - h_t) // 2
+            draw.text((x, y_o), obj, font=FONT_TEAM_SPORTS, fill=(255, 255, 255))
             x += w_t + spacing
 
     draw.text(((WIDTH - bl_w)//2, bottom_y), bottom, font=FONT_DATE_SPORTS, fill=(255,255,255))

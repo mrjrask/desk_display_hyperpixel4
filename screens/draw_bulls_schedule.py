@@ -32,7 +32,12 @@ from config import (
     CENTRAL_TIME,
 )
 
-from utils import clear_display, load_team_logo, draw_persistent_time
+from utils import (
+    clear_display,
+    load_team_logo,
+    draw_persistent_time,
+    standard_next_game_logo_height,
+)
 
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NBA_DIR = NBA_IMAGES_DIR
@@ -713,6 +718,9 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
 
     available_h = max(10, bottom_y - (y + 2))
     max_logo_height = max(36, min(available_h, int(round(HEIGHT * 0.6))))
+    preferred_logo_height = standard_next_game_logo_height(HEIGHT)
+    frame_ceiling = min(max_logo_height, preferred_logo_height)
+
     base_away_logo = _load_logo_cached(away.get("tri"), max_logo_height)
     base_home_logo = _load_logo_cached(home.get("tri"), max_logo_height)
 
@@ -721,28 +729,52 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     max_width = WIDTH - 24
     spacing_ratio = 0.16
 
-    def _scaled(logo: Optional[Image.Image], height: int) -> Optional[Image.Image]:
-        if logo is None:
+    def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
+        if size <= 0:
             return None
-        if logo.height == height:
-            return logo
-        ratio = height / float(logo.height)
-        return logo.resize((max(1, int(round(logo.width * ratio))), height), Image.LANCZOS)
+
+        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        if logo is not None:
+            ratio = 1.0
+            try:
+                ratio = min(size / float(logo.height or 1), size / float(logo.width or 1))
+            except Exception:
+                ratio = 1.0
+            if ratio and abs(ratio - 1.0) > 1e-3:
+                logo = logo.resize(
+                    (
+                        max(1, int(round(logo.width * ratio))),
+                        max(1, int(round(logo.height * ratio))),
+                    ),
+                    Image.LANCZOS,
+                )
+            x_off = (size - logo.width) // 2
+            y_off = (size - logo.height) // 2
+            frame.paste(logo, (x_off, y_off), logo)
+            return frame
+
+        if fallback:
+            drawer = ImageDraw.Draw(frame)
+            tw = _text_w(drawer, fallback, FONT_NEXT_OPP)
+            th = _text_h(drawer, FONT_NEXT_OPP)
+            drawer.text(((size - tw) // 2, (size - th) // 2), fallback, font=FONT_NEXT_OPP, fill=TEXT_COLOR)
+        return frame
 
     def _text_width(text: str) -> int:
         return _text_w(draw, text, FONT_NEXT_OPP)
 
     min_height = 34
+    starting_height = max(
+        min_height,
+        min(frame_ceiling if frame_ceiling > 0 else max_logo_height, available_h),
+    )
     best_layout: Optional[tuple[int, int, Optional[Image.Image], Optional[Image.Image]]] = None
-    starting_height = min(max_logo_height, max(min_height, available_h))
     for test_h in range(int(starting_height), min_height - 1, -2):
         spacing = max(12, int(round(test_h * spacing_ratio)))
-        away_option = _scaled(base_away_logo, test_h)
-        home_option = _scaled(base_home_logo, test_h)
-        total = at_w + spacing * 2
-        total += away_option.width if away_option else _text_width(away.get("tri") or "AWY")
-        total += home_option.width if home_option else _text_width(home.get("tri") or "HOME")
+        total = at_w + spacing * 2 + test_h * 2
         if total <= max_width:
+            away_option = _logo_frame(base_away_logo, away.get("tri") or "AWY", test_h)
+            home_option = _logo_frame(base_home_logo, home.get("tri") or "HOME", test_h)
             best_layout = (test_h, spacing, away_option, home_option)
             break
 
@@ -752,8 +784,8 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
         best_layout = (
             fallback_h,
             spacing,
-            _scaled(base_away_logo, fallback_h),
-            _scaled(base_home_logo, fallback_h),
+            _logo_frame(base_away_logo, away.get("tri") or "AWY", fallback_h),
+            _logo_frame(base_home_logo, home.get("tri") or "HOME", fallback_h),
         )
 
     logo_h, spacing, away_logo, home_logo = best_layout
