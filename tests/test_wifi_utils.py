@@ -147,3 +147,39 @@ def test_monitor_uses_fallback_ssid_when_link_info_missing(monkeypatch):
 
     assert wifi_utils.wifi_status == "ok"
     assert wifi_utils.current_ssid == "HomeWiFi"
+
+
+def test_monitor_waits_for_multiple_failures_before_dropping_state(monkeypatch):
+    class _Stopper:
+        def is_set(self):
+            return False
+
+        def wait(self, seconds):
+            return True
+
+    recorded = []
+
+    def fake_update(state, ssid):
+        recorded.append((state, ssid))
+        wifi_utils.wifi_status = state
+        wifi_utils.current_ssid = ssid
+
+    monkeypatch.setattr(wifi_utils, "_STOP_EVENT", _Stopper())
+    monkeypatch.setattr(wifi_utils, "_get_link_info", lambda iface: "")
+    monkeypatch.setattr(wifi_utils, "_get_ssid_from_link", lambda info: None)
+    monkeypatch.setattr(wifi_utils, "_get_ssid_fallback", lambda: None)
+    monkeypatch.setattr(wifi_utils, "_sleep_with_stop", lambda seconds: True)
+    monkeypatch.setattr(wifi_utils, "_report_status", lambda *args, **kwargs: None)
+    monkeypatch.setattr(wifi_utils, "_disable_powersave", lambda iface: None)
+    monkeypatch.setattr(wifi_utils, "_system_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(wifi_utils, "_update_state", fake_update)
+    monkeypatch.setattr(wifi_utils, "_IFACE", "wlan0", raising=False)
+
+    wifi_utils.wifi_status = "ok"
+    wifi_utils.current_ssid = "HomeWiFi"
+
+    wifi_utils._monitor_loop()
+
+    assert recorded == []
+    assert wifi_utils.wifi_status == "ok"
+    assert wifi_utils.current_ssid == "HomeWiFi"
