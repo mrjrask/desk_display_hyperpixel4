@@ -20,7 +20,9 @@ PING_HOSTS: Sequence[str] = ("1.1.1.1", "8.8.8.8")
 PING_TIMEOUT = 2  # seconds per ping
 CHECK_INTERVAL_OK = 15  # seconds between healthy checks
 RETRY_INTERVAL = 60  # seconds between recovery attempts
-MAX_FAILS = 1  # failures before triggering recovery
+# Allow a couple of transient failures before declaring Wi-Fi down. This helps
+# avoid spurious "No Wifi" reports when the network hiccups.
+MAX_FAILS = 3  # failures before triggering recovery
 
 
 # ─── Module globals ───────────────────────────────────────────────────────────
@@ -452,52 +454,62 @@ def _monitor_loop() -> None:
         if not associated and ssid:
             associated = True
 
+        failure_state: Optional[str] = None
+        failure_reason: Optional[str] = None
+        tried_hosts: List[str] = []
+
         if not associated:
-            fails += 1
-            _update_state("no_wifi", None)
-            _system_log(f"Fail: not_associated iface={iface} fail_count={fails}/{MAX_FAILS}")
+            failure_state = "no_wifi"
+            failure_reason = f"not_associated iface={iface}"
         else:
             if not ssid:
                 ssid = None
             if not _has_default_route(iface):
-                fails += 1
-                _update_state("no_internet", ssid)
-                _system_log(f"Fail: no_default_route iface={iface} fail_count={fails}/{MAX_FAILS}")
+                failure_state = "no_internet"
+                failure_reason = f"no_default_route iface={iface}"
             else:
-                internet_ok, tried = _check_internet(iface)
+                internet_ok, tried_hosts = _check_internet(iface)
                 if not internet_ok:
-                    fails += 1
-                    _update_state("no_internet", ssid)
-                    _system_log(
-                        "Fail: ping_timeout iface=%s hosts_tried='%s' timeout_s=%s fail_count=%s/%s"
-                        % (iface, " ".join(tried), PING_TIMEOUT, fails, MAX_FAILS)
+                    failure_state = "no_internet"
+                    failure_reason = (
+                        "ping_timeout iface=%s hosts_tried='%s' timeout_s=%s"
+                        % (iface, " ".join(tried_hosts), PING_TIMEOUT)
                     )
-                else:
-                    _update_state("ok", ssid)
-                    if recovery_started is not None:
-                        duration = int(time.time() - recovery_started)
-                        _user_log(f"Recovered connection on {iface} after {duration}s.")
-                        _system_log(f"Recovered: iface={iface} duration_s={duration}")
-                        _report_status(iface, _get_link_info(iface))
-                        recovery_started = None
-                    fails = 0
-                    if _sleep_with_stop(CHECK_INTERVAL_OK):
-                        break
-                    continue
 
-        _report_status(iface, link_info)
-
-        if fails >= MAX_FAILS:
-            if recovery_started is None:
-                recovery_started = time.time()
-                _user_log(f"Lost connection on {iface} — starting recovery attempts.")
-                _system_log(f"Recover: start iface={iface}")
-            _cycle_wifi(iface)
-            if _sleep_with_stop(RETRY_INTERVAL):
+        if not failure_state:
+            _update_state("ok", ssid)
+            if recovery_started is not None:
+                duration = int(time.time() - recovery_started)
+                _user_log(f"Recovered connection on {iface} after {duration}s.")
+                _system_log(f"Recovered: iface={iface} duration_s={duration}")
+                _report_status(iface, _get_link_info(iface))
+                recovery_started = None
+            fails = 0
+            if _sleep_with_stop(CHECK_INTERVAL_OK):
                 break
-        else:
+            continue
+
+        fails += 1
+
+        if fails < MAX_FAILS:
+            _system_log(
+                f"Transient fail: {failure_reason} fail_count={fails}/{MAX_FAILS}"
+            )
             if _sleep_with_stop(5):
                 break
+            continue
+
+        _update_state(failure_state, ssid)
+        _system_log(f"Fail: {failure_reason} fail_count={fails}/{MAX_FAILS}")
+        _report_status(iface, link_info)
+
+        if recovery_started is None:
+            recovery_started = time.time()
+            _user_log(f"Lost connection on {iface} — starting recovery attempts.")
+            _system_log(f"Recover: start iface={iface}")
+        _cycle_wifi(iface)
+        if _sleep_with_stop(RETRY_INTERVAL):
+            break
 
     _system_log("Wi-Fi monitor thread exiting")
 
