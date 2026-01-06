@@ -9,7 +9,13 @@ import logging
 import os
 import sys
 import zipfile
+from pathlib import Path
 from typing import Dict, Iterable, Optional, Set, Tuple
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 from PIL import Image
 
