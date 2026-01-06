@@ -230,7 +230,7 @@ def _is_game_final(game: dict) -> bool:
 
 def _score_text(side: dict, *, show: bool) -> str:
     if not show:
-        return "—"
+        return _record_text(side)
     score = (side or {}).get("score")
     return "—" if score is None else str(score)
 
@@ -251,6 +251,96 @@ def _score_value(side: dict) -> Optional[int]:
         except Exception:
             return None
     return None
+
+
+def _normalize_record_int(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            if re.match(r"^-?\d+(?:\.\d+)?$", text):
+                return int(float(text))
+    except Exception:
+        return None
+    return None
+
+
+def _record_from_summary(text: str) -> Optional[tuple[int, int, Optional[int]]]:
+    if not isinstance(text, str) or not text.strip():
+        return None
+    numbers = [int(part) for part in re.findall(r"\d+", text)]
+    if len(numbers) < 2:
+        return None
+    wins, losses = numbers[0], numbers[1]
+    tie = numbers[2] if len(numbers) > 2 else None
+    return wins, losses, tie
+
+
+def _record_from_data(data: object) -> Optional[tuple[int, int, Optional[int]]]:
+    if isinstance(data, dict):
+        wins = _normalize_record_int(data.get("wins") or data.get("win"))
+        losses = _normalize_record_int(data.get("losses") or data.get("loss"))
+        ties = _normalize_record_int(
+            data.get("ties")
+            or data.get("tie")
+            or data.get("draws")
+            or data.get("ot")
+            or data.get("overtime")
+        )
+        if wins is not None and losses is not None:
+            return wins, losses, ties
+
+        for key in ("displayValue", "summary", "text", "overall"):
+            summary = data.get(key)
+            record = _record_from_summary(summary)
+            if record:
+                return record
+    elif isinstance(data, str):
+        return _record_from_summary(data)
+    return None
+
+
+def _team_record(side: dict) -> Optional[tuple[int, int, Optional[int]]]:
+    if not isinstance(side, dict):
+        return None
+
+    records = side.get("records")
+    if isinstance(records, list):
+        for record in records:
+            parsed = _record_from_data(record)
+            if parsed:
+                return parsed
+
+    for key in ("record", "overallRecord", "teamRecord", "leagueRecord", "seriesRecord"):
+        parsed = _record_from_data(side.get(key))
+        if parsed:
+            return parsed
+
+    team = side.get("team")
+    if isinstance(team, dict):
+        for key in ("record", "overallRecord", "teamRecord", "leagueRecord"):
+            parsed = _record_from_data(team.get(key))
+            if parsed:
+                return parsed
+
+    return None
+
+
+def _record_text(side: dict) -> str:
+    record = _team_record(side)
+    if not record:
+        return "—"
+    wins, losses, ties = record
+    if wins is None or losses is None:
+        return "—"
+    if ties:
+        return f"({wins}-{losses}-{ties})"
+    return f"({wins}-{losses})"
 
 
 def _team_identifier_tokens(team: dict) -> list[str]:
@@ -543,8 +633,9 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     possession_flags = _team_has_possession(game)
 
     score_top = top
+    score_font = SCORE_FONT if show_scores else STATUS_FONT
     for idx, text in ((0, away_text), (2, "@"), (4, home_text)):
-        font = SCORE_FONT if idx != 2 else CENTER_FONT
+        font = score_font if idx != 2 else CENTER_FONT
         if idx == 0:
             fill = _score_fill("away", in_progress=in_progress, final=final, results=results)
         elif idx == 4:
