@@ -546,6 +546,7 @@ def _gather_hourly_forecast(weather: object, hours: int) -> list[dict]:
             uvi_val = None
         entry = {
             "temp": _safe_round(hour.get("temp")),
+            "feels_like": _safe_round_optional(hour.get("feels_like")),
             "time": _format_hour_label(dt or hour.get("dt"), index=len(forecast) + 1),
             "condition": _normalise_condition(hour),
             "icon": None,
@@ -733,6 +734,11 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         draw.line((x0 + 6, stat_area_top, x1 - 6, stat_area_top), fill=(50, 50, 80), width=1)
 
         stat_items = []
+
+        feels_like = hour.get("feels_like")
+        if feels_like is not None:
+            feels_like_text = f"Feels {feels_like}°F"
+            stat_items.append((feels_like_text, FONT_WEATHER_DETAILS_TINY, (90, 90, 90), None))
 
         wind_speed = hour.get("wind_speed")
         wind_dir = hour.get("wind_dir", "") or ""
