@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render NHL standings screens for Western and Eastern conferences."""
+"""Render NHL standings screens using the wild-card GP/RW/PTS column layout."""
 
 from __future__ import annotations
 
