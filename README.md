@@ -412,7 +412,7 @@ The repository ships with a ready-to-run `screens_config.json` that exposes the 
 6. Every fourth pass, show `vrnof` (Verano office status).
 7. Every other pass, cycle through the Blackhawks cards: `hawks logo`, `hawks last`, `hawks live`, `hawks next`, `hawks next home`.
 8. Every fifth pass, show `NHL Scoreboard`.
-9. Every sixth pass, cycle through `NHL Standings Overview`, `NHL Standings Overview`, `NHL Standings West`.
+9. Every sixth pass, cycle through `NHL Standings Overview West`, `NHL Standings Overview East`, `NHL Standings West`.
 10. Every eighteenth pass (starting at phase 12), show `NHL Standings East`.
 11. Every fourth pass, show `bears logo`.
 12. Every fourth pass, show `bears next`.

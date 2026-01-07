@@ -58,10 +58,17 @@
       }
     },
     "NHL Scoreboard v2": 0,
-    "NHL Standings Overview": {
+    "NHL Standings Overview West": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Standings Overview v2"],
+        "screen": ["NHL Standings Overview v2 West"],
+        "frequency": 1
+      }
+    },
+    "NHL Standings Overview East": {
+      "frequency": 1,
+      "alt": {
+        "screen": ["NHL Standings Overview v2 East"],
         "frequency": 1
       }
     },
@@ -79,7 +86,10 @@
         "frequency": 1
       }
     },
-    "NHL Standings Overview v2": {
+    "NHL Standings Overview v2 West": {
+      "frequency": 1
+    },
+    "NHL Standings Overview v2 East": {
       "frequency": 1
     },
     "NHL Standings West v2": 0,
