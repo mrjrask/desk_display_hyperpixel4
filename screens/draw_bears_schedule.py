@@ -22,7 +22,6 @@ from config import (
     BEARS_BOTTOM_MARGIN,
     BEARS_SCHEDULE,
     NFL_TEAM_ABBREVIATIONS,
-    NEXT_GAME_LOGO_FONT_SIZE,
 )
 from utils import (
     load_team_logo,
@@ -80,8 +79,14 @@ def show_bears_next_game(display, transition=False):
         bw, bh = draw.textsize(bottom, font=config.FONT_DATE_SPORTS)
         bottom_y = config.HEIGHT - bh - BEARS_BOTTOM_MARGIN  # keep on-screen
 
-        available_h = max(10, bottom_y - (y_txt + 2))
-        max_logo_height = max(32, min(available_h, int(round(config.HEIGHT * 0.65))))
+        horizontal_padding = max(12, int(round(config.WIDTH * 0.02)))
+        vertical_padding = max(4, int(round(config.HEIGHT * 0.01)))
+        min_spacing = max(10, int(round(config.WIDTH * 0.015)))
+
+        logo_area_top = y_txt + vertical_padding
+        logo_area_bottom = bottom_y - vertical_padding
+        available_h = max(10, logo_area_bottom - logo_area_top)
+        max_logo_height = max(36, min(available_h, int(round(config.HEIGHT * 0.6))))
         preferred_logo_height = standard_next_game_logo_height(config.HEIGHT)
         frame_ceiling = min(max_logo_height, preferred_logo_height)
 
@@ -90,7 +95,7 @@ def show_bears_next_game(display, transition=False):
 
         at_txt = loc_sym
         at_w, _ = draw.textsize(at_txt, font=config.FONT_TEAM_SPORTS)
-        max_width = config.WIDTH - 24
+        max_width = config.WIDTH - (horizontal_padding * 2)
         spacing_ratio = 0.16
 
         def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
@@ -139,7 +144,7 @@ def show_bears_next_game(display, transition=False):
             min(frame_ceiling if frame_ceiling > 0 else max_logo_height, available_h),
         )
         for test_h in range(int(starting_height), min_height - 1, -2):
-            spacing = max(12, int(round(test_h * spacing_ratio)))
+            spacing = max(min_spacing, int(round(test_h * spacing_ratio)))
             total = at_w + spacing * 2 + test_h * 2
             if total <= max_width:
                 best_layout = (
@@ -152,7 +157,7 @@ def show_bears_next_game(display, transition=False):
 
         if best_layout is None:
             fallback_h = max(min_height, int(round(starting_height * 0.85)))
-            spacing = max(10, int(round(fallback_h * spacing_ratio)))
+            spacing = max(min_spacing, int(round(fallback_h * spacing_ratio)))
             best_layout = (
                 fallback_h,
                 spacing,
@@ -162,10 +167,12 @@ def show_bears_next_game(display, transition=False):
 
         logo_h, spacing, logo_away, logo_home = best_layout
         block_h = logo_h
-        space_top = y_txt
-        space_bottom = bottom_y
-        available_space = max(0, space_bottom - space_top)
-        y_logo = space_top + max(0, (available_space - block_h) // 2)
+        available_space = max(0, logo_area_bottom - logo_area_top)
+        centered_top = logo_area_top + max(0, (available_space - block_h) // 2)
+        y_logo = min(
+            max(logo_area_top, centered_top),
+            max(logo_area_top, logo_area_bottom - block_h),
+        )
 
         elements = []
         elements.append(logo_away if logo_away else away_ab.upper())
