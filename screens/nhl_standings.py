@@ -72,10 +72,10 @@ TEAM_NAME_FONT = clone_font(ROW_FONT, _TEAM_NAME_FONT_SIZE)
 
 OVERVIEW_TITLE = "NHL Overview"
 OVERVIEW_DIVISIONS = [
-    (CONFERENCE_EAST_KEY, "Metropolitan", "Metro"),
-    (CONFERENCE_EAST_KEY, "Atlantic", "Atlantic"),
     (CONFERENCE_WEST_KEY, "Central", "Central"),
     (CONFERENCE_WEST_KEY, "Pacific", "Pacific"),
+    (CONFERENCE_EAST_KEY, "Metropolitan", "Metro"),
+    (CONFERENCE_EAST_KEY, "Atlantic", "Atlantic"),
 ]
 OVERVIEW_MARGIN_X = 10
 OVERVIEW_TITLE_MARGIN_BOTTOM = 18
