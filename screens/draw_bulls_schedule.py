@@ -716,7 +716,13 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     bottom_h = _text_h(draw, FONT_BOTTOM) if bottom_text else 0
     bottom_y = HEIGHT - (bottom_h + BOTTOM_LABEL_MARGIN) if bottom_text else HEIGHT
 
-    available_h = max(10, bottom_y - (y + 2))
+    horizontal_padding = max(12, int(round(WIDTH * 0.02)))
+    vertical_padding = max(4, int(round(HEIGHT * 0.01)))
+    min_spacing = max(10, int(round(WIDTH * 0.015)))
+
+    logo_area_top = y + vertical_padding
+    logo_area_bottom = bottom_y - vertical_padding
+    available_h = max(10, logo_area_bottom - logo_area_top)
     max_logo_height = max(36, min(available_h, int(round(HEIGHT * 0.6))))
     preferred_logo_height = standard_next_game_logo_height(HEIGHT)
     frame_ceiling = min(max_logo_height, preferred_logo_height)
@@ -726,7 +732,7 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
 
     at_txt = "@"
     at_w = _text_w(draw, at_txt, FONT_NEXT_OPP)
-    max_width = WIDTH - 24
+    max_width = WIDTH - (horizontal_padding * 2)
     spacing_ratio = 0.16
 
     def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
@@ -770,7 +776,7 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     )
     best_layout: Optional[tuple[int, int, Optional[Image.Image], Optional[Image.Image]]] = None
     for test_h in range(int(starting_height), min_height - 1, -2):
-        spacing = max(12, int(round(test_h * spacing_ratio)))
+        spacing = max(min_spacing, int(round(test_h * spacing_ratio)))
         total = at_w + spacing * 2 + test_h * 2
         if total <= max_width:
             away_option = _logo_frame(base_away_logo, away.get("tri") or "AWY", test_h)
@@ -780,7 +786,7 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
 
     if best_layout is None:
         fallback_h = max(min_height, int(round(starting_height * 0.85)))
-        spacing = max(10, int(round(fallback_h * spacing_ratio)))
+        spacing = max(min_spacing, int(round(fallback_h * spacing_ratio)))
         best_layout = (
             fallback_h,
             spacing,
@@ -790,10 +796,12 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
 
     logo_h, spacing, away_logo, home_logo = best_layout
     block_h = logo_h
-    y_top = y + 2
-    available_space = max(0, bottom_y - y_top)
-    centered_top = y_top + max(0, (available_space - block_h) // 2)
-    row_y = min(max(y_top + 1, centered_top), max(y_top + 1, bottom_y - block_h - 1))
+    available_space = max(0, logo_area_bottom - logo_area_top)
+    centered_top = logo_area_top + max(0, (available_space - block_h) // 2)
+    row_y = min(
+        max(logo_area_top, centered_top),
+        max(logo_area_top, logo_area_bottom - block_h),
+    )
 
     elements = [
         away_logo if away_logo else (away.get("tri") or "AWY"),
