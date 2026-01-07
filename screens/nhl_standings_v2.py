@@ -93,6 +93,10 @@ DROP_FRAME_DELAY = 0.02
 
 
 WHITE = (255, 255, 255)
+DOTTED_LINE_COLOR = WHITE
+DOTTED_LINE_WIDTH = 2
+DOTTED_LINE_DASH = 12
+DOTTED_LINE_GAP = 8
 
 _SESSION = get_session()
 
@@ -258,6 +262,74 @@ def _conference_column_layout(
         max_team_name_width = _text_size("Team", TEAM_NAME_FONT)[0]
 
     return _build_column_layout(max_team_name_width)
+
+
+def _section_column_layout(sections: Sequence[Iterable[dict]]) -> tuple[dict[str, int], int]:
+    max_team_name_width = 0
+    for teams in sections:
+        for team in teams:
+            team_label = _coerce_text(team.get("name")) or team.get("abbr", "")
+            if team_label:
+                max_team_name_width = max(
+                    max_team_name_width, _text_size(team_label, TEAM_NAME_FONT)[0]
+                )
+
+    if max_team_name_width <= 0:
+        max_team_name_width = _text_size("Team", TEAM_NAME_FONT)[0]
+
+    return _build_column_layout(max_team_name_width)
+
+
+def _wildcard_sort_key(team: dict) -> tuple:
+    rank = team.get("_rank")
+    if isinstance(rank, int) and rank > 0:
+        return (0, rank)
+    points = _normalize_int(team.get("points"))
+    regulation_wins = _normalize_int(team.get("regulationWins"))
+    wins = _normalize_int(team.get("wins"))
+    games_played = _normalize_int(team.get("gamesPlayed"))
+    return (1, -points, -regulation_wins, -wins, games_played)
+
+
+def _sort_wildcard_teams(teams: Iterable[dict]) -> List[dict]:
+    return sorted(teams, key=_wildcard_sort_key)
+
+
+def _conference_team_list(standings: Dict[str, List[dict]], divisions: Sequence[str]) -> List[dict]:
+    teams: List[dict] = []
+    for division in divisions:
+        teams.extend(standings.get(division, []))
+    return teams
+
+
+def _build_wildcard_sections(
+    standings: Dict[str, List[dict]],
+    division_order: Sequence[str],
+) -> List[tuple[str, List[dict], Optional[int]]]:
+    divisions = [division for division in division_order if standings.get(division)]
+    if not divisions:
+        divisions = list(division_order)
+
+    sections: List[tuple[str, List[dict], Optional[int]]] = []
+    top_abbrs: set[str] = set()
+    for division in divisions:
+        teams = standings.get(division, [])
+        top_three = teams[:3]
+        if not top_three:
+            continue
+        sections.append((f"{division} Division", top_three, None))
+        top_abbrs.update(team.get("abbr") for team in top_three if team.get("abbr"))
+
+    remaining = [
+        team
+        for team in _conference_team_list(standings, divisions)
+        if team.get("abbr") not in top_abbrs
+    ]
+    wildcard = _sort_wildcard_teams(remaining)
+    if wildcard:
+        sections.append(("Wild Card", wildcard, 2))
+
+    return sections
 
 
 def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
@@ -537,6 +609,8 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
                     "gamesPlayed": _normalize_int(team_record.get("gamesPlayed")),
                     "regulationWins": _normalize_int(team_record.get("regulationWins")),
                     "points": _normalize_int(team_record.get("points")),
+                    "_rank": _normalize_int(team_record.get("conferenceRank"))
+                    or _normalize_int(team_record.get("divisionRank")),
                 }
             )
         if parsed:
@@ -823,8 +897,6 @@ def _fetch_standings_api_web() -> Optional[dict[str, dict[str, list[dict]]]]:
     for conference in conferences.values():
         for teams in conference.values():
             teams.sort(key=_division_sort_key)
-            for item in teams:
-                item.pop("_rank", None)
 
     return conferences
 
@@ -858,6 +930,15 @@ def _truncate_text_to_width(text: str, font, max_width: int) -> str:
     return (trimmed + ellipsis) if trimmed else ellipsis
 
 
+def _draw_dotted_line(draw: ImageDraw.ImageDraw, y: int) -> None:
+    x = LEFT_MARGIN
+    right = WIDTH - RIGHT_MARGIN
+    while x < right:
+        segment_end = min(x + DOTTED_LINE_DASH, right)
+        draw.line((x, y, segment_end, y), fill=DOTTED_LINE_COLOR, width=DOTTED_LINE_WIDTH)
+        x += DOTTED_LINE_DASH + DOTTED_LINE_GAP
+
+
 def _draw_division(
     img: Image.Image,
     draw: ImageDraw.ImageDraw,
@@ -866,7 +947,9 @@ def _draw_division(
     teams: Iterable[dict],
     column_layout: dict[str, int],
     team_name_max_width: int,
+    divider_after: Optional[int] = None,
 ) -> int:
+    teams = list(teams)
     y = top + DIVISION_MARGIN_TOP
     y += _draw_centered_text(draw, title, DIVISION_FONT, y)
     y += DIVISION_HEADER_GAP
@@ -878,7 +961,7 @@ def _draw_division(
         _draw_text(draw, label, font, column_layout[key], header_top, COLUMN_ROW_HEIGHT, align)
     y += COLUMN_ROW_HEIGHT + COLUMN_GAP_BELOW
 
-    for team in teams:
+    for idx, team in enumerate(teams):
         row_top = y
         abbr = team.get("abbr", "")
         logo = _load_logo_cached(abbr)
@@ -912,6 +995,9 @@ def _draw_division(
                 "right",
             )
         y += ROW_HEIGHT + ROW_SPACING
+        if divider_after and idx + 1 == divider_after and idx + 1 < len(teams):
+            divider_y = y - max(1, ROW_SPACING // 2)
+            _draw_dotted_line(draw, divider_y)
 
     y -= ROW_SPACING
     y += DIVISION_MARGIN_BOTTOM
@@ -956,6 +1042,50 @@ def _render_conference(
             team_name_max_width,
         )
         if idx < len(divisions) - 1:
+            y += SECTION_GAP
+
+    return img
+
+
+def _render_wildcard_conference(
+    title: str, division_order: List[str], standings: Dict[str, List[dict]]
+) -> Image.Image:
+    sections = _build_wildcard_sections(standings, division_order)
+    if not sections:
+        return _render_empty(title)
+
+    column_layout, team_name_max_width = _section_column_layout(
+        [teams for _, teams, _ in sections]
+    )
+
+    total_height = TITLE_MARGIN_TOP + _text_size(title, TITLE_FONT)[1] + TITLE_MARGIN_BOTTOM
+    for idx, (_, teams, _) in enumerate(sections):
+        total_height += _division_section_height(len(teams))
+        if idx < len(sections) - 1:
+            total_height += SECTION_GAP
+    total_height = max(total_height, HEIGHT)
+
+    img = Image.new("RGB", (WIDTH, total_height), BACKGROUND_COLOR)
+    draw = ImageDraw.Draw(img)
+
+    y = TITLE_MARGIN_TOP
+    y += _draw_centered_text(draw, title, TITLE_FONT, y)
+    y += TITLE_MARGIN_BOTTOM
+
+    for idx, (section_title, teams, divider_after) in enumerate(sections):
+        if not teams:
+            continue
+        y = _draw_division(
+            img,
+            draw,
+            y,
+            section_title,
+            teams,
+            column_layout,
+            team_name_max_width,
+            divider_after=divider_after,
+        )
+        if idx < len(sections) - 1:
             y += SECTION_GAP
 
     return img
@@ -1138,6 +1268,42 @@ def _prepare_overview(divisions: List[tuple[str, List[dict]]]) -> tuple[Image.Im
     return base, row_positions
 
 
+def _build_overview_divisions_v2(
+    standings_by_conf: dict[str, dict[str, list[dict]]]
+) -> List[tuple[str, List[dict]]]:
+    west = standings_by_conf.get(CONFERENCE_WEST_KEY, {})
+    east = standings_by_conf.get(CONFERENCE_EAST_KEY, {})
+
+    central_top = west.get("Central", [])[:3]
+    pacific_top = west.get("Pacific", [])[:3]
+    west_top_abbrs = {team.get("abbr") for team in [*central_top, *pacific_top] if team.get("abbr")}
+    west_wildcard = _sort_wildcard_teams(
+        team
+        for team in _conference_team_list(west, DIVISION_ORDER_WEST)
+        if team.get("abbr") not in west_top_abbrs
+    )
+
+    metro_top = east.get("Metropolitan", [])[:3]
+    atlantic_top = east.get("Atlantic", [])[:3]
+    east_top_abbrs = {team.get("abbr") for team in [*metro_top, *atlantic_top] if team.get("abbr")}
+    east_wildcard = _sort_wildcard_teams(
+        team
+        for team in _conference_team_list(east, DIVISION_ORDER_EAST)
+        if team.get("abbr") not in east_top_abbrs
+    )
+
+    return [
+        ("Central Top 3", central_top),
+        ("Pacific Top 3", pacific_top),
+        ("West Wild Card", west_wildcard[:2]),
+        ("West Wild Card Rest", west_wildcard[2:]),
+        ("Metropolitan Top 3", metro_top),
+        ("Atlantic Top 3", atlantic_top),
+        ("East Wild Card", east_wildcard[:2]),
+        ("East Wild Card Rest", east_wildcard[2:]),
+    ]
+
+
 def _render_empty(title: str) -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(img)
@@ -1247,17 +1413,63 @@ if __name__ == "__main__":  # pragma: no cover
 
 def draw_nhl_standings_overview_v2(display, transition: bool = True) -> RenderResult:
     """Render the overview standings screen using the wild-card layout."""
-    return draw_nhl_standings_overview(display, transition=transition)
+    standings_by_conf = _fetch_standings_data()
+    divisions = _build_overview_divisions_v2(standings_by_conf)
+
+    if not any(teams for _, teams in divisions):
+        clear_display(display)
+        img = _render_empty(OVERVIEW_TITLE)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    base, row_positions = _prepare_overview(divisions)
+    final_img, _ = _compose_overview_image(base, row_positions)
+
+    clear_display(display)
+    _animate_overview_drop(display, base, row_positions)
+    display.image(final_img)
+    if hasattr(display, "show"):
+        display.show()
+
+    return ScreenImage(final_img, displayed=True)
 
 
 def draw_nhl_standings_west_v2(display, transition: bool = True) -> RenderResult:
     """Render the Western Conference standings screen using the wild-card layout."""
-    return draw_nhl_standings_west(display, transition=transition)
+    standings_by_conf = _fetch_standings_data()
+    conference = standings_by_conf.get(CONFERENCE_WEST_KEY, {})
+    if not any(conference.get(d) for d in DIVISION_ORDER_WEST):
+        clear_display(display)
+        img = _render_empty(TITLE_WEST)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    full_img = _render_wildcard_conference(TITLE_WEST, DIVISION_ORDER_WEST, conference)
+    clear_display(display)
+    _scroll_vertical(display, full_img)
+    return ScreenImage(full_img, displayed=True)
 
 
 def draw_nhl_standings_east_v2(display, transition: bool = True) -> RenderResult:
     """Render the Eastern Conference standings screen using the wild-card layout."""
-    return draw_nhl_standings_east(display, transition=transition)
+    standings_by_conf = _fetch_standings_data()
+    conference = standings_by_conf.get(CONFERENCE_EAST_KEY, {})
+    if not any(conference.get(d) for d in DIVISION_ORDER_EAST):
+        clear_display(display)
+        img = _render_empty(TITLE_EAST)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    full_img = _render_wildcard_conference(TITLE_EAST, DIVISION_ORDER_EAST, conference)
+    clear_display(display)
+    _scroll_vertical(display, full_img)
+    return ScreenImage(full_img, displayed=True)
 
 
 __all__ = [
