@@ -1135,6 +1135,48 @@ def _overview_layout(
     return base, col_centers, logos_top, cell_height, logo_target_height, max_rows
 
 
+def _overview_layout_horizontal(
+    sections: Sequence[tuple[str, List[dict]]],
+    title: str,
+) -> tuple[Image.Image, List[float], List[float], int, int]:
+    base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
+    draw = ImageDraw.Draw(base)
+
+    y = TITLE_MARGIN_TOP
+    y += _draw_centered_text(draw, title, TITLE_FONT, y)
+    y += OVERVIEW_TITLE_MARGIN_BOTTOM
+
+    logos_top = y
+    available_height = max(1.0, HEIGHT - logos_top - OVERVIEW_BOTTOM_MARGIN)
+
+    row_count = max(1, len(sections))
+    max_cols = max((len(teams) for _, teams in sections), default=0)
+    if max_cols <= 0:
+        max_cols = 1
+
+    available_width = max(1.0, WIDTH - 2 * OVERVIEW_MARGIN_X)
+    col_width = available_width / max_cols
+    col_centers = [
+        OVERVIEW_MARGIN_X + col_width * (idx + 0.5) for idx in range(max_cols)
+    ]
+
+    row_height = available_height / row_count if row_count else available_height
+    row_centers = [logos_top + row_height * (idx + 0.5) for idx in range(row_count)]
+
+    logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
+    logo_base_height = max(6, int(row_height - OVERVIEW_LOGO_PADDING))
+    logo_target_height = int(
+        min(
+            OVERVIEW_MAX_LOGO_HEIGHT,
+            max(OVERVIEW_MIN_LOGO_HEIGHT, logo_base_height),
+            logo_width_limit,
+        )
+    )
+    logo_target_height = max(6, logo_target_height)
+
+    return base, col_centers, row_centers, logo_target_height, max_cols
+
+
 def _overview_logo_position(
     col_idx: int,
     row_idx: int,
@@ -1147,6 +1189,20 @@ def _overview_logo_position(
     y_center = logos_top + cell_height * (row_idx + 0.5)
     x0 = int(col_center - logo.width / 2)
     y0 = int(y_center - logo.height / 2)
+    return x0, y0
+
+
+def _overview_logo_position_horizontal(
+    col_idx: int,
+    row_idx: int,
+    col_centers: Sequence[float],
+    row_centers: Sequence[float],
+    logo: Image.Image,
+) -> tuple[int, int]:
+    col_center = col_centers[col_idx]
+    row_center = row_centers[row_idx]
+    x0 = int(col_center - logo.width / 2)
+    y0 = int(row_center - logo.height / 2)
     return x0, y0
 
 
@@ -1170,6 +1226,32 @@ def _build_overview_rows(
             if not logo:
                 continue
             x0, y0 = _overview_logo_position(col_idx, row_idx, col_centers, logos_top, cell_height, logo)
+            rows[row_idx].append((abbr, logo, x0, y0))
+
+    return rows
+
+
+def _build_overview_rows_horizontal(
+    sections: Sequence[tuple[str, List[dict]]],
+    col_centers: Sequence[float],
+    row_centers: Sequence[float],
+    logo_height: int,
+    max_cols: int,
+) -> List[List[Placement]]:
+    rows: List[List[Placement]] = [[] for _ in range(len(sections))]
+
+    for row_idx, (_, teams) in enumerate(sections):
+        limited = teams[:max_cols]
+        for col_idx, team in enumerate(limited):
+            abbr = (team.get("abbr") or "").upper()
+            if not abbr:
+                continue
+            logo = _load_overview_logo(abbr, logo_height)
+            if not logo:
+                continue
+            x0, y0 = _overview_logo_position_horizontal(
+                col_idx, row_idx, col_centers, row_centers, logo
+            )
             rows[row_idx].append((abbr, logo, x0, y0))
 
     return rows
@@ -1275,6 +1357,20 @@ def _prepare_overview(
         title,
     )
     row_positions = _build_overview_rows(divisions, col_centers, logos_top, cell_height, logo_height, max_rows)
+    return base, row_positions
+
+
+def _prepare_overview_horizontal(
+    sections: List[tuple[str, List[dict]]],
+    title: str,
+) -> tuple[Image.Image, List[List[Placement]]]:
+    base, col_centers, row_centers, logo_height, max_cols = _overview_layout_horizontal(
+        sections,
+        title,
+    )
+    row_positions = _build_overview_rows_horizontal(
+        sections, col_centers, row_centers, logo_height, max_cols
+    )
     return base, row_positions
 
 
@@ -1522,6 +1618,56 @@ def draw_nhl_standings_overview_v2_east(display, transition: bool = True) -> Ren
     return ScreenImage(final_img, displayed=True)
 
 
+def draw_nhl_standings_overview_v3_west(display, transition: bool = True) -> RenderResult:
+    """Render the Western Conference overview screen using a horizontal layout."""
+    standings_by_conf = _fetch_standings_data()
+    sections = _build_overview_divisions_v2_west(standings_by_conf)
+
+    if not any(teams for _, teams in sections):
+        clear_display(display)
+        img = _render_empty(OVERVIEW_TITLE_WEST)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    base, row_positions = _prepare_overview_horizontal(sections, OVERVIEW_TITLE_WEST)
+    final_img, _ = _compose_overview_image(base, row_positions)
+
+    clear_display(display)
+    _animate_overview_drop(display, base, row_positions)
+    display.image(final_img)
+    if hasattr(display, "show"):
+        display.show()
+
+    return ScreenImage(final_img, displayed=True)
+
+
+def draw_nhl_standings_overview_v3_east(display, transition: bool = True) -> RenderResult:
+    """Render the Eastern Conference overview screen using a horizontal layout."""
+    standings_by_conf = _fetch_standings_data()
+    sections = _build_overview_divisions_v2_east(standings_by_conf)
+
+    if not any(teams for _, teams in sections):
+        clear_display(display)
+        img = _render_empty(OVERVIEW_TITLE_EAST)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    base, row_positions = _prepare_overview_horizontal(sections, OVERVIEW_TITLE_EAST)
+    final_img, _ = _compose_overview_image(base, row_positions)
+
+    clear_display(display)
+    _animate_overview_drop(display, base, row_positions)
+    display.image(final_img)
+    if hasattr(display, "show"):
+        display.show()
+
+    return ScreenImage(final_img, displayed=True)
+
+
 def draw_nhl_standings_west_v2(display, transition: bool = True) -> RenderResult:
     """Render the Western Conference standings screen using the wild-card layout."""
     standings_by_conf = _fetch_standings_data()
@@ -1561,6 +1707,8 @@ def draw_nhl_standings_east_v2(display, transition: bool = True) -> RenderResult
 __all__ = [
     "draw_nhl_standings_overview_v2_west",
     "draw_nhl_standings_overview_v2_east",
+    "draw_nhl_standings_overview_v3_west",
+    "draw_nhl_standings_overview_v3_east",
     "draw_nhl_standings_west_v2",
     "draw_nhl_standings_east_v2",
 ]

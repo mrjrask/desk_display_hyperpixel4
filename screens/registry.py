@@ -94,6 +94,8 @@ from screens.nhl_standings_v2 import (
     draw_nhl_standings_east_v2,
     draw_nhl_standings_overview_v2_east,
     draw_nhl_standings_overview_v2_west,
+    draw_nhl_standings_overview_v3_east,
+    draw_nhl_standings_overview_v3_west,
     draw_nhl_standings_west_v2,
 )
 
@@ -412,6 +414,14 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         register(
             "NHL Standings Overview v2 East",
             lambda: draw_nhl_standings_overview_v2_east(context.display, transition=True),
+        )
+        register(
+            "NHL Overview West v3",
+            lambda: draw_nhl_standings_overview_v3_west(context.display, transition=True),
+        )
+        register(
+            "NHL Overview East v3",
+            lambda: draw_nhl_standings_overview_v3_east(context.display, transition=True),
         )
         register(
             "NHL Standings West v2",
