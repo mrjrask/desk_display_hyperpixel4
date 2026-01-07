@@ -70,12 +70,15 @@ STATS_VALUE_FONT = clone_font(ROW_FONT, _ROW_FONT_SIZE + 6)
 _TEAM_NAME_FONT_SIZE = max(8, _ROW_FONT_SIZE + 10)
 TEAM_NAME_FONT = clone_font(ROW_FONT, _TEAM_NAME_FONT_SIZE)
 
-OVERVIEW_TITLE = "NHL Overview"
-OVERVIEW_DIVISIONS = [
-    (CONFERENCE_WEST_KEY, "Central", "Central"),
-    (CONFERENCE_WEST_KEY, "Pacific", "Pacific"),
-    (CONFERENCE_EAST_KEY, "Metropolitan", "Metro"),
-    (CONFERENCE_EAST_KEY, "Atlantic", "Atlantic"),
+OVERVIEW_TITLE_WEST = "NHL Overview West"
+OVERVIEW_TITLE_EAST = "NHL Overview East"
+OVERVIEW_DIVISIONS_WEST = [
+    ("Central", "Central"),
+    ("Pacific", "Pacific"),
+]
+OVERVIEW_DIVISIONS_EAST = [
+    ("Metropolitan", "Metro"),
+    ("Atlantic", "Atlantic"),
 ]
 OVERVIEW_MARGIN_X = 10
 OVERVIEW_TITLE_MARGIN_BOTTOM = 18
@@ -954,13 +957,14 @@ Placement = Tuple[str, Image.Image, int, int]
 
 
 def _overview_layout(
-    divisions: Sequence[tuple[str, List[dict]]]
+    divisions: Sequence[tuple[str, List[dict]]],
+    title: str,
 ) -> tuple[Image.Image, List[float], float, float, int, int]:
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
     y = TITLE_MARGIN_TOP
-    y += _draw_centered_text(draw, OVERVIEW_TITLE, TITLE_FONT, y)
+    y += _draw_centered_text(draw, title, TITLE_FONT, y)
     y += OVERVIEW_TITLE_MARGIN_BOTTOM
 
     logos_top = y
@@ -1121,10 +1125,29 @@ def _animate_overview_drop(
         time.sleep(DROP_FRAME_DELAY)
 
 
-def _prepare_overview(divisions: List[tuple[str, List[dict]]]) -> tuple[Image.Image, List[List[Placement]]]:
-    base, col_centers, logos_top, cell_height, logo_height, max_rows = _overview_layout(divisions)
+def _prepare_overview(
+    divisions: List[tuple[str, List[dict]]],
+    title: str,
+) -> tuple[Image.Image, List[List[Placement]]]:
+    base, col_centers, logos_top, cell_height, logo_height, max_rows = _overview_layout(
+        divisions,
+        title,
+    )
     row_positions = _build_overview_rows(divisions, col_centers, logos_top, cell_height, logo_height, max_rows)
     return base, row_positions
+
+
+def _build_overview_divisions(
+    standings_by_conf: Dict[str, Dict[str, List[dict]]],
+    conference_key: str,
+    division_labels: Sequence[tuple[str, str]],
+) -> List[tuple[str, List[dict]]]:
+    conference = standings_by_conf.get(conference_key, {})
+    divisions: List[tuple[str, List[dict]]] = []
+    for division_name, label in division_labels:
+        teams = conference.get(division_name, [])
+        divisions.append((label, teams))
+    return divisions
 
 
 def _render_empty(title: str) -> Image.Image:
@@ -1157,24 +1180,54 @@ def _scroll_vertical(display, image: Image.Image) -> None:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
-def draw_nhl_standings_overview(display, transition: bool = False) -> ScreenImage:
+def draw_nhl_standings_overview_west(display, transition: bool = False) -> ScreenImage:
     standings_by_conf = _fetch_standings_data()
 
-    divisions: List[tuple[str, List[dict]]] = []
-    for conference_key, division_name, label in OVERVIEW_DIVISIONS:
-        conference = standings_by_conf.get(conference_key, {})
-        teams = conference.get(division_name, [])
-        divisions.append((label, teams))
+    divisions = _build_overview_divisions(
+        standings_by_conf,
+        CONFERENCE_WEST_KEY,
+        OVERVIEW_DIVISIONS_WEST,
+    )
 
     if not any(teams for _, teams in divisions):
         clear_display(display)
-        img = _render_empty(OVERVIEW_TITLE)
+        img = _render_empty(OVERVIEW_TITLE_WEST)
         if transition:
             return ScreenImage(img, displayed=False)
         display.image(img)
         return ScreenImage(img, displayed=True)
 
-    base, row_positions = _prepare_overview(divisions)
+    base, row_positions = _prepare_overview(divisions, OVERVIEW_TITLE_WEST)
+    final_img, _ = _compose_overview_image(base, row_positions)
+
+    clear_display(display)
+    _animate_overview_drop(display, base, row_positions)
+    display.image(final_img)
+    if hasattr(display, "show"):
+        display.show()
+
+    return ScreenImage(final_img, displayed=True)
+
+
+@log_call
+def draw_nhl_standings_overview_east(display, transition: bool = False) -> ScreenImage:
+    standings_by_conf = _fetch_standings_data()
+
+    divisions = _build_overview_divisions(
+        standings_by_conf,
+        CONFERENCE_EAST_KEY,
+        OVERVIEW_DIVISIONS_EAST,
+    )
+
+    if not any(teams for _, teams in divisions):
+        clear_display(display)
+        img = _render_empty(OVERVIEW_TITLE_EAST)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    base, row_positions = _prepare_overview(divisions, OVERVIEW_TITLE_EAST)
     final_img, _ = _compose_overview_image(base, row_positions)
 
     clear_display(display)
