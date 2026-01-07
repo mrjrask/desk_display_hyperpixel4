@@ -705,14 +705,7 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         feels_like_gap = 2
         if feels_like is not None:
             feels_like_text = f"{feels_like}°"
-            feels_like_font = fit_font(
-                draw,
-                feels_like_text,
-                FONT_CONDITION,
-                max_width=max(1, col_w - 8),
-                max_height=max(1, temp_h),
-                min_pt=8,
-            )
+            feels_like_font = FONT_WEATHER_DETAILS_MICRO
             feels_like_w, feels_like_h = measure_text(draw, feels_like_text, feels_like_font)
 
         temp_block_h = temp_h + (feels_like_gap + feels_like_h if feels_like_text else 0)
@@ -721,7 +714,12 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
 
         if feels_like_text and feels_like_font:
             feels_like_y = temp_text_y + temp_h + feels_like_gap
-            draw.text((cx - feels_like_w // 2, feels_like_y), feels_like_text, font=feels_like_font, fill=(255, 255, 255))
+            draw.text(
+                (cx - feels_like_w // 2, feels_like_y),
+                feels_like_text,
+                font=feels_like_font,
+                fill=(120, 120, 120),
+            )
 
         icon_code = hour.get("icon")
         icon_img = None
