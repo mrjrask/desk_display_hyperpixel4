@@ -13,7 +13,7 @@
     "vrnof": 4,
     "travel": 2,
     "bears logo": 2,
-    "bears stand1": 1,
+    "bears stand1": 0,
     "bears stand2": 0,
     "bears next": 2,
     "nfl logo": 0,
@@ -61,17 +61,24 @@
     "NHL Standings Overview": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Standings West", "NHL Standings East"],
+        "screen": ["NHL Standings Overview v2"],
         "frequency": 1
       }
     },
-    "NHL Standings West": 0,
-    "NHL Standings East": 0,
-    "NHL Standings Overview v2": {
+    "NHL Standings West": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Standings West v2", "NHL Standings East v2"],
-        "frequency": 1
+        "screen": ["NHL Standings West v2"],
+        "frequency": 1,
+      }
+    },
+    "NHL Standings East": {
+      "frequency": 1,
+      "alt": {
+        "screen": ["NHL Standings East v2"],
+        "frequency": 1,
+    "NHL Standings Overview v2": {
+      "frequency": 1,
       }
     },
     "NHL Standings West v2": 0,
