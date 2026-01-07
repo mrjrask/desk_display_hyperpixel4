@@ -552,17 +552,63 @@ def _monitor_touchscreen() -> None:
         right_third_threshold = x_max * 2 // 3
         left_third_threshold = x_max // 3
         bottom_third_threshold = y_max * 2 // 3
-        logging.debug(f"Touchscreen max: {x_max}x{y_max}, right 1/3: {right_third_threshold}, left 1/3: {left_third_threshold}, bottom 1/3: {bottom_third_threshold}")
+        min_swipe_distance = x_max // 4
+        max_swipe_vertical = y_max // 4
+        logging.debug(
+            "Touchscreen max: %sx%s, right 1/3: %s, left 1/3: %s, bottom 1/3: %s, swipe min dx: %s, swipe max dy: %s",
+            x_max,
+            y_max,
+            right_third_threshold,
+            left_third_threshold,
+            bottom_third_threshold,
+            min_swipe_distance,
+            max_swipe_vertical,
+        )
     except Exception as exc:
         logging.warning(f"Could not determine touchscreen resolution: {exc}")
         right_third_threshold = 480  # Default for 720px screen
         left_third_threshold = 240
         bottom_third_threshold = 480
+        min_swipe_distance = 180
+        max_swipe_vertical = 180
 
     try:
         last_x = None
         last_y = None
         touch_active = False
+        touch_start_x = None
+        touch_start_y = None
+
+        def _handle_touch_release() -> None:
+            nonlocal last_x, last_y, touch_start_x, touch_start_y, touch_active
+            touch_active = False
+            swipe_handled = False
+            if (
+                touch_start_x is not None
+                and last_x is not None
+                and touch_start_y is not None
+                and last_y is not None
+            ):
+                delta_x = touch_start_x - last_x
+                delta_y = abs(touch_start_y - last_y)
+                if delta_x >= min_swipe_distance and delta_y <= max_swipe_vertical:
+                    logging.info("👈 Swipe right-to-left detected – skipping to next screen.")
+                    _manual_skip_event.set()
+                    swipe_handled = True
+            if not swipe_handled:
+                # Check if the touch was in the right 1/3 (skip screen)
+                if last_x is not None and last_x >= right_third_threshold:
+                    logging.info("👆 Right-side touch detected – skipping to next screen.")
+                    _manual_skip_event.set()
+                # Check if the touch was in the bottom-left corner (brightness toggle)
+                elif last_x is not None and last_y is not None:
+                    if last_x <= left_third_threshold and last_y >= bottom_third_threshold:
+                        logging.info("💡 Bottom-left corner touch detected – toggling brightness.")
+                        toggle_brightness()
+            last_x = None
+            last_y = None
+            touch_start_x = None
+            touch_start_y = None
 
         while not _shutdown_event.is_set():
             try:
@@ -577,30 +623,32 @@ def _monitor_touchscreen() -> None:
                     if event.code in (ecodes.ABS_X, ecodes.ABS_MT_POSITION_X):
                         last_x = event.value
                         touch_active = True
+                        if touch_start_x is None and touch_active:
+                            touch_start_x = last_x
+                            touch_start_y = last_y
                     elif event.code in (ecodes.ABS_Y, ecodes.ABS_MT_POSITION_Y):
                         last_y = event.value
                         touch_active = True
+                        if touch_start_y is None and touch_active:
+                            touch_start_x = last_x
+                            touch_start_y = last_y
                     elif event.code in (ecodes.ABS_MT_TRACKING_ID,):
                         # Multi-touch tracking ID -1 means touch released
                         if event.value == -1:
-                            touch_active = False
+                            if last_x is not None and touch_start_x is None:
+                                touch_start_x = last_x
+                            if last_y is not None and touch_start_y is None:
+                                touch_start_y = last_y
+                            _handle_touch_release()
                 elif event.type == ecodes.EV_KEY:
                     if event.code == ecodes.BTN_TOUCH:
                         if event.value == 0:  # Touch released
-                            touch_active = False
-                            # Check if the touch was in the right 1/3 (skip screen)
-                            if last_x is not None and last_x >= right_third_threshold:
-                                logging.info("👆 Right-side touch detected – skipping to next screen.")
-                                _manual_skip_event.set()
-                            # Check if the touch was in the bottom-left corner (brightness toggle)
-                            elif last_x is not None and last_y is not None:
-                                if last_x <= left_third_threshold and last_y >= bottom_third_threshold:
-                                    logging.info("💡 Bottom-left corner touch detected – toggling brightness.")
-                                    toggle_brightness()
-                            last_x = None
-                            last_y = None
+                            _handle_touch_release()
                         elif event.value == 1:  # Touch pressed
                             touch_active = True
+                            if touch_start_x is None:
+                                touch_start_x = last_x
+                                touch_start_y = last_y
 
             except Exception as exc:
                 if _shutdown_event.is_set():
