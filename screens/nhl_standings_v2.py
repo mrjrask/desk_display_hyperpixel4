@@ -72,8 +72,8 @@ STATS_VALUE_FONT = clone_font(ROW_FONT, _ROW_FONT_SIZE + 6)
 _TEAM_NAME_FONT_SIZE = max(8, _ROW_FONT_SIZE + 10)
 TEAM_NAME_FONT = clone_font(ROW_FONT, _TEAM_NAME_FONT_SIZE)
 
-OVERVIEW_TITLE_WEST = "NHL WC Wild Card"
-OVERVIEW_TITLE_EAST = "NHL EC Wild Card"
+OVERVIEW_TITLE_WEST = "NHL West Wild Card"
+OVERVIEW_TITLE_EAST = "NHL East Wild Card"
 OVERVIEW_DIVISIONS_WEST = [
     ("Central", "Central"),
     ("Pacific", "Pacific"),
