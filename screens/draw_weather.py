@@ -698,8 +698,30 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
             min_pt=10,
         )
         temp_w, temp_h = measure_text(draw, temp_str, temp_font)
-        temp_text_y = max(trend_top, min(trend_bottom - temp_h, temp_y - temp_h // 2))
+        feels_like = hour.get("feels_like")
+        feels_like_text = None
+        feels_like_font = None
+        feels_like_w = feels_like_h = 0
+        feels_like_gap = 2
+        if feels_like is not None:
+            feels_like_text = f"{feels_like}°"
+            feels_like_font = fit_font(
+                draw,
+                feels_like_text,
+                FONT_CONDITION,
+                max_width=max(1, col_w - 8),
+                max_height=max(1, temp_h),
+                min_pt=8,
+            )
+            feels_like_w, feels_like_h = measure_text(draw, feels_like_text, feels_like_font)
+
+        temp_block_h = temp_h + (feels_like_gap + feels_like_h if feels_like_text else 0)
+        temp_text_y = max(trend_top, min(trend_bottom - temp_block_h, temp_y - temp_block_h // 2))
         draw.text((cx - temp_w // 2, temp_text_y), temp_str, font=temp_font, fill=(255, 255, 255))
+
+        if feels_like_text and feels_like_font:
+            feels_like_y = temp_text_y + temp_h + feels_like_gap
+            draw.text((cx - feels_like_w // 2, feels_like_y), feels_like_text, font=feels_like_font, fill=(255, 255, 255))
 
         icon_code = hour.get("icon")
         icon_img = None
@@ -734,11 +756,6 @@ def draw_weather_hourly(display, weather, transition: bool = False, hours: int =
         draw.line((x0 + 6, stat_area_top, x1 - 6, stat_area_top), fill=(50, 50, 80), width=1)
 
         stat_items = []
-
-        feels_like = hour.get("feels_like")
-        if feels_like is not None:
-            feels_like_text = f"Feels {feels_like}°F"
-            stat_items.append((feels_like_text, FONT_WEATHER_DETAILS_TINY, (90, 90, 90), None))
 
         wind_speed = hour.get("wind_speed")
         wind_dir = hour.get("wind_dir", "") or ""
