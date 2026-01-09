@@ -18,6 +18,7 @@ from config import (
     FONT_TITLE_SPORTS,
     FONT_STATUS,
     NHL_IMAGES_DIR,
+    IS_SQUARE_DISPLAY,
     SCOREBOARD_SCROLL_STEP,
     SCOREBOARD_SCROLL_DELAY,
     SCOREBOARD_SCROLL_PAUSE_TOP,
@@ -90,6 +91,7 @@ OVERVIEW_MAX_LOGO_HEIGHT = 184
 OVERVIEW_LOGO_PADDING = 16
 OVERVIEW_LOGO_OVERLAP = 12
 OVERVIEW_LEADER_LOGO_SCALE = 1.2
+OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.15
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
 OVERVIEW_DROP_STAGGER = 0.4  # fraction of steps before next team starts
@@ -1211,6 +1213,8 @@ def _overview_logo_height(
     target = base_height
     if is_leader:
         target = int(round(base_height * OVERVIEW_LEADER_LOGO_SCALE))
+        if IS_SQUARE_DISPLAY:
+            target = int(round(target * OVERVIEW_LEADER_LOGO_SQUARE_SCALE))
     target = min(
         OVERVIEW_MAX_LOGO_HEIGHT,
         max(OVERVIEW_MIN_LOGO_HEIGHT, target),
