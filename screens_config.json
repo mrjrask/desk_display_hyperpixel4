@@ -61,14 +61,14 @@
     "NHL Standings Overview West": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Standings Overview v3 West"],
+        "screen": ["NHL Overview West v3"],
         "frequency": 1
       }
     },
     "NHL Standings Overview East": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Standings Overview v3 East"],
+        "screen": ["NHL Overview East v3"],
         "frequency": 1
       }
     },
