@@ -89,6 +89,7 @@ OVERVIEW_MIN_LOGO_HEIGHT = 96
 OVERVIEW_MAX_LOGO_HEIGHT = 184
 OVERVIEW_LOGO_PADDING = 16
 OVERVIEW_LOGO_OVERLAP = 12
+OVERVIEW_LEADER_LOGO_SCALE = 1.2
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
 OVERVIEW_DROP_STAGGER = 0.4  # fraction of steps before next team starts
@@ -1100,7 +1101,7 @@ Placement = Tuple[str, Image.Image, int, int]
 def _overview_layout(
     divisions: Sequence[tuple[str, List[dict]]],
     title: str,
-) -> tuple[Image.Image, List[float], float, float, int, int]:
+) -> tuple[Image.Image, List[float], float, float, float, int, int]:
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
@@ -1132,13 +1133,22 @@ def _overview_layout(
     )
     logo_target_height = max(6, logo_target_height)
 
-    return base, col_centers, logos_top, cell_height, logo_target_height, max_rows
+    return (
+        base,
+        col_centers,
+        logos_top,
+        available_height,
+        available_width,
+        logo_target_height,
+        max_rows,
+        col_count,
+    )
 
 
 def _overview_layout_horizontal(
     sections: Sequence[tuple[str, List[dict]]],
     title: str,
-) -> tuple[Image.Image, List[float], List[float], int, int]:
+) -> tuple[Image.Image, List[float], float, int, int]:
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
@@ -1155,14 +1165,11 @@ def _overview_layout_horizontal(
         max_cols = 1
 
     available_width = max(1.0, WIDTH - 2 * OVERVIEW_MARGIN_X)
-    col_width = available_width / max_cols
-    col_centers = [
-        OVERVIEW_MARGIN_X + col_width * (idx + 0.5) for idx in range(max_cols)
-    ]
 
     row_height = available_height / row_count if row_count else available_height
     row_centers = [logos_top + row_height * (idx + 0.5) for idx in range(row_count)]
 
+    col_width = available_width / max_cols
     logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
     logo_base_height = max(6, int(row_height - OVERVIEW_LOGO_PADDING))
     logo_target_height = int(
@@ -1174,58 +1181,77 @@ def _overview_layout_horizontal(
     )
     logo_target_height = max(6, logo_target_height)
 
-    return base, col_centers, row_centers, logo_target_height, max_cols
+    return base, row_centers, available_width, logo_target_height, max_cols
 
 
-def _overview_logo_position(
-    col_idx: int,
-    row_idx: int,
-    col_centers: Sequence[float],
-    logos_top: float,
-    cell_height: float,
+def _overview_logo_position_center(
+    col_center: float,
+    row_center: float,
     logo: Image.Image,
 ) -> tuple[int, int]:
-    col_center = col_centers[col_idx]
-    y_center = logos_top + cell_height * (row_idx + 0.5)
-    x0 = int(col_center - logo.width / 2)
-    y0 = int(y_center - logo.height / 2)
-    return x0, y0
-
-
-def _overview_logo_position_horizontal(
-    col_idx: int,
-    row_idx: int,
-    col_centers: Sequence[float],
-    row_centers: Sequence[float],
-    logo: Image.Image,
-) -> tuple[int, int]:
-    col_center = col_centers[col_idx]
-    row_center = row_centers[row_idx]
     x0 = int(col_center - logo.width / 2)
     y0 = int(row_center - logo.height / 2)
     return x0, y0
+
+
+def _centered_positions(count: int, start: float, available: float) -> List[float]:
+    if count <= 0:
+        return []
+    spacing = available / count
+    center = start + available / 2
+    offset = (count - 1) / 2
+    return [center + (idx - offset) * spacing for idx in range(count)]
+
+
+def _overview_logo_height(
+    base_height: int,
+    is_leader: bool,
+    logo_width_limit: int,
+) -> int:
+    target = base_height
+    if is_leader:
+        target = int(round(base_height * OVERVIEW_LEADER_LOGO_SCALE))
+    target = min(
+        OVERVIEW_MAX_LOGO_HEIGHT,
+        max(OVERVIEW_MIN_LOGO_HEIGHT, target),
+        logo_width_limit,
+    )
+    return max(6, target)
 
 
 def _build_overview_rows(
     divisions: Sequence[tuple[str, List[dict]]],
     col_centers: Sequence[float],
     logos_top: float,
-    cell_height: float,
+    available_height: float,
+    available_width: float,
     logo_height: int,
     max_rows: int,
+    col_count: int,
 ) -> List[List[Placement]]:
     rows: List[List[Placement]] = [[] for _ in range(max_rows)]
+    col_width = available_width / max(1, col_count)
+    logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
 
     for col_idx, (_, teams) in enumerate(divisions):
         limited = teams[:max_rows]
+        row_centers = _centered_positions(len(limited), logos_top, available_height)
         for row_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
                 continue
-            logo = _load_overview_logo(abbr, logo_height)
+            is_leader = row_idx == 0
+            target_height = _overview_logo_height(
+                logo_height,
+                is_leader=is_leader,
+                logo_width_limit=logo_width_limit,
+            )
+            logo = _load_overview_logo(abbr, target_height)
             if not logo:
                 continue
-            x0, y0 = _overview_logo_position(col_idx, row_idx, col_centers, logos_top, cell_height, logo)
+            col_center = col_centers[col_idx]
+            row_center = row_centers[row_idx]
+            x0, y0 = _overview_logo_position_center(col_center, row_center, logo)
             rows[row_idx].append((abbr, logo, x0, y0))
 
     return rows
@@ -1233,8 +1259,8 @@ def _build_overview_rows(
 
 def _build_overview_rows_horizontal(
     sections: Sequence[tuple[str, List[dict]]],
-    col_centers: Sequence[float],
     row_centers: Sequence[float],
+    available_width: float,
     logo_height: int,
     max_cols: int,
 ) -> List[List[Placement]]:
@@ -1242,16 +1268,29 @@ def _build_overview_rows_horizontal(
 
     for row_idx, (_, teams) in enumerate(sections):
         limited = teams[:max_cols]
+        col_centers = _centered_positions(
+            len(limited),
+            OVERVIEW_MARGIN_X,
+            available_width,
+        )
+        col_width = available_width / max(1, len(limited))
+        logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
         for col_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
                 continue
-            logo = _load_overview_logo(abbr, logo_height)
+            is_leader = col_idx == 0
+            target_height = _overview_logo_height(
+                logo_height,
+                is_leader=is_leader,
+                logo_width_limit=logo_width_limit,
+            )
+            logo = _load_overview_logo(abbr, target_height)
             if not logo:
                 continue
-            x0, y0 = _overview_logo_position_horizontal(
-                col_idx, row_idx, col_centers, row_centers, logo
-            )
+            col_center = col_centers[col_idx]
+            row_center = row_centers[row_idx]
+            x0, y0 = _overview_logo_position_center(col_center, row_center, logo)
             rows[row_idx].append((abbr, logo, x0, y0))
 
     return rows
@@ -1352,11 +1391,29 @@ def _prepare_overview(
     divisions: List[tuple[str, List[dict]]],
     title: str,
 ) -> tuple[Image.Image, List[List[Placement]]]:
-    base, col_centers, logos_top, cell_height, logo_height, max_rows = _overview_layout(
+    (
+        base,
+        col_centers,
+        logos_top,
+        available_height,
+        available_width,
+        logo_height,
+        max_rows,
+        col_count,
+    ) = _overview_layout(
         divisions,
         title,
     )
-    row_positions = _build_overview_rows(divisions, col_centers, logos_top, cell_height, logo_height, max_rows)
+    row_positions = _build_overview_rows(
+        divisions,
+        col_centers,
+        logos_top,
+        available_height,
+        available_width,
+        logo_height,
+        max_rows,
+        col_count,
+    )
     return base, row_positions
 
 
@@ -1364,12 +1421,18 @@ def _prepare_overview_horizontal(
     sections: List[tuple[str, List[dict]]],
     title: str,
 ) -> tuple[Image.Image, List[List[Placement]]]:
-    base, col_centers, row_centers, logo_height, max_cols = _overview_layout_horizontal(
+    (
+        base,
+        row_centers,
+        available_width,
+        logo_height,
+        max_cols,
+    ) = _overview_layout_horizontal(
         sections,
         title,
     )
     row_positions = _build_overview_rows_horizontal(
-        sections, col_centers, row_centers, logo_height, max_cols
+        sections, row_centers, available_width, logo_height, max_cols
     )
     return base, row_positions
 
