@@ -171,6 +171,13 @@ def _optional_int_from_env(name: str) -> Optional[int]:
         logging.warning("Invalid %s value %r; ignoring", name, raw_value)
         return None
 
+
+def _bool_from_env(name: str, default: bool = False) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
 import pytz
 from PIL import Image, ImageDraw, ImageFont
 
@@ -187,6 +194,7 @@ ENABLE_SCREENSHOTS   = True
 ENABLE_VIDEO         = False
 VIDEO_FPS            = 30
 ENABLE_WIFI_MONITOR  = True
+SYNC_PLAYBACK        = _bool_from_env("SYNC_PLAYBACK", default=True)
 
 WIFI_RETRY_DURATION  = 180
 WIFI_CHECK_INTERVAL  = 60

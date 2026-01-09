@@ -103,6 +103,7 @@ required_feeds = None
 WIDTH = HEIGHT = SCREEN_DELAY = LOGO_SCREEN_DELAY = SCHEDULE_UPDATE_INTERVAL = None
 FONT_DATE_SPORTS = None
 ENABLE_SCREENSHOTS = ENABLE_VIDEO = ENABLE_WIFI_MONITOR = VIDEO_FPS = None
+SYNC_PLAYBACK = None
 CENTRAL_TIME = TRAVEL_ACTIVE_WINDOW = DISPLAY_PROFILE = None
 
 def _configure_logging() -> None:
@@ -129,7 +130,8 @@ def _import_runtime_dependencies() -> None:
     global load_screen_overrides, resolve_overrides_for_profile, required_feeds
     global WIDTH, HEIGHT, SCREEN_DELAY, LOGO_SCREEN_DELAY, SCHEDULE_UPDATE_INTERVAL
     global FONT_DATE_SPORTS, ENABLE_SCREENSHOTS, ENABLE_VIDEO, VIDEO_FPS
-    global ENABLE_WIFI_MONITOR, CENTRAL_TIME, TRAVEL_ACTIVE_WINDOW, DISPLAY_PROFILE
+    global ENABLE_WIFI_MONITOR, SYNC_PLAYBACK, CENTRAL_TIME, TRAVEL_ACTIVE_WINDOW
+    global DISPLAY_PROFILE
     global get_travel_active_window, is_travel_screen_active
 
     from PIL import Image, ImageDraw
@@ -145,6 +147,7 @@ def _import_runtime_dependencies() -> None:
         ENABLE_VIDEO,
         VIDEO_FPS,
         ENABLE_WIFI_MONITOR,
+        SYNC_PLAYBACK,
         CENTRAL_TIME,
         TRAVEL_ACTIVE_WINDOW,
         DISPLAY_PROFILE,
@@ -216,6 +219,10 @@ _resolved_override_cache: Dict[str, ResolvedScreenOverride] = {}
 
 _skip_request_pending = False
 _last_screen_id: Optional[str] = None
+_sync_anchor_date: Optional[datetime.date] = None
+_sync_slot_index: Optional[int] = None
+_sync_current_entry: Optional["ScreenDefinition"] = None
+_last_displayed_slot: Optional[int] = None
 
 _SKIP_BUTTON_SCREEN_IDS = {"date", "time"}
 
@@ -308,6 +315,7 @@ def refresh_schedule_if_needed(force: bool = False) -> None:
     _screen_config_mtime = mtime
     _last_screen_id = None
     _skip_request_pending = False
+    _reset_sync_state()
     logging.info("🔁 Loaded schedule configuration with %d node(s).", scheduler.node_count)
 
 
@@ -725,6 +733,56 @@ def _next_screen_from_registry(
     _skip_request_pending = False
     return entry
 
+
+def _current_sync_slot(now: datetime.datetime) -> int:
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed = (now - day_start).total_seconds()
+    return int(elapsed // SCREEN_DELAY)
+
+
+def _seconds_until_next_slot(now: datetime.datetime) -> float:
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    slot = _current_sync_slot(now)
+    next_start = day_start + datetime.timedelta(seconds=(slot + 1) * SCREEN_DELAY)
+    return max(0.0, (next_start - now).total_seconds())
+
+
+def _reset_sync_state() -> None:
+    global _sync_anchor_date, _sync_slot_index, _sync_current_entry
+    global _last_displayed_slot
+
+    _sync_anchor_date = None
+    _sync_slot_index = None
+    _sync_current_entry = None
+    _last_displayed_slot = None
+
+
+def _synced_entry_for_slot(
+    registry: Dict[str, ScreenDefinition], slot: int
+) -> Optional[ScreenDefinition]:
+    global _sync_slot_index, _sync_current_entry
+
+    scheduler = screen_scheduler
+    if scheduler is None:
+        return None
+
+    if _sync_slot_index is None or slot < _sync_slot_index:
+        scheduler.reset()
+        _sync_slot_index = -1
+        _sync_current_entry = None
+
+    if _sync_slot_index == slot and _sync_current_entry is not None:
+        return _sync_current_entry
+
+    steps = slot - _sync_slot_index
+    entry = _sync_current_entry
+    for _ in range(steps):
+        entry = scheduler.next_available(registry)
+
+    _sync_slot_index = slot
+    _sync_current_entry = entry
+    return entry
+
 # ─── Screenshot / video outputs ──────────────────────────────────────────────
 if ENABLE_SCREENSHOTS:
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
@@ -1005,7 +1063,8 @@ loop_count = 0
 _travel_schedule_state: Optional[str] = None
 
 def main_loop():
-    global loop_count, _travel_schedule_state, _last_screen_id
+    global loop_count, _travel_schedule_state, _last_screen_id, _skip_request_pending
+    global _sync_anchor_date, _sync_slot_index, _sync_current_entry, _last_displayed_slot
 
     if not _initialized:
         _initialize_runtime()
@@ -1084,7 +1143,31 @@ def main_loop():
             registry, metadata = build_screen_registry(context)
             _travel_schedule_state = metadata.get("travel_state", _travel_schedule_state)
 
-            entry = _next_screen_from_registry(registry)
+            now = datetime.datetime.now(CENTRAL_TIME)
+            if SYNC_PLAYBACK:
+                anchor_date = now.date()
+                if _sync_anchor_date != anchor_date:
+                    _sync_anchor_date = anchor_date
+                    if screen_scheduler is not None:
+                        screen_scheduler.reset()
+                    _sync_slot_index = None
+                    _sync_current_entry = None
+                    _last_displayed_slot = None
+
+                slot = _current_sync_slot(now)
+                if _last_displayed_slot == slot:
+                    remaining = _seconds_until_next_slot(now)
+                    if remaining > 0:
+                        if _wait_with_button_checks(remaining):
+                            continue
+                    gc.collect()
+                    continue
+
+                entry = _synced_entry_for_slot(registry, slot)
+                if _skip_request_pending:
+                    _skip_request_pending = False
+            else:
+                entry = _next_screen_from_registry(registry)
             if entry is None:
                 logging.info(
                     "No eligible screens available; sleeping for %s seconds.",
@@ -1166,7 +1249,11 @@ def main_loop():
                     break
 
                 _last_screen_id = sid
-                delay = LOGO_SCREEN_DELAY if "logo" in sid else SCREEN_DELAY
+                if SYNC_PLAYBACK:
+                    _last_displayed_slot = slot
+                    delay = _seconds_until_next_slot(datetime.datetime.now(CENTRAL_TIME))
+                else:
+                    delay = LOGO_SCREEN_DELAY if "logo" in sid else SCREEN_DELAY
                 nixie_refresh_after = 0.0
 
                 def _refresh_nixie_clock() -> None:
