@@ -326,7 +326,7 @@ def _run_startup_renderer() -> None:
 
     try:
         _logger.info("Rendering all screens to refresh admin gallery…")
-        result = _render_all_screens(sync_screenshots=True, create_archive=False)
+        result = _render_all_screens(create_archive=False)
         if result != 0:
             _logger.warning("Initial render exited with status %s", result)
     except Exception as exc:  # pragma: no cover - runtime failure is logged

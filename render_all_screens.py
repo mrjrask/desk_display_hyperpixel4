@@ -42,8 +42,6 @@ CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger(__name__))
-SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
-CURRENT_SCREENSHOT_DIR = str(_storage_paths.current_screenshot_dir)
 ARCHIVE_DIR = str(_storage_paths.archive_base)
 
 
@@ -214,63 +212,6 @@ def _write_zip(assets: Iterable[Tuple[str, Image.Image]], timestamp: _dt.datetim
     return zip_path
 
 
-def _write_screenshots(
-    assets: Iterable[Tuple[str, Image.Image]], timestamp: _dt.datetime
-) -> list[str]:
-    os.makedirs(SCREENSHOT_DIR, exist_ok=True)
-    os.makedirs(CURRENT_SCREENSHOT_DIR, exist_ok=True)
-    saved: list[str] = []
-    ts_suffix = timestamp.strftime("%Y%m%d_%H%M%S")
-    counts: Dict[str, int] = {}
-    current_paths: dict[str, str] = {}
-
-    for screen_id, image in assets:
-        prefix = _sanitize_filename_prefix(screen_id)
-        counts[prefix] = counts.get(prefix, 0) + 1
-        suffix = "" if counts[prefix] == 1 else f"_{counts[prefix] - 1:02d}"
-        filename = f"{prefix}{suffix}_{ts_suffix}.png"
-        path = os.path.join(SCREENSHOT_DIR, filename)
-        image.save(path)
-        saved.append(path)
-
-        current_name = f"{prefix}{suffix}.png"
-        current_path = os.path.join(CURRENT_SCREENSHOT_DIR, current_name)
-        image.save(current_path)
-        current_paths[current_name] = current_path
-
-    for existing in os.listdir(CURRENT_SCREENSHOT_DIR):
-        existing_path = os.path.join(CURRENT_SCREENSHOT_DIR, existing)
-        if existing not in current_paths and os.path.isfile(existing_path):
-            try:
-                os.remove(existing_path)
-            except OSError as exc:
-                logging.warning("Failed to remove stale current screenshot '%s': %s", existing_path, exc)
-
-    return saved
-
-
-def _cleanup_screenshots(saved_paths: Iterable[str]) -> None:
-    """Delete screenshot files and prune empty directories."""
-
-    deleted_dirs: set[str] = set()
-    for path in saved_paths:
-        try:
-            os.remove(path)
-            deleted_dirs.add(os.path.dirname(path))
-        except FileNotFoundError:
-            continue
-        except OSError as exc:  # pragma: no cover - best-effort cleanup
-            logging.warning("Failed to delete screenshot '%s': %s", path, exc)
-
-    for directory in sorted(deleted_dirs, key=len, reverse=True):
-        try:
-            if os.path.isdir(directory) and not os.listdir(directory):
-                os.rmdir(directory)
-        except OSError:
-            # Directory may not be empty or could have been removed already
-            continue
-
-
 def _suppress_animation_delay():
     if utils is None:
         return lambda: None
@@ -285,7 +226,6 @@ def _suppress_animation_delay():
 
 def render_all_screens(
     *,
-    sync_screenshots: bool = False,
     create_archive: bool = True,
     ignore_schedule: bool = False,
 ) -> int:
@@ -381,21 +321,11 @@ def render_all_screens(
         logging.error("No screen images were produced.")
         return 1
 
-    saved: list[str] = []
-    if sync_screenshots:
-        saved = _write_screenshots(assets, now)
-        logging.info(
-            "Updated %d screenshot(s) in %s", len(saved), SCREENSHOT_DIR
-        )
-
     if create_archive:
         archive_path = _write_zip(assets, now)
         logging.info("Archived %d screen(s) → %s", len(assets), archive_path)
         print(archive_path)
-        if saved:
-            _cleanup_screenshots(saved)
-            logging.info("Cleaned up %d screenshot file(s) from %s", len(saved), SCREENSHOT_DIR)
-    elif not create_archive and not sync_screenshots:
+    elif not create_archive:
         logging.info("Rendered %d screen(s) (no outputs written)", len(assets))
 
     return 0
@@ -411,11 +341,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Ignore screens_config.json and render every available screen.",
     )
     parser.add_argument(
-        "--sync-screenshots",
-        action="store_true",
-        help="Write PNG files for each rendered screen to the screenshots directory.",
-    )
-    parser.add_argument(
         "--no-archive",
         action="store_true",
         help="Skip creating the ZIP archive of rendered screens.",
@@ -427,7 +352,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
     return render_all_screens(
-        sync_screenshots=args.sync_screenshots,
         create_archive=not args.no_archive,
         ignore_schedule=args.ignore_schedule,
     )

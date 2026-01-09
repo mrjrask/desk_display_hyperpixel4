@@ -151,12 +151,12 @@ def test_api_overrides_get_returns_current_file(app_client):
 
 
 def test_startup_renderer_runs_when_enabled(monkeypatch):
-    calls: list[tuple[bool, bool]] = []
+    calls: list[bool] = []
 
     class FakeRenderer:
         @staticmethod
-        def render_all_screens(*, sync_screenshots=False, create_archive=True):
-            calls.append((sync_screenshots, create_archive))
+        def render_all_screens(*, create_archive=True):
+            calls.append(create_archive)
             return 0
 
     monkeypatch.setitem(sys.modules, "render_all_screens", FakeRenderer)
@@ -171,4 +171,4 @@ def test_startup_renderer_runs_when_enabled(monkeypatch):
         else:
             admin.app.config["TESTING"] = previous
 
-    assert calls == [(True, False)]
+    assert calls == [False]
