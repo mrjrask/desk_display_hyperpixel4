@@ -1154,8 +1154,8 @@ def main_loop():
                     _sync_current_entry = None
                     _last_displayed_slot = None
 
-                slot = _current_sync_slot(now)
-                if _last_displayed_slot == slot:
+                current_slot = _current_sync_slot(now)
+                if _last_displayed_slot is not None and current_slot <= _last_displayed_slot:
                     remaining = _seconds_until_next_slot(now)
                     if remaining > 0:
                         if _wait_with_button_checks(remaining):
@@ -1163,7 +1163,12 @@ def main_loop():
                     gc.collect()
                     continue
 
-                entry = _synced_entry_for_slot(registry, slot)
+                if _last_displayed_slot is None:
+                    target_slot = current_slot
+                else:
+                    target_slot = _last_displayed_slot + 1
+
+                entry = _synced_entry_for_slot(registry, target_slot)
                 if _skip_request_pending:
                     _skip_request_pending = False
             else:
@@ -1250,8 +1255,13 @@ def main_loop():
 
                 _last_screen_id = sid
                 if SYNC_PLAYBACK:
-                    _last_displayed_slot = slot
-                    delay = _seconds_until_next_slot(datetime.datetime.now(CENTRAL_TIME))
+                    _last_displayed_slot = target_slot
+                    now = datetime.datetime.now(CENTRAL_TIME)
+                    current_slot = _current_sync_slot(now)
+                    if target_slot < current_slot:
+                        delay = 0.0
+                    else:
+                        delay = _seconds_until_next_slot(now)
                 else:
                     delay = LOGO_SCREEN_DELAY if "logo" in sid else SCREEN_DELAY
                 nixie_refresh_after = 0.0
