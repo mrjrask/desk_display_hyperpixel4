@@ -92,6 +92,16 @@ class ScreenScheduler:
 
         return None
 
+    def reset(self) -> None:
+        """Reset scheduler state to the initial cursor/cooldown positions."""
+
+        self._cursor = 0
+        for entry in self._entries:
+            entry.cooldown = 0
+            entry.play_count = 0
+            if entry.alternate is not None:
+                entry.alternate.current_index = 0
+
 
 def load_schedule_config(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as fh:
