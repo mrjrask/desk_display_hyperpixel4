@@ -20,14 +20,14 @@
     "NFL Scoreboard": 3,
     "NFL Scoreboard v2": 0,
     "NFL Overview NFC": {
-      "frequency": 2,
+      "frequency": 0,
       "alt": {
         "screen": "NFL Standings NFC",
         "frequency": 1
       }
     },
     "NFL Overview AFC": {
-      "frequency": 2,
+      "frequency": 0,
       "alt": {
         "screen": "NFL Standings AFC",
         "frequency": 1
