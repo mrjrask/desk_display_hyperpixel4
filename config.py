@@ -990,6 +990,7 @@ BEARS_SCHEDULE = [
     {"game_no": "17","week":"Week 17", "date":"Sun, Dec 28","opponent":"San Francisco 49ers",   "home_away":"Away","time":"7:20PM"},
     {"game_no": "18","week":"Week 18", "date":"Sun, Jan 4","opponent":"Detroit Lions",         "home_away":"Home","time":"3:25PM"},
     {"game_no": "19","week":"Wild Card", "date":"Sat, Jan 10","opponent":"Green Bay Packers",         "home_away":"Home","time":"7PM"},
+    {"game_no": "20","week":"Division Playoff ", "date":"TBD","opponent":"TBD",         "home_away":"Home","time":"TBD"},
 ]
 
 NFL_TEAM_ABBREVIATIONS = {
