@@ -242,6 +242,11 @@ class Display:
         if pygame is None:  # pragma: no cover - optional dependency
             return False, "pygame module not installed"
 
+        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            # Force-disable the hardware cursor when using KMSDRM to ensure it
+            # stays hidden on Raspberry Pi/HyperPixel stacks running Trixie.
+            os.environ.setdefault("SDL_VIDEO_KMSDRM_DISABLE_CURSOR", "1")
+
         flags = pygame.FULLSCREEN if DISPLAY_FULLSCREEN else 0
         original_driver = os.environ.get("SDL_VIDEODRIVER")
         driver_candidates: List[Optional[str]] = []
