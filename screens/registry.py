@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from PIL import Image
 
 import config
-from utils import ScreenImage, animate_scroll
+from utils import ScreenImage, animate_scroll, timestamp_to_datetime
 from screen_overrides import ResolvedScreenOverride
 from screen_runtime_overrides import apply_override_to_result
 from screens.draw_bears_schedule import show_bears_next_game
@@ -101,6 +101,67 @@ from screens.nhl_standings_v2 import (
 )
 
 RenderCallable = Callable[[], Optional[Image.Image | ScreenImage]]
+
+RADAR_LOOKAHEAD_HOURS = 8
+
+
+def _pop_pct_from(entry: object) -> Optional[int]:
+    if not isinstance(entry, dict):
+        return None
+    pop_raw = entry.get("pop")
+    if pop_raw is None:
+        pop_raw = entry.get("probabilityOfPrecipitation")
+    if pop_raw is None:
+        return None
+    try:
+        pop_val = float(pop_raw)
+    except Exception:
+        return None
+    if 0 <= pop_val <= 1:
+        pop_val *= 100
+    return int(round(pop_val))
+
+
+def _has_precipitation_amount(hour: object) -> bool:
+    if not isinstance(hour, dict):
+        return False
+    for key in ("rain", "snow"):
+        value = hour.get(key)
+        if value is None:
+            continue
+        if isinstance(value, (int, float)):
+            return value > 0
+        if isinstance(value, dict):
+            for amount in value.values():
+                try:
+                    if float(amount) > 0:
+                        return True
+                except Exception:
+                    continue
+    return False
+
+
+def _precip_within_hours(weather: object, hours: int, now: _dt.datetime) -> bool:
+    if not isinstance(weather, dict):
+        return False
+    hourly = weather.get("hourly") if isinstance(weather.get("hourly"), list) else []
+    if not hourly:
+        return False
+
+    end = now + _dt.timedelta(hours=hours)
+    for hour in hourly:
+        if not isinstance(hour, dict):
+            continue
+        dt = timestamp_to_datetime(hour.get("dt"), config.CENTRAL_TIME)
+        if not dt or dt < now or dt > end:
+            continue
+        pop_pct = _pop_pct_from(hour)
+        if pop_pct and pop_pct > 0:
+            return True
+        if _has_precipitation_amount(hour):
+            return True
+
+    return False
 
 
 @dataclass
@@ -239,7 +300,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
     register(
         "weather radar",
         lambda: draw_weather_radar(context.display, weather_data, transition=True),
-        available=True,
+        available=_precip_within_hours(weather_data, RADAR_LOOKAHEAD_HOURS, now=context.now),
     )
     register("inside", lambda: draw_inside(context.display, transition=True))
     register("inside sensors", lambda: draw_inside_sensors(context.display, transition=True))
