@@ -88,7 +88,8 @@ OVERVIEW_MIN_LOGO_HEIGHT = 96
 OVERVIEW_MAX_LOGO_HEIGHT = 184
 OVERVIEW_LOGO_PADDING = 16
 OVERVIEW_LOGO_OVERLAP = 12
-OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.15
+OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
+OVERVIEW_LEADER_LOGO_RECT_SCALE = 1.1
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
 OVERVIEW_DROP_STAGGER = 0.4  # fraction of steps before next team starts
@@ -525,7 +526,7 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
             continue
         teams = record.get("teamRecords", []) or []
         parsed: list[dict] = []
-        for team_record in sorted(teams, key=lambda t: _normalize_int(t.get("divisionRank", 99))):
+        for team_record in teams:
             if not isinstance(team_record, dict):
                 continue
             team_info = team_record.get("team", {}) or {}
@@ -539,9 +540,13 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
                     "losses": _normalize_int(record_info.get("losses")),
                     "ot": _normalize_int(record_info.get("ot")),
                     "points": _normalize_int(team_record.get("points")),
+                    "_rank": _normalize_int(team_record.get("divisionRank", 99)),
                 }
             )
         if parsed:
+            parsed.sort(key=_division_sort_key)
+            for item in parsed:
+                item.pop("_rank", None)
             conferences.setdefault(conf_name, {})[div_name] = parsed
 
     return conferences if conferences else None
@@ -1013,8 +1018,9 @@ def _overview_logo_position(
 
 def _overview_logo_height(base_height: int, is_leader: bool) -> int:
     target = base_height
-    if is_leader and IS_SQUARE_DISPLAY:
-        target = int(round(base_height * OVERVIEW_LEADER_LOGO_SQUARE_SCALE))
+    if is_leader:
+        scale = OVERVIEW_LEADER_LOGO_SQUARE_SCALE if IS_SQUARE_DISPLAY else OVERVIEW_LEADER_LOGO_RECT_SCALE
+        target = int(round(base_height * scale))
     target = min(OVERVIEW_MAX_LOGO_HEIGHT, max(OVERVIEW_MIN_LOGO_HEIGHT, target))
     return max(6, target)
 

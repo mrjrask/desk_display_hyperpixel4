@@ -83,6 +83,18 @@ def draw_nba_standings_screen1(
         or (rec_clean or {}).get("divisionAbbrev")
         or "division"
     )
+    if not conference_label or conference_label == "conference":
+        division_text = division_label.lower()
+        if "atlantic" in division_text or "central" in division_text or "southeast" in division_text:
+            conference_label = "the East"
+        elif "northwest" in division_text or "pacific" in division_text or "southwest" in division_text:
+            conference_label = "the West"
+    if isinstance(conference_label, str):
+        normalized = conference_label.strip().lower()
+        if normalized in {"east", "eastern", "eastern conference"}:
+            conference_label = "the East"
+        elif normalized in {"west", "western", "western conference"}:
+            conference_label = "the West"
 
     conference_rank = None
     division_rank = None
