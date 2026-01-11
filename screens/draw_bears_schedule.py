@@ -77,16 +77,19 @@ def show_bears_next_game(display, transition=False):
             except Exception:
                 date_txt = game["date"]
         t_txt = game["time"].strip()
-        bottom = f"{wk.replace('0.', 'Pre')}-{date_txt} {t_txt}"
+        week_text = wk.replace("0.", "Pre")
+        bottom = f"{date_txt} {t_txt}"
         bw, bh = draw.textsize(bottom, font=config.FONT_DATE_SPORTS)
+        ww, wh = draw.textsize(week_text, font=config.FONT_DATE_SPORTS)
         bottom_y = config.HEIGHT - bh - BEARS_BOTTOM_MARGIN  # keep on-screen
+        week_y = bottom_y - wh - 2
 
         horizontal_padding = max(12, int(round(config.WIDTH * 0.02)))
         vertical_padding = max(4, int(round(config.HEIGHT * 0.01)))
         min_spacing = max(10, int(round(config.WIDTH * 0.015)))
 
         logo_area_top = y_txt + vertical_padding
-        logo_area_bottom = bottom_y - vertical_padding
+        logo_area_bottom = week_y - vertical_padding
         available_h = max(10, logo_area_bottom - logo_area_top)
         max_logo_height = max(36, min(available_h, int(round(config.HEIGHT * 0.6))))
         frame_ceiling = max_logo_height
@@ -197,6 +200,8 @@ def show_bears_next_game(display, transition=False):
                 x += w_sy + spacing
 
         # Draw bottom text
+        draw.text(((config.WIDTH - ww)//2, week_y),
+                  week_text, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
         draw.text(((config.WIDTH - bw)//2, bottom_y),
                   bottom, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
 
