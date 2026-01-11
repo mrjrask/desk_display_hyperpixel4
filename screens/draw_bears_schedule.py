@@ -53,8 +53,11 @@ def show_bears_next_game(display, transition=False):
 
         # Logos row: AWAY @ HOME
         bears_ab = "chi"
-        opp_key  = opp.split()[-1].lower()
-        opp_ab   = NFL_TEAM_ABBREVIATIONS.get(opp_key, opp_key[:3])
+        opp_key = opp.split()[-1].lower()
+        if opp_key == "tbd":
+            opp_ab = "AFC" if "super bowl" in game.get("week", "").lower() else "NFC"
+        else:
+            opp_ab = NFL_TEAM_ABBREVIATIONS.get(opp_key, opp_key[:3])
         if opp_ab == "was":
             opp_ab = "wsh"
         if ha=="away":
@@ -65,10 +68,14 @@ def show_bears_next_game(display, transition=False):
         # Bottom line text — **no spaces around the dash**
         wk = game["week"]
         try:
-            dt0 = datetime.datetime.strptime(game["date"], "%a, %b %d")
+            dt0 = datetime.datetime.strptime(game["date"], "%a, %b %d, %Y")
             date_txt = f"{dt0.month}/{dt0.day}"
-        except:
-            date_txt = game["date"]
+        except Exception:
+            try:
+                dt0 = datetime.datetime.strptime(game["date"], "%a, %b %d")
+                date_txt = f"{dt0.month}/{dt0.day}"
+            except Exception:
+                date_txt = game["date"]
         t_txt = game["time"].strip()
         bottom = f"{wk.replace('0.', 'Pre')}-{date_txt} {t_txt}"
         bw, bh = draw.textsize(bottom, font=config.FONT_DATE_SPORTS)

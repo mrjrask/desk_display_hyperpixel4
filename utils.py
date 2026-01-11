@@ -991,26 +991,53 @@ def next_game_from_schedule(schedule: List[Dict[str, Any]], today: Optional[date
         except Exception:
             return 0.0
 
-    upcoming: List[tuple[datetime.date, float, Dict[str, Any]]] = []
-    for entry in schedule:
-        if entry.get("opponent") == "—" or str(entry.get("time", "")).upper() == "TBD":
-            continue
-        try:
-            parsed = datetime.datetime.strptime(entry.get("date", ""), "%a, %b %d")
-        except Exception:
-            continue
-
-        game_date = datetime.date(today.year, parsed.month, parsed.day)
-        if game_date < today:
-            game_date = datetime.date(today.year + 1, parsed.month, parsed.day)
-
-        upcoming.append((game_date, _game_no(entry), entry))
-
-    if not upcoming:
+    def _parse_game_date(raw: str) -> Optional[datetime.date]:
+        if not raw:
+            return None
+        for fmt in ("%a, %b %d, %Y", "%a, %b %d"):
+            try:
+                parsed = datetime.datetime.strptime(raw, fmt)
+                if fmt.endswith("%Y"):
+                    return parsed.date()
+                game_date = datetime.date(today.year, parsed.month, parsed.day)
+                if game_date < today:
+                    game_date = datetime.date(today.year + 1, parsed.month, parsed.day)
+                return game_date
+            except Exception:
+                continue
         return None
 
-    upcoming.sort(key=lambda item: (item[0], item[1]))
-    return upcoming[0][2]
+    upcoming: List[tuple[datetime.date, float, Dict[str, Any]]] = []
+    dated_games: List[tuple[datetime.date, float, Dict[str, Any]]] = []
+
+    for entry in schedule:
+        if entry.get("opponent") == "—":
+            continue
+
+        game_date = _parse_game_date(str(entry.get("date", "")).strip())
+        if game_date is None:
+            continue
+
+        game_no = _game_no(entry)
+        dated_games.append((game_date, game_no, entry))
+        if game_date >= today:
+            upcoming.append((game_date, game_no, entry))
+
+    if upcoming:
+        upcoming.sort(key=lambda item: (item[0], item[1]))
+        return upcoming[0][2]
+
+    last_game_no = max((game_no for _, game_no, _ in dated_games), default=0.0)
+    fallback = [
+        (game_no, entry)
+        for entry in schedule
+        if _game_no(entry) > last_game_no and entry.get("opponent") != "—"
+    ]
+    if fallback:
+        fallback.sort(key=lambda item: item[0])
+        return fallback[0][1]
+
+    return None
 
 
 _LOGO_BRIGHTNESS_OVERRIDES: dict[tuple[str, str], float] = {
