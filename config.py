@@ -569,6 +569,9 @@ DISPLAY_FULLSCREEN = os.environ.get("DISPLAY_FULLSCREEN", "1").strip().lower() n
     "no",
     "off",
 }
+FORCE_DISABLE_HARDWARE_CURSOR = _bool_from_env(
+    "FORCE_DISABLE_HARDWARE_CURSOR", default=False
+)
 try:
     TEAM_STANDINGS_DISPLAY_SECONDS = int(
         os.environ.get("TEAM_STANDINGS_DISPLAY_SECONDS", "5")

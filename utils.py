@@ -96,6 +96,7 @@ from config import (
     DISPLAY_BACKEND,
     DISPLAY_FULLSCREEN,
     DISPLAY_PROFILE,
+    FORCE_DISABLE_HARDWARE_CURSOR,
 )
 # Color utilities
 from screens.color_palettes import random_color
@@ -242,11 +243,6 @@ class Display:
         if pygame is None:  # pragma: no cover - optional dependency
             return False, "pygame module not installed"
 
-        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
-            # Force-disable the hardware cursor when using KMSDRM to ensure it
-            # stays hidden on Raspberry Pi/HyperPixel stacks running Trixie.
-            os.environ.setdefault("SDL_VIDEO_KMSDRM_DISABLE_CURSOR", "1")
-
         flags = pygame.FULLSCREEN if DISPLAY_FULLSCREEN else 0
         original_driver = os.environ.get("SDL_VIDEODRIVER")
         driver_candidates: List[Optional[str]] = []
@@ -263,6 +259,21 @@ class Display:
                 continue
             driver_candidates.append(candidate)
 
+        def _ensure_cursor_disabled(selected_driver: Optional[str]) -> None:
+            if selected_driver not in {"kmsdrm", "fbcon"}:
+                return
+            if not FORCE_DISABLE_HARDWARE_CURSOR and (
+                os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+            ):
+                return
+            if os.environ.get("SDL_VIDEO_KMSDRM_DISABLE_CURSOR") == "1":
+                return
+            os.environ["SDL_VIDEO_KMSDRM_DISABLE_CURSOR"] = "1"
+            logging.info(
+                "🖱️  Set SDL_VIDEO_KMSDRM_DISABLE_CURSOR=1 for SDL driver '%s'.",
+                selected_driver,
+            )
+
         attempted_errors: List[str] = []
         surface = None
         try:
@@ -274,6 +285,8 @@ class Display:
                         os.environ["SDL_VIDEODRIVER"] = original_driver
                 else:
                     os.environ["SDL_VIDEODRIVER"] = driver
+
+                _ensure_cursor_disabled(driver)
 
                 try:
                     pygame.display.quit()
@@ -300,6 +313,7 @@ class Display:
                     return False, ", ".join(attempted_errors)
                 return False, "pygame display initialisation failed"
 
+            selected_driver = os.environ.get("SDL_VIDEODRIVER") or "default"
             try:
                 pygame.display.set_caption("Desk Display")
             except Exception:  # pragma: no cover - optional dependency
@@ -327,6 +341,7 @@ class Display:
                 self.height,
                 self.rotation,
             )
+            logging.info("🧰 SDL video driver selected: %s.", selected_driver)
             return True, None
         finally:
             if original_driver is None:
