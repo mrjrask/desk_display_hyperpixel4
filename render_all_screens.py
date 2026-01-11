@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import data_fetch
 from config import CENTRAL_TIME, HEIGHT, WIDTH, DISPLAY_PROFILE
@@ -224,6 +224,44 @@ def _suppress_animation_delay():
     return restore
 
 
+def _suppress_image_loading(no_images: bool):
+    if not no_images:
+        return lambda: None
+
+    original_open = Image.open
+
+    def _placeholder_image(size: Tuple[int, int]) -> Image.Image:
+        width, height = size
+        placeholder = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(placeholder)
+        border = max(1, min(width, height) // 24)
+        inset = border // 2
+        draw.rectangle(
+            (inset, inset, width - 1 - inset, height - 1 - inset),
+            outline=(180, 180, 180, 255),
+            width=border,
+        )
+        return placeholder
+
+    def open_placeholder(fp, *args, **kwargs):  # type: ignore[no-untyped-def]
+        img = original_open(fp, *args, **kwargs)
+        try:
+            size = img.size
+        finally:
+            try:
+                img.close()
+            except Exception:  # pragma: no cover - cleanup only
+                pass
+        return _placeholder_image(size)
+
+    Image.open = open_placeholder  # type: ignore[assignment]
+
+    def restore() -> None:
+        Image.open = original_open  # type: ignore[assignment]
+
+    return restore
+
+
 def render_all_screens(
     *,
     create_archive: bool = True,
@@ -238,6 +276,7 @@ def render_all_screens(
     )
 
     restore_sleep = _suppress_animation_delay()
+    restore_open = _suppress_image_loading(no_images)
     assets: list[Tuple[str, Image.Image]] = []
     now = _dt.datetime.now(CENTRAL_TIME)
     try:
@@ -252,7 +291,7 @@ def render_all_screens(
 
         travel_requested = ignore_schedule or "travel" in requested_ids
         display = HeadlessDisplay()
-        logos = build_logo_map() if not no_images else {}
+        logos = build_logo_map()
         cache = build_cache(requested_ids)
 
         now = _dt.datetime.now(CENTRAL_TIME)
@@ -262,7 +301,7 @@ def render_all_screens(
             cache=cache,
             logos=logos,
             image_dir=IMAGES_DIR,
-            images_enabled=not no_images,
+            images_enabled=True,
             travel_requested=travel_requested,
             travel_active=is_travel_screen_active(),
             travel_window=get_travel_active_window(),
@@ -317,6 +356,7 @@ def render_all_screens(
 
     finally:
         restore_sleep()
+        restore_open()
 
     if not assets:
         logging.error("No screen images were produced.")
@@ -349,7 +389,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-images",
         action="store_true",
-        help="Skip image-based screens and logo assets.",
+        help="Render outlines where image assets would normally appear.",
     )
     return parser
 
