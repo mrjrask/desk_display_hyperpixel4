@@ -185,6 +185,7 @@ def get_travel_routes() -> Dict[str, Optional[dict]]:
     try:
         routes_all = list(_fetch_routes(avoid_highways=False))
         remaining = list(routes_all)
+        non_highway_routes = list(_fetch_routes(avoid_highways=True))
 
         lake_shore_tokens = [
             "lake shore",
@@ -222,7 +223,9 @@ def get_travel_routes() -> Dict[str, Optional[dict]]:
             "willow road",
         ]
 
-        lake_shore = _pop_route(remaining, lake_shore_tokens)
+        lake_shore = _pop_route(non_highway_routes, lake_shore_tokens)
+        if not lake_shore:
+            lake_shore = _pop_route(remaining, lake_shore_tokens)
         kennedy_edens = _pop_route(remaining, kennedy_edens_tokens)
         kennedy_294 = _pop_route(remaining, kennedy_294_tokens)
 
