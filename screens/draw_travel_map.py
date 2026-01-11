@@ -7,6 +7,7 @@ avoid-highways or avoid-tolls route pools configured there.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import math
 import os
@@ -23,6 +24,7 @@ from config import (
     HEIGHT,
     LATITUDE,
     LONGITUDE,
+    CENTRAL_TIME,
     TRAVEL_TITLE,
     WIDTH,
     scale,
@@ -40,29 +42,46 @@ from screens.draw_travel_time import (
 from utils import ScreenImage, log_call
 
 ROUTE_ICON_HEIGHT = scale(26)
-MAP_MARGIN = scale(12)
+MAP_MARGIN = scale(6)
 LEGEND_GAP = scale(6)
 ROUTE_LINE_WIDTH = scale(5)
 BACKGROUND_COLOR = (18, 18, 18)
-MAP_COLOR = (36, 36, 36)
-MAP_BRIGHTNESS = 1.35
+MAP_DAY_COLOR = (232, 236, 240)
+MAP_NIGHT_COLOR = (14, 16, 20)
+MAP_DAY_BRIGHTNESS = 1.0
+MAP_NIGHT_BRIGHTNESS = 0.8
 STATIC_MAP_TIMEOUT = 6
 STATIC_MAP_USER_AGENT = "desk-display/traffic-map"
-MAP_ZOOM_LEVELS = range(15, 6, -1)
-MAP_DARK_STYLES = (
-    "style=element:geometry|color:0x1b1b1b",
-    "style=element:labels.text.fill|color:0xffffff",
-    "style=element:labels.text.stroke|color:0x000000|lightness:80",
-    "style=feature:road|element:geometry|color:0x303030",
-    "style=feature:road.highway|element:geometry|color:0x3a3a3a",
+MAP_ZOOM_LEVELS = range(18, 7, -1)
+MAP_DAY_STYLES = (
+    "style=element:geometry|color:0xf5f6f7",
+    "style=element:labels.text.fill|color:0x2b2b2b",
+    "style=element:labels.text.stroke|color:0xffffff|lightness:70",
+    "style=feature:road|element:geometry|color:0xdedfe1",
+    "style=feature:road.highway|element:geometry|color:0xc8c9cc",
     "style=feature:poi|visibility:off",
     "style=feature:transit|visibility:off",
-    "style=feature:water|element:geometry|color:0x0d171f",
+    "style=feature:water|element:geometry|color:0xb9d7f0",
+)
+MAP_NIGHT_STYLES = (
+    "style=element:geometry|color:0x0d0f14",
+    "style=element:labels.text.fill|color:0xe6e6e6",
+    "style=element:labels.text.stroke|color:0x000000|lightness:70",
+    "style=feature:road|element:geometry|color:0x1a1d24",
+    "style=feature:road.highway|element:geometry|color:0x232733",
+    "style=feature:poi|visibility:off",
+    "style=feature:transit|visibility:off",
+    "style=feature:water|element:geometry|color:0x0a1b2b",
 )
 
 
 def _api_key() -> str:
     return os.environ.get("GOOGLE_MAPS_API_KEY") or GOOGLE_MAPS_API_KEY
+
+
+def _is_night() -> bool:
+    now = datetime.datetime.now(CENTRAL_TIME)
+    return now.hour >= 19 or now.hour < 6
 
 
 def _decode_polyline(polyline: str) -> List[Tuple[float, float]]:
@@ -277,7 +296,7 @@ def _select_map_view(
 ) -> Tuple[Tuple[float, float], int]:
     all_points = _flatten(polylines)
     if not all_points:
-        return fallback_center, 12
+        return fallback_center, 10
 
     (min_lat, min_lng), (max_lat, max_lng) = _bounds(all_points)
     center = ((min_lat + max_lat) / 2, (min_lng + max_lng) / 2)
@@ -303,6 +322,7 @@ def _fetch_base_map(
     center: Tuple[float, float],
     zoom: int,
     size: Tuple[int, int],
+    styles: Sequence[str],
 ) -> Optional[Image.Image]:
     lat, lng = center
     width, height = size
@@ -313,7 +333,7 @@ def _fetch_base_map(
     url = (
         "https://maps.googleapis.com/maps/api/staticmap?"
         f"center={lat},{lng}&zoom={zoom}&size={width}x{height}&maptype=roadmap&"
-        + "&".join(MAP_DARK_STYLES)
+        + "&".join(styles)
         + f"&key={_api_key()}"
     )
     headers = {"User-Agent": STATIC_MAP_USER_AGENT}
@@ -387,6 +407,10 @@ def _compose_legend_entry(
 def _compose_travel_map(routes: Dict[str, Optional[dict]]) -> Image.Image:
     route_order = ["lake_shore", "kennedy_edens", "kennedy_294"]
     route_segments = _extract_route_segments(routes)
+    night_mode = _is_night()
+    map_styles = MAP_NIGHT_STYLES if night_mode else MAP_DAY_STYLES
+    map_color = MAP_NIGHT_COLOR if night_mode else MAP_DAY_COLOR
+    map_brightness = MAP_NIGHT_BRIGHTNESS if night_mode else MAP_DAY_BRIGHTNESS
 
     base_width = WIDTH // 3
     map_widths = [base_width, base_width, WIDTH - 2 * base_width]
@@ -397,11 +421,11 @@ def _compose_travel_map(routes: Dict[str, Optional[dict]]) -> Image.Image:
         polylines = [points for points, _ in segments]
         map_view = _select_map_view(polylines, (map_width, HEIGHT), (LATITUDE, LONGITUDE))
 
-        base_map = _fetch_base_map(map_view[0], map_view[1], (map_width, HEIGHT))
+        base_map = _fetch_base_map(map_view[0], map_view[1], (map_width, HEIGHT), map_styles)
         if base_map is None:
-            map_canvas = Image.new("RGB", (map_width, HEIGHT), MAP_COLOR)
+            map_canvas = Image.new("RGB", (map_width, HEIGHT), map_color)
         else:
-            map_canvas = ImageEnhance.Brightness(base_map).enhance(MAP_BRIGHTNESS)
+            map_canvas = ImageEnhance.Brightness(base_map).enhance(map_brightness)
 
         draw = ImageDraw.Draw(map_canvas)
         _draw_routes(draw, {key: segments}, (map_width, HEIGHT), map_view=map_view)
