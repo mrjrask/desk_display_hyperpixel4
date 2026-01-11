@@ -19,7 +19,7 @@ import logging
 import math
 import time
 from io import BytesIO
-from typing import Optional, Tuple
+from typing import NamedTuple, Optional, Tuple
 
 import requests
 from PIL import Image, ImageDraw
@@ -28,6 +28,7 @@ from config import (
     WIDTH,
     HEIGHT,
     CENTRAL_TIME,
+    GOOGLE_MAPS_API_KEY,
     FONT_TEMP,
     FONT_CONDITION,
     FONT_WEATHER_LABEL,
@@ -910,11 +911,33 @@ def _latlon_to_tile(lat: float, lon: float, zoom: int) -> tuple[int, int, float,
     return x_tile, y_tile, x_float - x_tile, y_float - y_tile
 
 
-def _fetch_radar_frames(zoom: int = 7, max_frames: int = 6) -> list[Image.Image]:
+class RadarFrame(NamedTuple):
+    image: Image.Image
+    timestamp: Optional[int]
+
+
+def _normalise_radar_timestamp(value: object) -> Optional[int]:
+    try:
+        ts_int = int(value)  # type: ignore[arg-type]
+    except Exception:
+        return None
+    if ts_int > 1_000_000_000_000:
+        ts_int = ts_int // 1000
+    return ts_int
+
+
+def _format_radar_timestamp(timestamp: Optional[int]) -> str:
+    dt = timestamp_to_datetime(timestamp, CENTRAL_TIME)
+    if dt is None:
+        return ""
+    return dt.strftime("%-I:%M %p")
+
+
+def _fetch_radar_frames(zoom: int = 7, max_frames: int = 6) -> list[RadarFrame]:
     return _fetch_rainviewer_frames(zoom=zoom, max_frames=max_frames)
 
 
-def _fetch_rainviewer_frames(zoom: int = 7, max_frames: int = 6) -> list[Image.Image]:
+def _fetch_rainviewer_frames(zoom: int = 7, max_frames: int = 6) -> list[RadarFrame]:
     try:
         meta_resp = requests.get(
             "https://api.rainviewer.com/public/weather-maps.json", timeout=6
@@ -931,10 +954,13 @@ def _fetch_rainviewer_frames(zoom: int = 7, max_frames: int = 6) -> list[Image.I
     frames = frames[-max_frames:]
 
     x_tile, y_tile, x_offset, y_offset = _latlon_to_tile(LATITUDE, LONGITUDE, zoom)
-    images: list[Image.Image] = []
+    images: list[RadarFrame] = []
 
     for frame in frames:
         path = frame.get("path") if isinstance(frame, dict) else None
+        timestamp = _normalise_radar_timestamp(
+            frame.get("time") if isinstance(frame, dict) else None
+        )
         if not path:
             continue
         url = (
@@ -950,45 +976,35 @@ def _fetch_rainviewer_frames(zoom: int = 7, max_frames: int = 6) -> list[Image.I
 
         frame_img = Image.new("RGBA", tile.size, (0, 0, 0, 255))
         frame_img.alpha_composite(tile)
-        marker_x = int((x_offset or 0.5) * tile.width)
-        marker_y = int((y_offset or 0.5) * tile.height)
-        draw = ImageDraw.Draw(frame_img)
-        draw.ellipse((marker_x - 3, marker_y - 3, marker_x + 3, marker_y + 3), fill=(255, 0, 0, 255))
-
-        final_frame = frame_img.resize((WIDTH, HEIGHT), Image.LANCZOS).convert("RGB")
-        images.append(final_frame)
+        final_frame = frame_img.resize((WIDTH, HEIGHT), Image.LANCZOS).convert("RGBA")
+        images.append(RadarFrame(final_frame, timestamp))
 
     return images
 
 
 def _fetch_base_map(zoom: int = 7) -> Optional[Image.Image]:
-    x_tile, y_tile, x_offset, y_offset = _latlon_to_tile(LATITUDE, LONGITUDE, zoom)
-    headers = {
-        "User-Agent": "desk-display/1.0 (+https://github.com/lukemaryon/desk_display)",
-    }
-    tile_urls = [
-        f"https://tile.openstreetmap.org/{zoom}/{x_tile}/{y_tile}.png",
-    ]
-
-    tile: Optional[Image.Image] = None
-    for url in tile_urls:
-        try:
-            resp = requests.get(url, timeout=6, headers=headers)
-            resp.raise_for_status()
-            tile = Image.open(BytesIO(resp.content)).convert("RGBA")
-            break
-        except Exception as exc:  # pragma: no cover - network failures are non-fatal
-            logging.warning("Base map fetch failed from %s: %s", url, exc)
-
-    if tile is None:
+    if not GOOGLE_MAPS_API_KEY:
+        logging.warning("Radar base map: GOOGLE_MAPS_API_KEY not set; skipping base map fetch")
         return None
 
-    marker_x = int((x_offset or 0.5) * tile.width)
-    marker_y = int((y_offset or 0.5) * tile.height)
-    draw = ImageDraw.Draw(tile)
-    draw.ellipse((marker_x - 3, marker_y - 3, marker_x + 3, marker_y + 3), fill=(255, 64, 64, 255), outline=(255, 255, 255, 255))
-    draw.text((marker_x + 6, marker_y - 8), "You", font=FONT_WEATHER_DETAILS, fill=(255, 255, 255, 255))
-    return tile.convert("RGB")
+    lat = LATITUDE
+    lon = LONGITUDE
+    url = (
+        "https://maps.googleapis.com/maps/api/staticmap?"
+        f"center={lat},{lon}&zoom={zoom}&size={WIDTH}x{HEIGHT}&maptype=roadmap"
+        f"&key={GOOGLE_MAPS_API_KEY}"
+    )
+    headers = {
+        "User-Agent": "desk-display/weather-radar",
+    }
+
+    try:
+        resp = requests.get(url, timeout=6, headers=headers)
+        resp.raise_for_status()
+        return Image.open(BytesIO(resp.content)).convert("RGB")
+    except Exception as exc:  # pragma: no cover - network failures are non-fatal
+        logging.warning("Radar base map fetch failed from %s: %s", url, exc)
+        return None
 
 
 @log_call
@@ -1007,23 +1023,43 @@ def draw_weather_radar(display, weather=None, transition: bool = False):
     clear_display(display)
     loops = 2
     delay = 0.5
-    radar_height = int(HEIGHT * 0.65)
-    separator_y = radar_height
     map_section = None
     if base_map:
-        map_section = base_map.resize((WIDTH, HEIGHT - radar_height), Image.LANCZOS)
+        map_section = base_map.resize((WIDTH, HEIGHT), Image.LANCZOS).convert("RGBA")
 
-    def _compose_frame(frame: Image.Image) -> Image.Image:
+    padding = max(6, int(round(WIDTH * 0.012)))
+
+    def _compose_frame(frame: RadarFrame) -> Image.Image:
+        radar_resized = frame.image.resize((WIDTH, HEIGHT), Image.LANCZOS).convert("RGBA")
+        radar_opacity = 0.6
+        if radar_opacity < 1.0:
+            alpha = radar_resized.getchannel("A")
+            alpha = alpha.point(lambda p: int(p * radar_opacity))
+            radar_resized.putalpha(alpha)
         if map_section is None:
-            return frame
-        combined = Image.new("RGB", (WIDTH, HEIGHT), "black")
-        radar_resized = frame.resize((WIDTH, radar_height), Image.LANCZOS)
-        combined.paste(radar_resized, (0, 0))
-        combined.paste(map_section, (0, radar_height))
-        draw = ImageDraw.Draw(combined)
-        draw.line((0, separator_y, WIDTH, separator_y), fill=(60, 60, 60))
-        draw.text((4, radar_height + 4), "Map overview", font=FONT_WEATHER_DETAILS_BOLD, fill=(220, 220, 220))
-        return combined
+            result = radar_resized.convert("RGB")
+        else:
+            combined = map_section.copy()
+            combined.alpha_composite(radar_resized)
+            result = combined.convert("RGB")
+
+        label = _format_radar_timestamp(frame.timestamp)
+        if label:
+            draw = ImageDraw.Draw(result)
+            bbox = draw.textbbox((0, 0), label, font=FONT_WEATHER_DETAILS_TINY, stroke_width=1)
+            text_w = bbox[2] - bbox[0]
+            x = WIDTH - text_w - padding
+            y = padding
+            draw.text(
+                (x, y),
+                label,
+                font=FONT_WEATHER_DETAILS_TINY,
+                fill=(255, 255, 255),
+                stroke_width=1,
+                stroke_fill=(0, 0, 0),
+            )
+
+        return result
 
     composed_frames = [_compose_frame(frame) for frame in frames]
 
