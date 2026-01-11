@@ -70,7 +70,10 @@ _LOGO_ABBREVIATION_OVERRIDES: Dict[str, str] = {
 
 
 def _load_logo_cached(abbr: str, height: int) -> Optional[Image.Image]:
-    key = ((abbr or "").upper(), height)
+    cleaned = (abbr or "").strip().upper()
+    if not cleaned:
+        return None
+    key = (cleaned, height)
     if key in _LOGO_CACHE:
         logo = _LOGO_CACHE[key]
         return logo.copy() if logo else None
