@@ -224,8 +224,6 @@ def get_travel_routes() -> Dict[str, Optional[dict]]:
         ]
 
         lake_shore = _pop_route(non_highway_routes, lake_shore_tokens)
-        if not lake_shore:
-            lake_shore = _pop_route(remaining, lake_shore_tokens)
         kennedy_edens = _pop_route(remaining, kennedy_edens_tokens)
         kennedy_294 = _pop_route(remaining, kennedy_294_tokens)
 
