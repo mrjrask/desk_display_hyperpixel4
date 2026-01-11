@@ -503,6 +503,20 @@ Run directly:
 python3 main.py
 ```
 
+### Render all screens
+
+Use `render_all_screens.py` to produce screenshots for every available screen:
+
+```bash
+python3 render_all_screens.py --all
+```
+
+Available flags:
+
+- `-a`, `--all`: ignore `screens_config.json` and render every available screen.
+- `--no-archive`: skip creating the ZIP archive of rendered screens.
+- `--no-images`: skip image-based screens and logo assets (useful on headless runs).
+
 Or install the included systemd service (see below).
 
 ---

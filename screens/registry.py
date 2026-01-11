@@ -120,6 +120,7 @@ class ScreenContext:
     cache: Dict[str, Any]
     logos: Dict[str, Optional[Image.Image]]
     image_dir: str
+    images_enabled: bool
     travel_requested: bool
     travel_active: bool
     travel_window: Optional[Tuple[Optional[_dt.time], Optional[_dt.time]]]
@@ -211,13 +212,14 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
     register("nixie", lambda: draw_nixie(context.display, transition=True))
 
     weather_data = context.cache.get("weather")
-    weather_logo = context.logos.get("weather logo")
-    if weather_logo is not None:
-        register(
-            "weather logo",
-            lambda img=weather_logo: _show_logo(context.display, img),
-            available=True,
-        )
+    if context.images_enabled:
+        weather_logo = context.logos.get("weather logo")
+        if weather_logo is not None:
+            register(
+                "weather logo",
+                lambda img=weather_logo: _show_logo(context.display, img),
+                available=True,
+            )
     register(
         "weather1",
         lambda data=weather_data: draw_weather_screen_1(context.display, data, transition=True),
@@ -289,6 +291,8 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
     metadata["travel_state"] = travel_state
 
     def register_logo(screen_id: str):
+        if not context.images_enabled:
+            return
         image = context.logos.get(screen_id)
         if image is None:
             return
@@ -298,7 +302,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         register_logo(base_logo)
 
     bears = context.cache.get("bears") or {}
-    if bears.get("stand"):
+    if bears.get("stand") and context.images_enabled:
         register(
             "bears stand1",
             lambda data=bears.get("stand"): draw_bears_standings_screen1(
@@ -336,7 +340,7 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         hawks_next_home = hawks.get("next_home")
         if _games_match(hawks_next_home, hawks_next):
             hawks_next_home = None
-        if hawks.get("stand"):
+        if hawks.get("stand") and context.images_enabled:
             register(
                 "hawks stand1",
                 lambda data=hawks.get("stand"): draw_hawks_standings_screen1(
@@ -440,27 +444,28 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         if _games_match(cubs_next_home, cubs_next):
             cubs_next_home = None
 
-        register(
-            "cubs stand1",
-            lambda data=cubs.get("stand"): draw_standings_screen1(
-                context.display,
-                data,
-                os.path.join(context.image_dir, "mlb/CUBS.png"),
-                "NL Central",
-                transition=True,
-            ),
-            available=bool(cubs.get("stand")),
-        )
-        register(
-            "cubs stand2",
-            lambda data=cubs.get("stand"): draw_standings_screen2(
-                context.display,
-                data,
-                os.path.join(context.image_dir, "mlb/CUBS.png"),
-                transition=True,
-            ),
-            available=bool(cubs.get("stand")),
-        )
+        if context.images_enabled:
+            register(
+                "cubs stand1",
+                lambda data=cubs.get("stand"): draw_standings_screen1(
+                    context.display,
+                    data,
+                    os.path.join(context.image_dir, "mlb/CUBS.png"),
+                    "NL Central",
+                    transition=True,
+                ),
+                available=bool(cubs.get("stand")),
+            )
+            register(
+                "cubs stand2",
+                lambda data=cubs.get("stand"): draw_standings_screen2(
+                    context.display,
+                    data,
+                    os.path.join(context.image_dir, "mlb/CUBS.png"),
+                    transition=True,
+                ),
+                available=bool(cubs.get("stand")),
+            )
         register(
             "cubs last",
             lambda data=cubs.get("last"): draw_last_game(
@@ -517,27 +522,28 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         if _games_match(sox_next_home, sox_next):
             sox_next_home = None
 
-        register(
-            "sox stand1",
-            lambda data=sox.get("stand"): draw_standings_screen1(
-                context.display,
-                data,
-                os.path.join(context.image_dir, "mlb/SOX.png"),
-                "AL Central",
-                transition=True,
-            ),
-            available=bool(sox.get("stand")),
-        )
-        register(
-            "sox stand2",
-            lambda data=sox.get("stand"): draw_standings_screen2(
-                context.display,
-                data,
-                os.path.join(context.image_dir, "mlb/SOX.png"),
-                transition=True,
-            ),
-            available=bool(sox.get("stand")),
-        )
+        if context.images_enabled:
+            register(
+                "sox stand1",
+                lambda data=sox.get("stand"): draw_standings_screen1(
+                    context.display,
+                    data,
+                    os.path.join(context.image_dir, "mlb/SOX.png"),
+                    "AL Central",
+                    transition=True,
+                ),
+                available=bool(sox.get("stand")),
+            )
+            register(
+                "sox stand2",
+                lambda data=sox.get("stand"): draw_standings_screen2(
+                    context.display,
+                    data,
+                    os.path.join(context.image_dir, "mlb/SOX.png"),
+                    transition=True,
+                ),
+                available=bool(sox.get("stand")),
+            )
         register(
             "sox last",
             lambda data=sox.get("last"): draw_last_game(

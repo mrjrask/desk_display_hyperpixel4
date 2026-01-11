@@ -1075,6 +1075,7 @@ def main_loop():
                 cache=cache,
                 logos=LOGOS,
                 image_dir=IMAGES_DIR,
+                images_enabled=True,
                 travel_requested=travel_requested,
                 travel_active=is_travel_screen_active(),
                 travel_window=get_travel_active_window(),
