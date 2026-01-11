@@ -781,6 +781,12 @@ def _finalize_shutdown() -> None:
         _touch_monitor_thread.join(timeout=1.0)
         _touch_monitor_thread = None
 
+    if display is not None:
+        try:
+            display.show_mouse_cursor()
+        except Exception as exc:
+            logging.debug("Failed to show mouse cursor during shutdown: %s", exc)
+
     _shutdown_complete.set()
     logging.info("👋 Shutdown cleanup finished.")
 
