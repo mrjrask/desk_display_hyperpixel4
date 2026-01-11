@@ -179,8 +179,8 @@ def get_travel_active_window() -> Optional[Tuple[dt.time, dt.time]]:
     return start, end
 
 
-def get_travel_times() -> Dict[str, TravelTimeResult]:
-    """Return formatted travel times keyed by route identifier."""
+def get_travel_routes() -> Dict[str, Optional[dict]]:
+    """Return raw travel routes keyed by route identifier."""
 
     try:
         routes_all = list(_fetch_routes(avoid_highways=False))
@@ -227,17 +227,24 @@ def get_travel_times() -> Dict[str, TravelTimeResult]:
         kennedy_294 = _pop_route(remaining, kennedy_294_tokens)
 
         return {
-            "lake_shore": TravelTimeResult.from_route(lake_shore),
-            "kennedy_edens": TravelTimeResult.from_route(kennedy_edens),
-            "kennedy_294": TravelTimeResult.from_route(kennedy_294),
+            "lake_shore": lake_shore,
+            "kennedy_edens": kennedy_edens,
+            "kennedy_294": kennedy_294,
         }
     except Exception as exc:  # pragma: no cover - defensive guard for runtime issues
-        logging.warning("Travel time parse failed: %s", exc)
-        return {
-            "lake_shore": TravelTimeResult("N/A"),
-            "kennedy_edens": TravelTimeResult("N/A"),
-            "kennedy_294": TravelTimeResult("N/A"),
-        }
+        logging.warning("Travel route parse failed: %s", exc)
+        return {"lake_shore": None, "kennedy_edens": None, "kennedy_294": None}
+
+
+def get_travel_times() -> Dict[str, TravelTimeResult]:
+    """Return formatted travel times keyed by route identifier."""
+
+    routes = get_travel_routes()
+    return {
+        "lake_shore": TravelTimeResult.from_route(routes.get("lake_shore")),
+        "kennedy_edens": TravelTimeResult.from_route(routes.get("kennedy_edens")),
+        "kennedy_294": TravelTimeResult.from_route(routes.get("kennedy_294")),
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Drawing helpers for travel route icons
@@ -529,6 +536,7 @@ def draw_travel_time_screen(
 
 __all__ = [
     "draw_travel_time_screen",
+    "get_travel_routes",
     "get_travel_times",
     "is_travel_screen_active",
     "get_travel_active_window",
