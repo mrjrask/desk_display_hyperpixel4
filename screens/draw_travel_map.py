@@ -49,7 +49,7 @@ BACKGROUND_COLOR = (18, 18, 18)
 MAP_DAY_COLOR = (232, 236, 240)
 MAP_NIGHT_COLOR = (14, 16, 20)
 MAP_DAY_BRIGHTNESS = 1.0
-MAP_NIGHT_BRIGHTNESS = 0.8
+MAP_NIGHT_BRIGHTNESS = 0.7
 STATIC_MAP_TIMEOUT = 6
 STATIC_MAP_USER_AGENT = "desk-display/traffic-map"
 MAP_ZOOM_LEVELS = range(18, 7, -1)
@@ -407,10 +407,9 @@ def _compose_legend_entry(
 def _compose_travel_map(routes: Dict[str, Optional[dict]]) -> Image.Image:
     route_order = ["lake_shore", "kennedy_edens", "kennedy_294"]
     route_segments = _extract_route_segments(routes)
-    night_mode = _is_night()
-    map_styles = MAP_NIGHT_STYLES if night_mode else MAP_DAY_STYLES
-    map_color = MAP_NIGHT_COLOR if night_mode else MAP_DAY_COLOR
-    map_brightness = MAP_NIGHT_BRIGHTNESS if night_mode else MAP_DAY_BRIGHTNESS
+    map_styles = MAP_NIGHT_STYLES
+    map_color = MAP_NIGHT_COLOR
+    map_brightness = MAP_NIGHT_BRIGHTNESS
 
     base_width = WIDTH // 3
     map_widths = [base_width, base_width, WIDTH - 2 * base_width]
