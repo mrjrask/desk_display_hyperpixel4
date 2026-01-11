@@ -239,6 +239,28 @@ class Display:
 
         self._hide_mouse_cursor()
 
+    def show_mouse_cursor(self) -> None:
+        """Show the cursor and reset it to the default when possible."""
+
+        if pygame is None:  # pragma: no cover - optional dependency
+            return
+
+        try:
+            pygame.mouse.set_visible(True)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
+        try:
+            if hasattr(pygame, "SYSTEM_CURSOR_ARROW"):
+                try:
+                    pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+                except Exception:
+                    pygame.mouse.set_cursor(pygame.cursors.Cursor(pygame.SYSTEM_CURSOR_ARROW))
+            elif hasattr(pygame.cursors, "arrow"):
+                pygame.mouse.set_cursor(*pygame.cursors.arrow)
+        except Exception:  # pragma: no cover - optional dependency
+            pass
+
     def _init_pygame_backend(self) -> Tuple[bool, Optional[str]]:
         if pygame is None:  # pragma: no cover - optional dependency
             return False, "pygame module not installed"
