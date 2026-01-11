@@ -228,6 +228,7 @@ def render_all_screens(
     *,
     create_archive: bool = True,
     ignore_schedule: bool = False,
+    no_images: bool = False,
 ) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -240,20 +241,19 @@ def render_all_screens(
     assets: list[Tuple[str, Image.Image]] = []
     now = _dt.datetime.now(CENTRAL_TIME)
     try:
-        display = HeadlessDisplay()
-        logos = build_logo_map()
-        cache = build_cache(requested_ids)
-
         schedule_error: Optional[str] = None
         if ignore_schedule:
             logging.info("Ignoring schedule configuration (requested by flag)")
             requested_ids: set[str] = set()
-            travel_requested = True
         else:
             requested_ids, schedule_error = load_requested_screen_ids()
             if schedule_error:
                 logging.info("Continuing without schedule data (%s)", schedule_error)
-            travel_requested = True
+
+        travel_requested = ignore_schedule or "travel" in requested_ids
+        display = HeadlessDisplay()
+        logos = build_logo_map() if not no_images else {}
+        cache = build_cache(requested_ids)
 
         now = _dt.datetime.now(CENTRAL_TIME)
         resolved_overrides = resolve_overrides_for_profile(DISPLAY_PROFILE)
@@ -262,6 +262,7 @@ def render_all_screens(
             cache=cache,
             logos=logos,
             image_dir=IMAGES_DIR,
+            images_enabled=not no_images,
             travel_requested=travel_requested,
             travel_active=is_travel_screen_active(),
             travel_window=get_travel_active_window(),
@@ -345,6 +346,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip creating the ZIP archive of rendered screens.",
     )
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        help="Skip image-based screens and logo assets.",
+    )
     return parser
 
 
@@ -354,6 +360,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     return render_all_screens(
         create_archive=not args.no_archive,
         ignore_schedule=args.ignore_schedule,
+        no_images=args.no_images,
     )
 
 
