@@ -75,9 +75,9 @@ def _format_conference_name(rec):
         if IS_SQUARE_DISPLAY:
             trimmed_lower = trimmed.lower()
             if trimmed_lower.startswith("western"):
-                return "West"
+                return "the West"
             if trimmed_lower.startswith("eastern"):
-                return "East"
+                return "the East"
 
         return f"{trimmed} Conf."
 
