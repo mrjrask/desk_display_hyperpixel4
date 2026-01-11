@@ -39,6 +39,7 @@ from config import (
     FONT_WEATHER_DETAILS_SMALL_BOLD,
     FONT_EMOJI,
     FONT_EMOJI_SMALL,
+    IS_SQUARE_DISPLAY,
     WEATHER_ICON_SIZE,
     WEATHER_DESC_GAP,
     HOURLY_FORECAST_HOURS,
@@ -400,6 +401,7 @@ def draw_weather_screen_1(display, weather, transition=False):
     side_font = FONT_WEATHER_DETAILS
     stack_gap = 2
     side_margin = 8
+    edge_inset = max(6, int(round(WIDTH * 0.05))) if IS_SQUARE_DISPLAY else 0
 
     def _center_block(start: int, end: int, block_width: int) -> int:
         """Return an x position that centers ``block_width`` between ``start`` and ``end``.
@@ -427,7 +429,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         pct_w, pct_h = draw.textsize(precip_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
-        precip_x = _center_block(0, icon_x, block_w)
+        precip_x = _center_block(edge_inset, icon_x, block_w)
         block_y = max(
             side_margin,
             min(icon_center_y - block_h // 2, y_lbl - block_h - side_margin),
@@ -443,7 +445,7 @@ def draw_weather_screen_1(display, weather, transition=False):
         pct_w, pct_h = draw.textsize(cloud_percent, font=side_font)
         block_w = max(emoji_w, pct_w)
         block_h = emoji_h + stack_gap + pct_h
-        cloud_x = _center_block(icon_x + WEATHER_ICON_SIZE, WIDTH, block_w)
+        cloud_x = _center_block(icon_x + WEATHER_ICON_SIZE, WIDTH - edge_inset, block_w)
         block_y = max(
             side_margin,
             min(icon_center_y - block_h // 2, y_lbl - block_h - side_margin),

@@ -396,43 +396,43 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         register("NHL Scoreboard", lambda: draw_nhl_scoreboard(context.display, transition=True))
         register("NHL Scoreboard v2", lambda: draw_nhl_scoreboard_v2(context.display, transition=True))
         register(
-            "NHL Standings Overview West",
+            "NHL Div Standings West Overview",
             lambda: draw_nhl_standings_overview_west(context.display, transition=True),
         )
         register(
-            "NHL Standings Overview East",
+            "NHL Div Standings Overview East",
             lambda: draw_nhl_standings_overview_east(context.display, transition=True),
         )
         register(
-            "NHL Standings West",
+            "NHL Div Standings West",
             lambda: draw_nhl_standings_west(context.display, transition=True),
         )
         register(
-            "NHL Standings East",
+            "NHL Div Standings East",
             lambda: draw_nhl_standings_east(context.display, transition=True),
         )
         register(
-            "NHL Standings Overview v2 West",
+            "NHL WestPlayoff Standings Overview vertical",
             lambda: draw_nhl_standings_overview_v2_west(context.display, transition=True),
         )
         register(
-            "NHL Standings Overview v2 East",
+            "NHL EastPlayoff Standings Overview vertical",
             lambda: draw_nhl_standings_overview_v2_east(context.display, transition=True),
         )
         register(
-            "NHL Overview West v3",
+            "NHL WestPlayoff Standings Overview horizontal",
             lambda: draw_nhl_standings_overview_v3_west(context.display, transition=True),
         )
         register(
-            "NHL Overview East v3",
+            "NHL EastPlayoff Standings Overview horizontal",
             lambda: draw_nhl_standings_overview_v3_east(context.display, transition=True),
         )
         register(
-            "NHL Standings West v2",
+            "NHL WestPlayoff Standings",
             lambda: draw_nhl_standings_west_v2(context.display, transition=True),
         )
         register(
-            "NHL Standings East v2",
+            "NHL EastPlayoff Standings",
             lambda: draw_nhl_standings_east_v2(context.display, transition=True),
         )
 

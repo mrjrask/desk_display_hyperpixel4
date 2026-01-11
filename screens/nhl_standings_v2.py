@@ -90,8 +90,8 @@ OVERVIEW_MIN_LOGO_HEIGHT = 96
 OVERVIEW_MAX_LOGO_HEIGHT = 184
 OVERVIEW_LOGO_PADDING = 16
 OVERVIEW_LOGO_OVERLAP = 12
-OVERVIEW_LEADER_LOGO_SCALE = 1.2
-OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.15
+OVERVIEW_LEADER_LOGO_SCALE = 1.1
+OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
 OVERVIEW_DROP_STAGGER = 0.4  # fraction of steps before next team starts
@@ -599,7 +599,7 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
             continue
         teams = record.get("teamRecords", []) or []
         parsed: list[dict] = []
-        for team_record in sorted(teams, key=lambda t: _normalize_int(t.get("divisionRank", 99))):
+        for team_record in teams:
             if not isinstance(team_record, dict):
                 continue
             team_info = team_record.get("team", {}) or {}
@@ -620,6 +620,7 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
                 }
             )
         if parsed:
+            parsed.sort(key=_division_sort_key)
             conferences.setdefault(conf_name, {})[div_name] = parsed
 
     return conferences if conferences else None
@@ -1212,9 +1213,10 @@ def _overview_logo_height(
 ) -> int:
     target = base_height
     if is_leader:
-        target = int(round(base_height * OVERVIEW_LEADER_LOGO_SCALE))
+        scale = OVERVIEW_LEADER_LOGO_SCALE
         if IS_SQUARE_DISPLAY:
-            target = int(round(target * OVERVIEW_LEADER_LOGO_SQUARE_SCALE))
+            scale = OVERVIEW_LEADER_LOGO_SQUARE_SCALE
+        target = int(round(base_height * scale))
     target = min(
         OVERVIEW_MAX_LOGO_HEIGHT,
         max(OVERVIEW_MIN_LOGO_HEIGHT, target),

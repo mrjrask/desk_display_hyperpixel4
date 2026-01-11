@@ -58,40 +58,40 @@
       }
     },
     "NHL Scoreboard v2": 0,
-    "NHL Standings Overview West": {
+    "NHL Div Standings West Overview": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Overview West v3"],
+        "screen": ["NHL WestPlayoff Standings Overview horizontal"],
         "frequency": 1
       }
     },
-    "NHL Standings Overview East": {
+    "NHL Div Standings Overview East": {
       "frequency": 1,
       "alt": {
-        "screen": ["NHL Overview East v3"],
+        "screen": ["NHL EastPlayoff Standings Overview horizontal"],
         "frequency": 1
       }
     },
-    "NHL Standings West": {
+    "NHL Div Standings West": {
       "frequency": 2,
       "alt": {
-        "screen": ["NHL Standings West v2"],
+        "screen": ["NHL WestPlayoff Standings"],
         "frequency": 2
       }
     },
-    "NHL Standings East": {
+    "NHL Div Standings East": {
       "frequency": 2,
       "alt": {
-        "screen": ["NHL Standings East v2"],
+        "screen": ["NHL EastPlayoff Standings"],
         "frequency": 2
       }
     },
-    "NHL Standings Overview v2 West": 0,
-    "NHL Standings Overview v2 East": 0,
-    "NHL Overview West v3": 0,
-    "NHL Overview East v3": 0,
-    "NHL Standings West v2": 0,
-    "NHL Standings East v2": 0,
+    "NHL WestPlayoff Standings Overview vertical": 0,
+    "NHL EastPlayoff Standings Overview vertical": 0,
+    "NHL WestPlayoff Standings Overview horizontal": 0,
+    "NHL EastPlayoff Standings Overview horizontal": 0,
+    "NHL WestPlayoff Standings": 0,
+    "NHL EastPlayoff Standings": 0,
     "cubs logo": 0,
     "cubs stand1": 0,
     "cubs stand2": 0,
