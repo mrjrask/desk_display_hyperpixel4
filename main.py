@@ -181,6 +181,7 @@ def _import_runtime_dependencies() -> None:
     )
     from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
     from schedule import ScreenScheduler, build_scheduler, load_schedule_config
+    from screen_config import active_config_path, resolve_config_paths
     from logos import build_logo_map
     from screen_overrides import (
         ResolvedScreenOverride,
@@ -190,8 +191,10 @@ def _import_runtime_dependencies() -> None:
 
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH, CONFIG_LOCAL_PATH = resolve_config_paths()
+CONFIG_PATH = str(CONFIG_PATH)
+CONFIG_LOCAL_PATH = str(CONFIG_LOCAL_PATH)
 SCREEN_OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 
 _storage_paths = None
@@ -222,6 +225,7 @@ _SKIP_BUTTON_SCREEN_IDS = {"date", "time"}
 _shutdown_event = threading.Event()
 _shutdown_complete = threading.Event()
 _display_cleared = threading.Event()
+_config_server_thread: Optional[threading.Thread] = None
 
 
 def _initialize_runtime() -> None:
@@ -260,6 +264,8 @@ def _initialize_runtime() -> None:
     ).start()
     refresh_all()
 
+    _start_config_server()
+
     _initialized = True
 
 BUTTON_POLL_INTERVAL = 0.1
@@ -272,8 +278,9 @@ _touch_device = None
 
 
 def _load_scheduler_from_config() -> Optional[ScreenScheduler]:
+    config_path = str(active_config_path())
     try:
-        config_data = load_schedule_config(CONFIG_PATH)
+        config_data = load_schedule_config(config_path)
     except Exception as exc:
         logging.warning(f"Could not load schedule configuration: {exc}")
         return None
@@ -287,12 +294,36 @@ def _load_scheduler_from_config() -> Optional[ScreenScheduler]:
     return scheduler
 
 
+def _start_config_server() -> None:
+    global _config_server_thread
+
+    if _config_server_thread and _config_server_thread.is_alive():
+        return
+
+    if os.environ.get("SCREEN_CONFIG_DISABLED") == "1":
+        logging.info("🛑 Screen configuration UI disabled via SCREEN_CONFIG_DISABLED.")
+        return
+
+    host = os.environ.get("SCREEN_CONFIG_HOST", "0.0.0.0")
+    port = int(os.environ.get("SCREEN_CONFIG_PORT", "5001"))
+
+    def _run_server() -> None:
+        from admin import app as admin_app
+        from waitress import serve
+
+        logging.info("🌐 Screen configuration UI running at http://%s:%s", host, port)
+        serve(admin_app, host=host, port=port)
+
+    _config_server_thread = threading.Thread(target=_run_server, daemon=True)
+    _config_server_thread.start()
+
+
 def refresh_schedule_if_needed(force: bool = False) -> None:
     global _screen_config_mtime, screen_scheduler, _requested_screen_ids
     global _last_screen_id, _skip_request_pending
 
     try:
-        mtime = os.path.getmtime(CONFIG_PATH)
+        mtime = os.path.getmtime(str(active_config_path()))
     except OSError:
         mtime = None
 

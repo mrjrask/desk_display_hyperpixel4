@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Screen tuning</title>
+  <title>Screen configuration</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -19,7 +19,7 @@
       padding: clamp(1rem, 3vw, 2.5rem);
     }
     .page {
-      max-width: 1200px;
+      max-width: 1100px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
@@ -28,13 +28,13 @@
     .page__header {
       display: flex;
       flex-wrap: wrap;
-      align-items: flex-start;
+      align-items: baseline;
       justify-content: space-between;
       gap: 1rem;
     }
     h1 {
       margin: 0;
-      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-size: clamp(1.8rem, 4vw, 2.6rem);
       letter-spacing: 0.02em;
     }
     p {
@@ -69,7 +69,38 @@
     .status[data-tone="success"] { color: #86efac; }
     .status[data-tone="error"] { color: #fca5a5; }
     .status[data-tone="info"] { color: #93c5fd; }
-    .error {
+    .config-panel {
+      background: rgba(15, 23, 42, 0.75);
+      border-radius: 20px;
+      padding: 1.5rem;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 25px 50px rgba(15, 23, 42, 0.45);
+    }
+    .config-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.75rem;
+    }
+    .config-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .config-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .config-actions button.secondary {
+      background: rgba(148, 163, 184, 0.12);
+      color: #e2e8f0;
+      box-shadow: none;
+    }
+    .config-error {
       border: 1px solid rgba(248,113,113,0.6);
       background: rgba(248,113,113,0.08);
       padding: 0.75rem 1rem;
@@ -77,247 +108,43 @@
       color: #fecaca;
       font-weight: 600;
     }
-    .grid {
+    .config-table {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
-    }
-    .screen-card__media {
-      display: grid;
-      grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
-      gap: 1rem;
-      align-items: start;
-    }
-    @media (max-width: 960px) {
-      .screen-card__media {
-        grid-template-columns: 1fr;
-      }
-    }
-    .screen-card {
-      position: relative;
-      background: rgba(15, 23, 42, 0.85);
-      border-radius: 20px;
-      padding: 1.5rem;
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      backdrop-filter: blur(10px);
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
-    }
-    .screen-card--dirty::after {
-      content: "Unsaved";
-      position: absolute;
-      top: 0.75rem;
-      right: 1rem;
-      font-size: 0.75rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #fcd34d;
-    }
-    .screen-card__title {
-      display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
-    }
-    .screen-card__title h2 {
-      margin: 0;
-      font-size: 1.1rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .screen-card__title span {
-      color: #94a3b8;
-      font-size: 0.9rem;
-    }
-    .screenshot-button {
-      all: unset;
-      width: 100%;
-      cursor: pointer;
-    }
-    .screenshot-button:focus-visible {
-      outline: 2px solid #38bdf8;
-      outline-offset: 6px;
-      border-radius: 16px;
-    }
-    .screenshot {
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      border-radius: 16px;
-      border: 1px solid rgba(148, 163, 184, 0.25);
-      background: rgba(30, 41, 59, 0.6);
-      object-fit: cover;
-    }
-    .screenshot--empty {
-      display: grid;
-      place-items: center;
-      font-style: italic;
-      color: #94a3b8;
-      font-size: 0.9rem;
-    }
-    .font-panel {
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      border-radius: 16px;
-      padding: 1rem;
-      background: rgba(15, 23, 42, 0.5);
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      min-height: 100%;
-    }
-    .font-panel__header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 0.5rem;
-    }
-    .font-panel__header h3 {
-      margin: 0;
-      font-size: 1rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #f8fafc;
-    }
-    .font-panel__header span {
-      color: #94a3b8;
-      font-size: 0.85rem;
-    }
-    .font-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-    .font-entry__name {
-      font-weight: 700;
-      color: #e2e8f0;
-    }
-    .font-entry__meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem 0.75rem;
-      color: #94a3b8;
-      font-size: 0.9rem;
-    }
-    .font-entry__path {
-      color: #64748b;
-      font-size: 0.85rem;
-      word-break: break-all;
-    }
-    .font-panel__empty {
-      margin: 0;
-      color: #94a3b8;
-      font-size: 0.95rem;
-    }
-    .lightbox {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.8);
-      display: flex;
+      grid-template-columns: 40px minmax(160px, 1.5fr) minmax(120px, 0.9fr) minmax(220px, 1.4fr) minmax(140px, 0.9fr);
+      gap: 0.75rem 1rem;
       align-items: center;
-      justify-content: center;
-      padding: 2rem;
-      z-index: 20;
     }
-    .lightbox[hidden] {
-      display: none;
-    }
-    .lightbox__content {
-      position: relative;
-      max-width: min(1200px, 95vw);
-      max-height: 90vh;
-    }
-    .lightbox__image {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      border-radius: 14px;
-      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
-      background: #0b1220;
-    }
-    .lightbox__close {
-      position: absolute;
-      top: -14px;
-      right: -14px;
-      background: #0f172a;
-      color: #e2e8f0;
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      border-radius: 999px;
-      width: 36px;
-      height: 36px;
-      font-size: 1.2rem;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-    }
-    .lightbox__close:hover {
-      background: #1e293b;
-    }
-    .lightbox__backdrop {
-      position: fixed;
-      inset: 0;
-    }
-    body.no-scroll {
-      overflow: hidden;
-    }
-    .timestamp {
+    .config-table__header {
       font-size: 0.85rem;
-      color: #94a3b8;
-    }
-    .override-groups {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .override-group {
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      border-radius: 16px;
-      padding: 1rem;
-      background: rgba(15, 23, 42, 0.5);
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-    .override-group h3 {
-      margin: 0;
-      font-size: 1rem;
-      letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #f8fafc;
-    }
-    .override-group p {
+      letter-spacing: 0.08em;
       color: #94a3b8;
-      font-size: 0.85rem;
-      margin: 0;
     }
-    label {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      font-size: 0.9rem;
-      color: #cbd5f5;
+    .config-row {
+      display: contents;
     }
-    input[type="number"], select {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid rgba(148, 163, 184, 0.4);
+    .config-cell {
       background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .config-cell input {
+      width: 100%;
+      border: none;
+      background: transparent;
       color: inherit;
-      font-size: 1rem;
-      padding: 0.5rem 0.75rem;
+      font-size: 0.95rem;
       outline: none;
-      transition: border-color 120ms ease;
     }
-    input[type="number"]:focus, select:focus {
-      border-color: #38bdf8;
+    .drag-handle {
+      cursor: grab;
+      font-size: 1.2rem;
+      text-align: center;
+      user-select: none;
     }
-    input.invalid {
-      border-color: #f87171;
-    }
-    small {
-      color: #64748b;
-      font-size: 0.8rem;
+    .dragging .config-cell {
+      opacity: 0.5;
     }
   </style>
 </head>
@@ -325,460 +152,220 @@
   <main class="page">
     <header class="page__header">
       <div>
-        <h1>Screen tuning</h1>
-        <p>Adjust font sizes, image scale, and device profiles for each scheduled screen.</p>
+        <h1>Screen configuration</h1>
+        <p>Reorder screens and adjust frequencies for the active playlist.</p>
       </div>
-      <button id="save-all" type="button" disabled>Save changes</button>
     </header>
-    {% if error %}
-      <div class="error">{{ error }}</div>
-    {% endif %}
-    <div class="status" id="status" aria-live="polite"></div>
-    <section class="grid">
-      {% for screen in screens %}
-        <article class="screen-card" data-screen-id="{{ screen.id }}">
-          <div class="screen-card__title">
-            <h2>{{ screen.id }}</h2>
-            <span>Every {{ screen.frequency }} loop{{ '' if screen.frequency == 1 else 's' }}</span>
-          </div>
-          <div class="screen-card__media">
-            <button
-              type="button"
-              class="screenshot-button"
-              aria-label="Open screenshot for {{ screen.id }}"
-              {% if screen.last_screenshot %}
-                data-full-src="{{ url_for('static', filename=screen.last_screenshot) }}"
-              {% endif %}
-            >
-              {% if screen.last_screenshot %}
-                <img
-                  class="screenshot"
-                  src="{{ url_for('static', filename=screen.last_screenshot) }}"
-                  alt="Latest screenshot for {{ screen.id }}"
-                >
-              {% else %}
-                <div class="screenshot screenshot--empty">No screenshot captured yet</div>
-              {% endif %}
-            </button>
-            <section class="font-panel" aria-label="Fonts used on {{ screen.id }}">
-              <div class="font-panel__header">
-                <h3>Fonts</h3>
-                <span>Defined in config</span>
-              </div>
-              {% if screen.fonts %}
-                <ul class="font-list">
-                  {% for font in screen.fonts %}
-                    <li class="font-entry">
-                      <div class="font-entry__name">{{ font.name }}</div>
-                      <div class="font-entry__meta">
-                        <span class="font-entry__group">{{ font.group }}{% if font.key %} • {{ font.key }}{% endif %}</span>
-                        {% if font.size is not none %}
-                          <span class="font-entry__size">{{ font.size }}{% if font.size is not string %} pt{% endif %}</span>
-                        {% endif %}
-                        {% if font.path %}
-                          <span class="font-entry__path" title="{{ font.path }}">{{ font.path }}</span>
-                        {% endif %}
-                      </div>
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <p class="font-panel__empty">No font definitions recorded for this screen.</p>
-              {% endif %}
-            </section>
-          </div>
-          {% if screen.last_screenshot and screen.last_captured %}
-            <div class="timestamp">Captured {{ screen.last_captured }}</div>
-          {% endif %}
-          <div class="override-groups">
-            {% set defaults = screen.overrides.defaults %}
-            <section class="override-group" data-profile="defaults">
-              <h3>Shared defaults</h3>
-              <p>Applied to every display profile unless a targeted override is defined.</p>
-              <label>
-                Font scale multiplier
-                <input
-                  type="number"
-                  min="0.25"
-                  max="5"
-                  step="0.05"
-                  inputmode="decimal"
-                  placeholder="Inherit global"
-                  class="override-input"
-                  data-field="font_scale"
-                  data-profile="defaults"
-                  value="{{ '%.4g'|format(defaults.font_scale) if defaults.font_scale is defined else '' }}"
-                >
-                <small>Leave blank to use the display default.</small>
-              </label>
-              <label>
-                Image scale multiplier
-                <input
-                  type="number"
-                  min="0.25"
-                  max="3"
-                  step="0.05"
-                  inputmode="decimal"
-                  placeholder="Inherit global"
-                  class="override-input"
-                  data-field="image_scale"
-                  data-profile="defaults"
-                  value="{{ '%.4g'|format(defaults.image_scale) if defaults.image_scale is defined else '' }}"
-                >
-                <small>Dial in logos or maps without touching the base layout.</small>
-              </label>
-              <label>
-                Device profile override
-                <select class="override-input" data-field="device_profile" data-profile="defaults">
-                  <option value="" {% if defaults.device_profile is not defined %}selected{% endif %}>Use global profile</option>
-                  {% for value, label in device_profiles %}
-                    <option value="{{ value }}" {% if defaults.device_profile == value %}selected{% endif %}>{{ label }}</option>
-                  {% endfor %}
-                </select>
-                <small>Force a specific HyperPixel layout when testing.</small>
-              </label>
-            </section>
-            {% set profile_overrides = screen.overrides.profiles %}
-            {% for value, label in device_profiles %}
-              {% set entry = profile_overrides.get(value, {}) %}
-              <section class="override-group" data-profile="{{ value }}">
-                <h3>{{ label }}</h3>
-                <p>Only applied when the display reports the <code>{{ value }}</code> profile.</p>
-                <label>
-                  Font scale multiplier
-                  <input
-                    type="number"
-                    min="0.25"
-                    max="5"
-                    step="0.05"
-                    inputmode="decimal"
-                    placeholder="Inherit shared"
-                    class="override-input"
-                    data-field="font_scale"
-                    data-profile="{{ value }}"
-                    value="{{ '%.4g'|format(entry.font_scale) if entry.font_scale is defined else '' }}"
-                  >
-                  <small>Leave blank to inherit the shared defaults.</small>
-                </label>
-                <label>
-                  Image scale multiplier
-                  <input
-                    type="number"
-                    min="0.25"
-                    max="3"
-                    step="0.05"
-                    inputmode="decimal"
-                    placeholder="Inherit shared"
-                    class="override-input"
-                    data-field="image_scale"
-                    data-profile="{{ value }}"
-                    value="{{ '%.4g'|format(entry.image_scale) if entry.image_scale is defined else '' }}"
-                  >
-                  <small>Use when a hardware revision needs extra breathing room.</small>
-                </label>
-              </section>
-            {% endfor %}
-          </div>
-        </article>
-      {% endfor %}
+    <section class="config-panel" aria-label="Screen configuration">
+      <div class="config-header">
+        <div>
+          <h2>Playlist editor</h2>
+          <p>Drag to reorder, set frequencies, and add alternate screens.</p>
+        </div>
+        <div class="config-actions">
+          <button type="button" class="config-save" disabled>Save changes</button>
+          <button type="button" class="secondary config-defaults">Load defaults</button>
+          <button type="button" class="secondary config-export">Export configuration</button>
+        </div>
+      </div>
+      <div class="status" id="config-status" aria-live="polite"></div>
+      <div class="config-error" id="config-error" hidden></div>
+      <div class="config-table config-table__header" aria-hidden="true">
+        <div>Drag</div>
+        <div>Screen</div>
+        <div>Frequency</div>
+        <div>Alternate screens</div>
+        <div>Alternate frequency</div>
+      </div>
+      <div class="config-table" id="config-list"></div>
+      <div class="config-actions">
+        <button type="button" class="config-save" disabled>Save changes</button>
+        <button type="button" class="secondary config-defaults">Load defaults</button>
+        <button type="button" class="secondary config-export">Export configuration</button>
+      </div>
     </section>
   </main>
-  <div class="lightbox" id="lightbox" hidden aria-hidden="true">
-    <div class="lightbox__backdrop" data-lightbox-dismiss></div>
-    <div class="lightbox__content">
-      <button class="lightbox__close" type="button" aria-label="Close full-size screenshot" data-lightbox-dismiss>&times;</button>
-      <img id="lightbox-image" class="lightbox__image" alt="Full-size screenshot">
-    </div>
-  </div>
   <script>
     (() => {
-      const initial = {{ overrides | tojson }};
-      const pending = Object.create(null);
-      const saveBtn = document.getElementById('save-all');
-      const statusEl = document.getElementById('status');
-      const lightbox = document.getElementById('lightbox');
-      const lightboxImage = document.getElementById('lightbox-image');
+      const configList = document.getElementById('config-list');
+      const configStatus = document.getElementById('config-status');
+      const configError = document.getElementById('config-error');
+      const configSaveButtons = Array.from(document.querySelectorAll('.config-save'));
+      const configDefaultsButtons = Array.from(document.querySelectorAll('.config-defaults'));
+      const configExportButtons = Array.from(document.querySelectorAll('.config-export'));
+      let configDirty = false;
 
-      function getInitial(screenId, profileKey, field) {
-        const screen = initial[screenId];
-        if (!screen) {
-          return null;
-        }
-        if (profileKey === 'defaults') {
-          return (screen.defaults && Object.prototype.hasOwnProperty.call(screen.defaults, field))
-            ? screen.defaults[field]
-            : null;
-        }
-        const profiles = screen.profiles || {};
-        if (!Object.prototype.hasOwnProperty.call(profiles, profileKey)) {
-          return null;
-        }
-        const profileEntry = profiles[profileKey];
-        return Object.prototype.hasOwnProperty.call(profileEntry, field)
-          ? profileEntry[field]
-          : null;
+      function setConfigStatus(message, tone = 'info') {
+        configStatus.textContent = message;
+        configStatus.dataset.tone = tone;
       }
 
-      function valuesEqual(a, b) {
-        if (a == null && b == null) {
-          return true;
-        }
-        if (typeof a === 'number' && typeof b === 'number') {
-          return Math.abs(a - b) < 0.0001;
-        }
-        return a === b;
-      }
-
-      function cardFor(screenId) {
-        return document.querySelector(`.screen-card[data-screen-id="${CSS.escape(screenId)}"]`);
-      }
-
-      function setStatus(message, tone = 'info') {
-        statusEl.textContent = message;
-        statusEl.dataset.tone = tone;
-      }
-
-      function validateInput(input) {
-        if (input.type === 'number') {
-          if (!input.value) {
-            input.classList.remove('invalid');
-            input.setCustomValidity('');
-            return true;
-          }
-          const value = Number(input.value);
-          const min = Number(input.min);
-          const max = Number(input.max);
-          if (Number.isNaN(value) || value < min || value > max) {
-            input.classList.add('invalid');
-            input.setCustomValidity(`Enter a value between ${min} and ${max}.`);
-            return false;
-          }
-        }
-        input.classList.remove('invalid');
-        input.setCustomValidity('');
-        return true;
-      }
-
-      function normaliseValue(input) {
-        if (input.type === 'number') {
-          return input.value ? Number(input.value) : null;
-        }
-        if (input.tagName === 'SELECT') {
-          return input.value || null;
-        }
-        return input.value || null;
-      }
-
-      function ensurePending(screenId) {
-        if (!pending[screenId]) {
-          pending[screenId] = { defaults: {}, profiles: {} };
-        }
-        const entry = pending[screenId];
-        if (!entry.defaults) {
-          entry.defaults = {};
-        }
-        if (!entry.profiles) {
-          entry.profiles = {};
-        }
-        return entry;
-      }
-
-      function cleanupPending(screenId) {
-        const entry = pending[screenId];
-        if (!entry) {
+      function setConfigError(message = '') {
+        if (!message) {
+          configError.hidden = true;
+          configError.textContent = '';
           return;
         }
-        if (entry.defaults && Object.keys(entry.defaults).length === 0) {
-          delete entry.defaults;
-        }
-        if (entry.profiles) {
-          Object.keys(entry.profiles).forEach((profile) => {
-            if (Object.keys(entry.profiles[profile]).length === 0) {
-              delete entry.profiles[profile];
-            }
-          });
-          if (Object.keys(entry.profiles).length === 0) {
-            delete entry.profiles;
-          }
-        }
-        if (!entry.defaults && !entry.profiles) {
-          delete pending[screenId];
-        }
+        configError.hidden = false;
+        configError.textContent = message;
       }
 
-      function updatePending(screenId, profileKey, field, value) {
-        const entry = ensurePending(screenId);
-        const target = profileKey === 'defaults'
-          ? (entry.defaults || (entry.defaults = {}))
-          : ((entry.profiles[profileKey] = entry.profiles[profileKey] || {}));
-        target[field] = value;
-        if (valuesEqual(value, getInitial(screenId, profileKey, field))) {
-          delete target[field];
+      function markConfigDirty(isDirty) {
+        configDirty = isDirty;
+        configSaveButtons.forEach((button) => {
+          button.disabled = !configDirty;
+        });
+      }
+
+      function renderConfigRows(screens) {
+        configList.innerHTML = '';
+        screens.forEach((screen) => {
+          const row = document.createElement('div');
+          row.className = 'config-row';
+          row.dataset.screenId = screen.id;
+          row.draggable = true;
+
+          row.innerHTML = `
+            <div class="config-cell drag-handle" title="Drag to reorder" aria-label="Drag handle">⠿</div>
+            <div class="config-cell">${screen.id}</div>
+            <div class="config-cell">
+              <input type="number" min="0" inputmode="numeric" class="freq-input" value="${screen.frequency ?? ''}">
+            </div>
+            <div class="config-cell">
+              <input type="text" class="alt-screen-input" placeholder="alternate_a, alternate_b" value="${screen.alt_screen ?? ''}">
+            </div>
+            <div class="config-cell">
+              <input type="number" min="0" inputmode="numeric" class="alt-frequency-input" placeholder="Optional" value="${screen.alt_frequency ?? ''}">
+            </div>
+          `;
+
+          row.querySelectorAll('input').forEach((input) => {
+            input.addEventListener('input', () => {
+              markConfigDirty(true);
+            });
+          });
+
+          row.addEventListener('dragstart', (event) => {
+            const handle = event.target.closest('.drag-handle');
+            if (!handle) {
+              event.preventDefault();
+              return;
+            }
+            row.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+          });
+
+          row.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
+            markConfigDirty(true);
+          });
+
+          configList.appendChild(row);
+        });
+      }
+
+      function getDragAfterElement(container, y) {
+        const draggableElements = Array.from(container.querySelectorAll('.config-row:not(.dragging)'));
+        return draggableElements.reduce((closest, child) => {
+          const box = child.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+          }
+          return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+      }
+
+      configList.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        const afterElement = getDragAfterElement(configList, event.clientY);
+        const dragging = configList.querySelector('.dragging');
+        if (!dragging) {
+          return;
         }
-        cleanupPending(screenId);
-        if (pending[screenId]) {
-          cardFor(screenId)?.classList.add('screen-card--dirty');
+        if (afterElement == null) {
+          configList.appendChild(dragging);
         } else {
-          cardFor(screenId)?.classList.remove('screen-card--dirty');
+          configList.insertBefore(dragging, afterElement);
         }
-        saveBtn.disabled = Object.keys(pending).length === 0;
-      }
-
-      function handleInput(event) {
-        const input = event.target;
-        if (!input.classList.contains('override-input')) {
-          return;
-        }
-        if (!validateInput(input)) {
-          return;
-        }
-        const card = input.closest('.screen-card');
-        if (!card) {
-          return;
-        }
-        const screenId = card.dataset.screenId;
-        const field = input.dataset.field;
-        const profileKey = input.dataset.profile || 'defaults';
-        updatePending(screenId, profileKey, field, normaliseValue(input));
-      }
-
-      document.querySelectorAll('.override-input').forEach((input) => {
-        input.addEventListener('input', handleInput);
-        input.addEventListener('change', handleInput);
       });
 
-      function closeLightbox() {
-        lightbox.hidden = true;
-        lightbox.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('no-scroll');
-        lightboxImage.src = '';
+      function buildConfigPayload() {
+        const rows = Array.from(configList.querySelectorAll('.config-row'));
+        return {
+          screens: rows.map((row) => ({
+            id: row.dataset.screenId,
+            frequency: row.querySelector('.freq-input').value,
+            alt_screen: row.querySelector('.alt-screen-input').value,
+            alt_frequency: row.querySelector('.alt-frequency-input').value,
+          })),
+        };
       }
 
-      function openLightbox(src, label) {
-        if (!src) {
-          return;
+      async function loadConfig(url) {
+        setConfigError('');
+        setConfigStatus('Loading screen configuration…', 'info');
+        const resp = await fetch(url);
+        const payload = await resp.json();
+        if (!resp.ok || payload.status !== 'ok') {
+          throw new Error(payload.message || 'Unable to load configuration');
         }
-        lightboxImage.src = src;
-        lightboxImage.alt = label || 'Full-size screenshot';
-        lightbox.hidden = false;
-        lightbox.setAttribute('aria-hidden', 'false');
-        document.body.classList.add('no-scroll');
+        renderConfigRows(payload.screens || []);
+        markConfigDirty(false);
+        setConfigStatus('Configuration loaded.', 'success');
       }
 
-      document.querySelectorAll('.screenshot-button').forEach((button) => {
+      async function saveConfig() {
+        setConfigError('');
+        setConfigStatus('Saving screen configuration…', 'info');
+        const resp = await fetch('/api/screens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildConfigPayload()),
+        });
+        const payload = await resp.json();
+        if (!resp.ok || payload.status !== 'ok') {
+          throw new Error(payload.message || 'Unable to save configuration');
+        }
+        markConfigDirty(false);
+        setConfigStatus('Configuration saved to device override.', 'success');
+      }
+
+      configSaveButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            await saveConfig();
+          } catch (err) {
+            setConfigError(err.message);
+            setConfigStatus('Save failed.', 'error');
+            markConfigDirty(true);
+          } finally {
+            button.disabled = !configDirty;
+          }
+        });
+      });
+
+      configDefaultsButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+          try {
+            await loadConfig('/api/screens/defaults');
+          } catch (err) {
+            setConfigError(err.message);
+            setConfigStatus('Unable to load defaults.', 'error');
+          }
+        });
+      });
+
+      configExportButtons.forEach((button) => {
         button.addEventListener('click', () => {
-          const src = button.dataset.fullSrc;
-          if (!src) {
-            return;
-          }
-          openLightbox(src, button.getAttribute('aria-label'));
+          window.location.href = '/api/screens/export';
         });
       });
 
-      document.querySelectorAll('[data-lightbox-dismiss]').forEach((el) => {
-        el.addEventListener('click', closeLightbox);
-      });
-
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && !lightbox.hidden) {
-          closeLightbox();
-        }
-      });
-
-      function serializePending() {
-        const payload = {};
-        for (const [screenId, fields] of Object.entries(pending)) {
-          const entry = {};
-          if (fields.defaults && Object.keys(fields.defaults).length > 0) {
-            entry.defaults = { ...fields.defaults };
-          }
-          if (fields.profiles) {
-            for (const [profile, values] of Object.entries(fields.profiles)) {
-              if (Object.keys(values).length === 0) {
-                continue;
-              }
-              if (!entry.profiles) {
-                entry.profiles = {};
-              }
-              entry.profiles[profile] = { ...values };
-            }
-          }
-          if (Object.keys(entry).length > 0) {
-            payload[screenId] = entry;
-          }
-        }
-        return payload;
-      }
-
-      function refreshInputs() {
-        document.querySelectorAll('.screen-card').forEach((card) => {
-          const screenId = card.dataset.screenId;
-          card.querySelectorAll('.override-input').forEach((input) => {
-            const field = input.dataset.field;
-            const profileKey = input.dataset.profile || 'defaults';
-            const value = getInitial(screenId, profileKey, field);
-            if (input.type === 'number') {
-              input.value = value == null ? '' : value;
-            } else if (input.tagName === 'SELECT') {
-              input.value = value || '';
-            }
-          });
-        });
-      }
-
-      saveBtn.addEventListener('click', async () => {
-        if (saveBtn.disabled) {
-          return;
-        }
-        const inputs = Array.from(document.querySelectorAll('.override-input'));
-        for (const input of inputs) {
-          if (!validateInput(input)) {
-            input.reportValidity();
-            setStatus('Fix invalid values before saving.', 'error');
-            return;
-          }
-        }
-
-        const updates = serializePending();
-        if (Object.keys(updates).length === 0) {
-          setStatus('No changes to save.', 'info');
-          return;
-        }
-
-        saveBtn.disabled = true;
-        const originalLabel = saveBtn.textContent;
-        saveBtn.textContent = 'Saving…';
-        setStatus('Saving overrides…', 'info');
-        try {
-          const resp = await fetch('/api/overrides', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ screens: updates }),
-          });
-          const payload = await resp.json();
-          if (!resp.ok || payload.status !== 'ok') {
-            throw new Error(payload.message || 'Unable to save overrides');
-          }
-          for (const key of Object.keys(initial)) {
-            if (!(key in payload.overrides)) {
-              delete initial[key];
-            }
-          }
-          Object.entries(payload.overrides).forEach(([key, value]) => {
-            initial[key] = value;
-          });
-          Object.keys(pending).forEach((key) => {
-            delete pending[key];
-            cardFor(key)?.classList.remove('screen-card--dirty');
-          });
-          refreshInputs();
-          setStatus('Overrides saved.', 'success');
-        } catch (err) {
-          setStatus(err.message || 'Save failed', 'error');
-        } finally {
-          saveBtn.textContent = originalLabel;
-          saveBtn.disabled = Object.keys(pending).length === 0;
-        }
+      loadConfig('/api/screens').catch((err) => {
+        setConfigError(err.message);
+        setConfigStatus('Unable to load configuration.', 'error');
       });
     })();
   </script>
