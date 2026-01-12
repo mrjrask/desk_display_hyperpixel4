@@ -36,7 +36,6 @@ from config import (
     SCOREBOARD_IN_PROGRESS_SCORE_COLOR,
     SCOREBOARD_FINAL_WINNING_SCORE_COLOR,
     SCOREBOARD_FINAL_LOSING_SCORE_COLOR,
-    NFL_LOGO_ALIASES,
 )
 from utils import (
     ScreenImage,
@@ -185,20 +184,6 @@ def _get_possession_icon() -> Optional[Image.Image]:
 def _team_logo_abbr(team: dict) -> str:
     if not isinstance(team, dict):
         return ""
-    abbr_raw = team.get("abbreviation") or team.get("abbrev")
-    if isinstance(abbr_raw, str):
-        abbr_candidate = abbr_raw.strip().upper()
-        alias = NFL_LOGO_ALIASES.get(abbr_candidate)
-        if alias and os.path.exists(os.path.join(LOGO_DIR, f"{alias}.png")):
-            return alias
-    full_name = " ".join(
-        str(team.get(key) or "").strip()
-        for key in ("displayName", "shortDisplayName", "name", "nickname")
-    ).strip()
-    if "rams" in full_name.lower():
-        alias = NFL_LOGO_ALIASES.get("LA", "LAR")
-        if os.path.exists(os.path.join(LOGO_DIR, f"{alias}.png")):
-            return alias
     for key in ("abbreviation", "abbrev", "shortDisplayName", "displayName"):
         value = team.get(key)
         if isinstance(value, str) and value.strip():
