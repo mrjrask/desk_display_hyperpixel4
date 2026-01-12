@@ -1013,7 +1013,6 @@ NFL_TEAM_ABBREVIATIONS = {
     "steelers": "pit",   "eagles": "phi",   "packers": "gb",
     "browns": "cle",     "49ers": "sf",
 }
-NFL_LOGO_ALIASES = {"LA": "LAR"}
 
 # VRNOF screen
 VRNOF_FRESHNESS_LIMIT = 10 * 60
