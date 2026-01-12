@@ -27,6 +27,7 @@ from screens.draw_travel_time import get_travel_active_window, is_travel_screen_
 from screens.registry import ScreenContext, ScreenDefinition, build_screen_registry
 from screens_catalog import SCREEN_IDS
 from schedule import build_scheduler, load_schedule_config
+from screen_config import active_config_path, resolve_config_paths
 from utils import ScreenImage
 from paths import resolve_storage_paths
 from screen_overrides import resolve_overrides_for_profile
@@ -38,7 +39,9 @@ except ImportError:  # pragma: no cover
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
+CONFIG_PATH, CONFIG_LOCAL_PATH = resolve_config_paths()
+CONFIG_PATH = str(CONFIG_PATH)
+CONFIG_LOCAL_PATH = str(CONFIG_LOCAL_PATH)
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger(__name__))
@@ -172,7 +175,7 @@ def build_cache(requested_ids: Optional[Set[str]] = None) -> Dict[str, object]:
 
 def load_requested_screen_ids() -> Tuple[set[str], Optional[str]]:
     try:
-        config = load_schedule_config(CONFIG_PATH)
+        config = load_schedule_config(str(active_config_path()))
         scheduler = build_scheduler(config)
         logging.info("Loaded %d schedule entries", scheduler.node_count)
         return scheduler.requested_ids, None
