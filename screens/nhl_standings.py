@@ -402,12 +402,12 @@ def _normalize_int(value) -> int:
 
 def _division_sort_key(team: dict) -> tuple[int, int, int, int, str]:
     points = _normalize_int(team.get("points"))
-    wins = _normalize_int(team.get("wins"))
-    ot = _normalize_int(team.get("ot"))
+    regulation_wins = _normalize_int(team.get("regulationWins"))
+    row_wins = _normalize_int(team.get("regulationPlusOvertimeWins"))
     rank = _normalize_int(team.get("_rank", 99)) or 99
     abbr = str(team.get("abbr", ""))
-    # Sort by points (desc), wins (desc), overtime losses (asc), then fallback rank and abbr.
-    return (-points, -wins, ot, rank, abbr)
+    # Sort by points, regulation wins, and regulation+overtime wins (all desc), then fallback rank and abbr.
+    return (-points, -regulation_wins, -row_wins, rank, abbr)
 
 
 def _normalize_conference_name(name: object) -> str:
@@ -547,6 +547,12 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
                     "wins": _normalize_int(record_info.get("wins")),
                     "losses": _normalize_int(record_info.get("losses")),
                     "ot": _normalize_int(record_info.get("ot")),
+                    "regulationWins": _normalize_int(team_record.get("regulationWins")),
+                    "regulationPlusOvertimeWins": _normalize_int(
+                        team_record.get("regulationPlusOvertimeWins")
+                        if team_record.get("regulationPlusOvertimeWins") is not None
+                        else team_record.get("row")
+                    ),
                     "points": _normalize_int(team_record.get("points")),
                     "_rank": _normalize_int(team_record.get("divisionRank", 99)),
                 }
@@ -605,6 +611,8 @@ def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list
             losses = _extract_stat(row, ("losses", "l"))
             ot = _extract_stat(row, ("ot", "otLosses", "otl"))
             points = _extract_stat(row, ("points", "pts"))
+            regulation_wins = _extract_stat(row, ("regulationWins", "rw"))
+            row_wins = _extract_stat(row, ("regulationPlusOvertimeWins", "row"))
 
             team_entry = {
                 "abbr": abbr,
@@ -612,6 +620,8 @@ def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list
                 "wins": wins,
                 "losses": losses,
                 "ot": ot,
+                "regulationWins": regulation_wins,
+                "regulationPlusOvertimeWins": row_wins,
                 "points": points,
                 "_rank": _extract_rank(row),
             }
@@ -661,6 +671,8 @@ def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]
         losses = _extract_stat(node, ("losses", "l"))
         ot = _extract_stat(node, ("ot", "otLosses", "otl"))
         points = _extract_stat(node, ("points", "pts"))
+        regulation_wins = _extract_stat(node, ("regulationWins", "rw"))
+        row_wins = _extract_stat(node, ("regulationPlusOvertimeWins", "row"))
 
         key = (conference_name, division_name, abbr)
         if key in seen:
@@ -673,6 +685,8 @@ def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]
             "wins": wins,
             "losses": losses,
             "ot": ot,
+            "regulationWins": regulation_wins,
+            "regulationPlusOvertimeWins": row_wins,
             "points": points,
             "_rank": _extract_rank(node),
         }
