@@ -172,6 +172,14 @@ def _optional_int_from_env(name: str) -> Optional[int]:
         return None
 
 
+def _optional_str_from_env(name: str) -> Optional[str]:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return None
+    value = raw_value.strip()
+    return value or None
+
+
 def _bool_from_env(name: str, default: bool = False) -> bool:
     raw_value = os.environ.get(name)
     if raw_value is None:
@@ -323,6 +331,7 @@ GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
 # Optional override for the bus number used by the inside environmental sensor.
 INSIDE_SENSOR_I2C_BUS = _optional_int_from_env("INSIDE_SENSOR_I2C_BUS")
+INSIDE_SENSOR = _optional_str_from_env("INSIDE_SENSOR")
 
 
 # Supported HyperPixel panels.  The keys roughly match the product names so an

@@ -41,6 +41,7 @@ from config import (
     FONT_INSIDE_TEMP,
     FONT_INSIDE_VALUE,
     FONT_TITLE_INSIDE,
+    INSIDE_SENSOR,
     INSIDE_SENSOR_I2C_BUS,
 )
 from utils import (
@@ -68,6 +69,21 @@ except Exception:
     BME280 = None
 
 try:
+    import adafruit_bme280.advanced as adafruit_bme280
+except Exception:
+    adafruit_bme280 = None
+
+try:
+    import adafruit_bme680
+except Exception:
+    adafruit_bme680 = None
+
+try:
+    import bme68x  # type: ignore
+except Exception:
+    bme68x = None
+
+try:
     import ltr559  # pimoroni LTR559
 except Exception:
     ltr559 = None
@@ -77,9 +93,15 @@ try:
 except Exception:
     LSM6DSOX = None
 
+try:
+    from adafruit_extended_bus import ExtendedI2C as I2C
+except Exception:
+    I2C = None
+
 # ---- Addresses ----
 ADDR_SHT4X = [0x44, 0x45]
 ADDR_BME280 = [0x76, 0x77]
+ADDR_BME680 = [0x76, 0x77]
 ADDR_LTR559 = [0x23]
 ADDR_LSM6  = [0x6A, 0x6B]
 
@@ -87,6 +109,29 @@ ADDR_LSM6  = [0x6A, 0x6B]
 # priority explicitly so rectangular (13/14) and square (15) panels are tested
 # before the generic Raspberry Pi buses.
 _HYPERPIXEL_BUS_PRIORITY = (15, 13, 14, 1)
+
+_SUPPORTED_INSIDE_SENSORS = {
+    "pimoroni_bme280",
+    "adafruit_bme280",
+    "pimoroni_bme680",
+    "pimoroni_bme68x",
+    "adafruit_bme680",
+    "adafruit_sht41",
+}
+
+_INSIDE_SENSOR_ALIASES = {
+    "bme280": "adafruit_bme280",
+    "pimoroni_bme280": "pimoroni_bme280",
+    "adafruit_bme280": "adafruit_bme280",
+    "pimoroni_bme680": "pimoroni_bme68x",
+    "pimoroni_bme68x": "pimoroni_bme68x",
+    "bme680": "adafruit_bme680",
+    "adafruit_bme680": "adafruit_bme680",
+    "sht41": "adafruit_sht41",
+    "adafruit_sht41": "adafruit_sht41",
+    "sht4x": "adafruit_sht41",
+    "adafruit_sht4x": "adafruit_sht41",
+}
 
 
 def _preferred_bus_order(buses: List[int]) -> List[int]:
@@ -111,6 +156,23 @@ def _preferred_bus_order(buses: List[int]) -> List[int]:
         ordered = [override] + [b for b in ordered if b != override]
 
     return ordered
+
+
+def _normalize_inside_sensor(raw_value: Optional[str]) -> Optional[str]:
+    if not raw_value:
+        return None
+    key = raw_value.strip().lower()
+    if not key:
+        return None
+    normalized = _INSIDE_SENSOR_ALIASES.get(key, key)
+    if normalized not in _SUPPORTED_INSIDE_SENSORS:
+        logging.warning(
+            "Unknown INSIDE_SENSOR value %r; supported values: %s",
+            raw_value,
+            ", ".join(sorted(_SUPPORTED_INSIDE_SENSORS)),
+        )
+        return None
+    return normalized
 
 
 def _classify_orientation(ax: float, ay: float, az: float) -> str:
@@ -209,51 +271,153 @@ class SensorHub:
     def __init__(self) -> None:
         self.bus_for_sht4x: Optional[Tuple[int, int]] = None   # (busnum, addr)
         self.bus_for_bme280: Optional[Tuple[int, int]] = None  # (busnum, addr)
+        self.bus_for_adafruit_bme280: Optional[Tuple[int, int]] = None
+        self.bus_for_adafruit_bme680: Optional[Tuple[int, int]] = None
+        self.bus_for_bme68x: Optional[Tuple[int, int]] = None
         self.bus_for_ltr559: Optional[Tuple[int, int]] = None  # (busnum, addr)
         self.bus_for_lsm6: Optional[Tuple[int, int]] = None    # (busnum, addr)
 
         self._bme280: Optional[BME280] = None
+        self._adafruit_bme280: Optional[object] = None
+        self._adafruit_bme680: Optional[object] = None
+        self._bme68x: Optional[object] = None
         self._ltr: Optional[object] = None  # ltr559.LTR559 instance
         self._imu: Optional[object] = None  # LSM6DSOX instance
+        self._inside_sensor = _normalize_inside_sensor(INSIDE_SENSOR)
 
         self._discover_all()
+
+    def _probe_sht4x(self, buses: Sequence[int]) -> None:
+        for bus in buses:
+            for addr in ADDR_SHT4X:
+                if safe_probe(bus, addr):
+                    try:
+                        _ = sht4x_read_temp_humidity(bus, addr)
+                        self.bus_for_sht4x = (bus, addr)
+                        return
+                    except Exception:
+                        pass
+
+    def _probe_pimoroni_bme280(self, buses: Sequence[int]) -> None:
+        if BME280 is None:
+            return
+        for bus in buses:
+            for addr in ADDR_BME280:
+                if safe_probe(bus, addr):
+                    try:
+                        dev = SMBus(bus)
+                        bme = BME280(i2c_dev=dev, i2c_addr=addr)
+                        _ = bme.get_temperature()
+                        self._bme280 = bme
+                        self.bus_for_bme280 = (bus, addr)
+                        return
+                    except Exception:
+                        pass
+
+    def _probe_adafruit_bme280(self, buses: Sequence[int]) -> None:
+        if adafruit_bme280 is None or I2C is None:
+            return
+        for bus in buses:
+            for addr in ADDR_BME280:
+                i2c = None
+                try:
+                    i2c = I2C(bus)
+                    dev = adafruit_bme280.Adafruit_BME280_I2C(i2c, address=addr)
+                    _ = dev.temperature
+                    self._adafruit_bme280 = dev
+                    self.bus_for_adafruit_bme280 = (bus, addr)
+                    return
+                except Exception:
+                    try:
+                        if i2c is not None:
+                            i2c.deinit()
+                    except Exception:
+                        pass
+
+    def _probe_adafruit_bme680(self, buses: Sequence[int]) -> None:
+        if adafruit_bme680 is None or I2C is None:
+            return
+        for bus in buses:
+            for addr in ADDR_BME680:
+                i2c = None
+                try:
+                    i2c = I2C(bus)
+                    dev = adafruit_bme680.Adafruit_BME680_I2C(i2c, address=addr)
+                    _ = dev.temperature
+                    self._adafruit_bme680 = dev
+                    self.bus_for_adafruit_bme680 = (bus, addr)
+                    return
+                except Exception:
+                    try:
+                        if i2c is not None:
+                            i2c.deinit()
+                    except Exception:
+                        pass
+
+    def _probe_bme68x(self, buses: Sequence[int]) -> None:
+        if bme68x is None:
+            return
+        for bus in buses:
+            for addr in ADDR_BME680:
+                try:
+                    dev = bme68x.BME68X(i2c_bus=bus, i2c_address=addr)  # type: ignore
+                    dev.set_humidity_oversampling(bme68x.OS_2X)  # type: ignore
+                    dev.set_pressure_oversampling(bme68x.OS_4X)  # type: ignore
+                    dev.set_temperature_oversampling(bme68x.OS_8X)  # type: ignore
+                    data = dev.get_data()  # type: ignore
+                    if data:
+                        self._bme68x = dev
+                        self.bus_for_bme68x = (bus, addr)
+                        return
+                except Exception:
+                    pass
 
     def _discover_all(self) -> None:
         buses = list_i2c_buses()
 
-        # Probe order favors discrete dedicated sensors for temp/humidity first
-        for bus in buses:
-            # SHT4x
-            for addr in ADDR_SHT4X:
-                if safe_probe(bus, addr):
-                    try:
-                        # quick sanity read to confirm it truly responds
-                        _ = sht4x_read_temp_humidity(bus, addr)
-                        self.bus_for_sht4x = (bus, addr)
-                        break
-                    except Exception:
-                        # Device may be present but busy; leave for second pass
-                        pass
-            if self.bus_for_sht4x:
+        env_probe_order = [
+            "adafruit_sht41",
+            "pimoroni_bme280",
+            "adafruit_bme280",
+            "adafruit_bme680",
+            "pimoroni_bme68x",
+        ]
+
+        if self._inside_sensor:
+            env_probe_order = [self._inside_sensor]
+
+        for sensor in env_probe_order:
+            if sensor == "adafruit_sht41":
+                self._probe_sht4x(buses)
+            elif sensor == "pimoroni_bme280":
+                self._probe_pimoroni_bme280(buses)
+            elif sensor == "adafruit_bme280":
+                self._probe_adafruit_bme280(buses)
+            elif sensor == "adafruit_bme680":
+                self._probe_adafruit_bme680(buses)
+            elif sensor == "pimoroni_bme68x":
+                self._probe_bme68x(buses)
+
+            if self._inside_sensor and (
+                self.bus_for_sht4x
+                or self.bus_for_bme280
+                or self.bus_for_adafruit_bme280
+                or self.bus_for_adafruit_bme680
+                or self.bus_for_bme68x
+            ):
                 break
 
-        # BME280
-        if BME280 is not None:
-            for bus in buses:
-                for addr in ADDR_BME280:
-                    if safe_probe(bus, addr):
-                        try:
-                            dev = SMBus(bus)
-                            bme = BME280(i2c_dev=dev, i2c_addr=addr)
-                            # one read to ensure it initializes
-                            _ = bme.get_temperature()
-                            self._bme280 = bme
-                            self.bus_for_bme280 = (bus, addr)
-                            break
-                        except Exception:
-                            pass
-                if self._bme280 is not None:
-                    break
+        if self._inside_sensor and not (
+            self.bus_for_sht4x
+            or self.bus_for_bme280
+            or self.bus_for_adafruit_bme280
+            or self.bus_for_adafruit_bme680
+            or self.bus_for_bme68x
+        ):
+            logging.warning(
+                "INSIDE_SENSOR=%s was requested but no matching sensor was detected.",
+                self._inside_sensor,
+            )
 
         # LTR559
         if ltr559 is not None:
@@ -289,6 +453,96 @@ class SensorHub:
                 if self._imu is not None:
                     break
 
+    def _apply_env_metrics(
+        self,
+        out: Dict[str, float],
+        sources: Dict[str, str],
+        data: Dict[str, Optional[float]],
+        label: str,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        for key, value in data.items():
+            if value is None:
+                continue
+            if overwrite or key not in out:
+                out[key] = value
+                sources[key] = label
+
+    def _read_sht4x_env(self) -> Optional[Dict[str, float]]:
+        if self.bus_for_sht4x is None:
+            return None
+        bus, addr = self.bus_for_sht4x
+        try:
+            t, h = sht4x_read_temp_humidity(bus, addr)
+        except Exception:
+            return None
+        return {"temperature_c": t, "humidity_pct": h}
+
+    def _read_pimoroni_bme280_env(self) -> Optional[Dict[str, float]]:
+        if self._bme280 is None:
+            return None
+        try:
+            return {
+                "temperature_c": float(self._bme280.get_temperature()),
+                "humidity_pct": float(self._bme280.get_humidity()),
+                "pressure_hpa": float(self._bme280.get_pressure()),
+            }
+        except Exception:
+            return None
+
+    def _read_adafruit_bme280_env(self) -> Optional[Dict[str, float]]:
+        if self._adafruit_bme280 is None:
+            return None
+        dev = self._adafruit_bme280
+        try:
+            return {
+                "temperature_c": float(dev.temperature),
+                "humidity_pct": float(dev.humidity),
+                "pressure_hpa": float(dev.pressure),
+            }
+        except Exception:
+            return None
+
+    def _read_adafruit_bme680_env(self) -> Optional[Dict[str, float]]:
+        if self._adafruit_bme680 is None:
+            return None
+        dev = self._adafruit_bme680
+        try:
+            return {
+                "temperature_c": float(dev.temperature),
+                "humidity_pct": float(dev.humidity),
+                "pressure_hpa": float(dev.pressure),
+                "voc_ohms": float(getattr(dev, "gas", 0.0)),
+            }
+        except Exception:
+            return None
+
+    def _read_bme68x_env(self) -> Optional[Dict[str, float]]:
+        if self._bme68x is None:
+            return None
+        try:
+            data = self._bme68x.get_data()
+            if isinstance(data, (list, tuple)) and data:
+                sample = data[0]
+                return {
+                    "temperature_c": float(
+                        getattr(sample, "temperature", getattr(sample, "temp", 0.0))
+                    ),
+                    "humidity_pct": float(
+                        getattr(sample, "humidity", getattr(sample, "rh", 0.0))
+                    ),
+                    "pressure_hpa": float(
+                        getattr(sample, "pressure", getattr(sample, "press", 0.0))
+                    ),
+                    "voc_ohms": float(
+                        getattr(sample, "gas_resistance", getattr(sample, "gas_res", 0.0))
+                    ),
+                }
+        except Exception:
+            return None
+        return None
+
     def get_readings(self) -> Dict[str, float]:
         """
         Returns a dictionary with any available metrics.
@@ -300,41 +554,88 @@ class SensorHub:
         out: Dict[str, float] = {}
         sources: Dict[str, str] = {}
 
-        # Priority: SHT4x for temp/humidity (high accuracy), else BME280
-        # Temperature / Humidity
-        if self.bus_for_sht4x is not None:
-            bus, addr = self.bus_for_sht4x
+        # Environmental sensors (temperature / humidity / pressure / VOC)
+        if self._inside_sensor:
             try:
-                t, h = sht4x_read_temp_humidity(bus, addr)
-                out["temperature_c"] = t
-                out["humidity_pct"] = h
-                sources["temperature_c"] = f"SHT4x@{bus}:{hex(addr)}"
-                sources["humidity_pct"] = f"SHT4x@{bus}:{hex(addr)}"
+                if self._inside_sensor == "adafruit_sht41":
+                    data = self._read_sht4x_env()
+                    if data:
+                        bus, addr = self.bus_for_sht4x
+                        self._apply_env_metrics(
+                            out,
+                            sources,
+                            data,
+                            f"SHT4x@{bus}:{hex(addr)}",
+                            overwrite=True,
+                        )
+                elif self._inside_sensor == "pimoroni_bme280":
+                    data = self._read_pimoroni_bme280_env()
+                    if data:
+                        self._apply_env_metrics(
+                            out, sources, data, self._fmt_bme(), overwrite=True
+                        )
+                elif self._inside_sensor == "adafruit_bme280":
+                    data = self._read_adafruit_bme280_env()
+                    if data:
+                        bus, addr = self.bus_for_adafruit_bme280
+                        self._apply_env_metrics(
+                            out,
+                            sources,
+                            data,
+                            f"BME280@{bus}:{hex(addr)}",
+                            overwrite=True,
+                        )
+                elif self._inside_sensor == "adafruit_bme680":
+                    data = self._read_adafruit_bme680_env()
+                    if data:
+                        bus, addr = self.bus_for_adafruit_bme680
+                        self._apply_env_metrics(
+                            out,
+                            sources,
+                            data,
+                            f"BME680@{bus}:{hex(addr)}",
+                            overwrite=True,
+                        )
+                elif self._inside_sensor == "pimoroni_bme68x":
+                    data = self._read_bme68x_env()
+                    if data:
+                        bus, addr = self.bus_for_bme68x
+                        self._apply_env_metrics(
+                            out,
+                            sources,
+                            data,
+                            f"BME68x@{bus}:{hex(addr)}",
+                            overwrite=True,
+                        )
             except Exception:
-                # fall through to BME280 if available
                 pass
+        else:
+            # Priority: SHT4x for temp/humidity (high accuracy), else BME sensors
+            if self.bus_for_sht4x is not None:
+                try:
+                    data = self._read_sht4x_env()
+                    if data:
+                        bus, addr = self.bus_for_sht4x
+                        self._apply_env_metrics(
+                            out, sources, data, f"SHT4x@{bus}:{hex(addr)}"
+                        )
+                except Exception:
+                    pass
 
-        if ("temperature_c" not in out or "humidity_pct" not in out) and self._bme280 is not None:
-            try:
-                t = float(self._bme280.get_temperature())
-                h = float(self._bme280.get_humidity())  # %RH
-                out.setdefault("temperature_c", t)
-                out.setdefault("humidity_pct", h)
-                if "temperature_c" not in sources:
-                    sources["temperature_c"] = self._fmt_bme()
-                if "humidity_pct" not in sources:
-                    sources["humidity_pct"] = self._fmt_bme()
-            except Exception:
-                pass
-
-        # Pressure (BME280)
-        if self._bme280 is not None:
-            try:
-                p = float(self._bme280.get_pressure())  # hPa
-                out["pressure_hpa"] = p
-                sources["pressure_hpa"] = self._fmt_bme()
-            except Exception:
-                pass
+            for data, label in (
+                (self._read_pimoroni_bme280_env(), self._fmt_bme()),
+                (
+                    self._read_adafruit_bme280_env(),
+                    self._fmt_adafruit_bme280(),
+                ),
+                (
+                    self._read_adafruit_bme680_env(),
+                    self._fmt_adafruit_bme680(),
+                ),
+                (self._read_bme68x_env(), self._fmt_bme68x()),
+            ):
+                if data:
+                    self._apply_env_metrics(out, sources, data, label)
 
         # Light (LTR559)
         if self._ltr is not None:
@@ -396,6 +697,24 @@ class SensorHub:
             return "BME280@unknown"
         b, a = self.bus_for_bme280
         return f"BME280@{b}:{hex(a)}"
+
+    def _fmt_adafruit_bme280(self) -> str:
+        if self.bus_for_adafruit_bme280 is None:
+            return "BME280@unknown"
+        b, a = self.bus_for_adafruit_bme280
+        return f"BME280@{b}:{hex(a)}"
+
+    def _fmt_adafruit_bme680(self) -> str:
+        if self.bus_for_adafruit_bme680 is None:
+            return "BME680@unknown"
+        b, a = self.bus_for_adafruit_bme680
+        return f"BME680@{b}:{hex(a)}"
+
+    def _fmt_bme68x(self) -> str:
+        if self.bus_for_bme68x is None:
+            return "BME68x@unknown"
+        b, a = self.bus_for_bme68x
+        return f"BME68x@{b}:{hex(a)}"
 
 
 # ---- Rendering helpers -------------------------------------------------------

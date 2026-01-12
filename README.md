@@ -573,6 +573,19 @@ the standard rectangular HyperPixel boards commonly appear on bus `13`. If you
 omit the variable entirely the app will scan every detected bus but still prefer
 the HyperPixel candidates first.
 
+You can also explicitly declare the indoor sensor model with `INSIDE_SENSOR`.
+Supported values are:
+
+- `pimoroni_bme280`
+- `adafruit_bme280`
+- `pimoroni_bme680`
+- `pimoroni_bme68x`
+- `adafruit_bme680`
+- `adafruit_sht41`
+
+When set, the inside screens will only attempt to initialise the requested
+sensor type (other I2C peripherals such as LTR559/LSM6 are still detected).
+
 ### Admin service helper scripts
 
 Systemd helpers for `admin.py` live under `scripts/`:
