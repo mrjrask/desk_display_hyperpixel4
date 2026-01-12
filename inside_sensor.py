@@ -17,6 +17,13 @@ except Exception:
     adafruit_bme280 = None
 
 try:
+    from bme280 import BME280 as PimoroniBME280
+    from smbus2 import SMBus
+except Exception:
+    PimoroniBME280 = None
+    SMBus = None
+
+try:
     import adafruit_bme680
 except Exception:
     adafruit_bme680 = None
@@ -57,6 +64,29 @@ ADDR = {
 
 LIKELY_BUSES_DEFAULT = [15, 13, 14, 1, 0, 10]
 
+SUPPORTED_INSIDE_SENSORS = {
+    "pimoroni_bme280",
+    "adafruit_bme280",
+    "pimoroni_bme680",
+    "pimoroni_bme68x",
+    "adafruit_bme680",
+    "adafruit_sht41",
+}
+
+INSIDE_SENSOR_ALIASES = {
+    "bme280": "adafruit_bme280",
+    "pimoroni_bme280": "pimoroni_bme280",
+    "adafruit_bme280": "adafruit_bme280",
+    "pimoroni_bme680": "pimoroni_bme68x",
+    "pimoroni_bme68x": "pimoroni_bme68x",
+    "adafruit_bme680": "adafruit_bme680",
+    "bme680": "adafruit_bme680",
+    "sht41": "adafruit_sht41",
+    "adafruit_sht41": "adafruit_sht41",
+    "sht4x": "adafruit_sht41",
+    "adafruit_sht4x": "adafruit_sht41",
+}
+
 def _dedupe(seq):
     seen = set()
     out = []
@@ -92,7 +122,53 @@ def _any_known(addrs: List[int]) -> bool:
                 return True
     return False
 
+def _normalize_inside_sensor(raw_value: Optional[str]) -> Optional[str]:
+    if not raw_value:
+        return None
+    key = raw_value.strip().lower()
+    if not key:
+        return None
+    normalized = INSIDE_SENSOR_ALIASES.get(key, key)
+    if normalized not in SUPPORTED_INSIDE_SENSORS:
+        logging.warning(
+            "Unknown INSIDE_SENSOR value %r; supported values: %s",
+            raw_value,
+            ", ".join(sorted(SUPPORTED_INSIDE_SENSORS)),
+        )
+        return None
+    return normalized
+
 # --- Per-sensor init + read helpers ------------------------------------------
+def _init_pimoroni_bme280(bus: int):
+    if not (PimoroniBME280 and SMBus):
+        return None
+    for a in ADDR["BME280"]:
+        dev = None
+        i2c = None
+        try:
+            i2c = SMBus(bus)
+            dev = PimoroniBME280(i2c_dev=i2c, i2c_addr=a)
+            _ = dev.get_temperature()
+            return dev
+        except Exception:
+            try:
+                if dev is not None and hasattr(dev, "i2c_dev"):
+                    dev.i2c_dev.close()
+                elif i2c is not None:
+                    i2c.close()
+            except Exception:
+                pass
+    return None
+
+def _read_pimoroni_bme280(dev) -> Dict[str, Any]:
+    return {
+        "temperature_c": float(dev.get_temperature()),
+        "humidity_percent": float(dev.get_humidity()),
+        "pressure_hpa": float(dev.get_pressure()),
+        "gas_ohms": None,
+        "sensor_model": "BME280",
+    }
+
 def _init_bme280(bus: int):
     if not adafruit_bme280:
         return None
@@ -306,23 +382,48 @@ def read_all() -> Dict[str, Any]:
     # 3) try to init sensors on chosen bus
     results: Dict[str, Any] = {"bus": chosen, "scan_map": scan_map, "sensors": {}}
 
-    # Priority: environmental first (used by 'inside' screen)
-    bme68x_dev = _init_bme68x(chosen)
-    if bme68x_dev:
-        results["sensors"]["env_primary"] = _read_bme68x(bme68x_dev)
-    else:
-        bme680_dev = _init_bme680(chosen)
-        if bme680_dev:
-            results["sensors"]["env_primary"] = _read_bme680(bme680_dev)
+    inside_sensor = _normalize_inside_sensor(os.getenv("INSIDE_SENSOR"))
+    if inside_sensor:
+        init_read_map = {
+            "pimoroni_bme280": (_init_pimoroni_bme280, _read_pimoroni_bme280),
+            "adafruit_bme280": (_init_bme280, _read_bme280),
+            "pimoroni_bme68x": (_init_bme68x, _read_bme68x),
+            "adafruit_bme680": (_init_bme680, _read_bme680),
+            "adafruit_sht41": (_init_sht4x, _read_sht4x),
+        }
+        init_fn, read_fn = init_read_map[inside_sensor]
+        dev = init_fn(chosen)
+        if dev:
+            results["sensors"]["env_primary"] = read_fn(dev)
         else:
-            bme280_dev = _init_bme280(chosen)
-            if bme280_dev:
-                results["sensors"]["env_primary"] = _read_bme280(bme280_dev)
+            results["error"] = (
+                f"INSIDE_SENSOR={inside_sensor} was requested, but no matching "
+                f"device could be initialized on bus {chosen}."
+            )
+    else:
+        # Priority: environmental first (used by 'inside' screen)
+        bme68x_dev = _init_bme68x(chosen)
+        if bme68x_dev:
+            results["sensors"]["env_primary"] = _read_bme68x(bme68x_dev)
+        else:
+            bme680_dev = _init_bme680(chosen)
+            if bme680_dev:
+                results["sensors"]["env_primary"] = _read_bme680(bme680_dev)
+            else:
+                pimoroni_bme280_dev = _init_pimoroni_bme280(chosen)
+                if pimoroni_bme280_dev:
+                    results["sensors"]["env_primary"] = _read_pimoroni_bme280(
+                        pimoroni_bme280_dev
+                    )
+                else:
+                    bme280_dev = _init_bme280(chosen)
+                    if bme280_dev:
+                        results["sensors"]["env_primary"] = _read_bme280(bme280_dev)
 
-    # Secondary humidity-only candidate
-    sht4x_dev = _init_sht4x(chosen)
-    if sht4x_dev:
-        results["sensors"]["sht4x"] = _read_sht4x(sht4x_dev)
+        # Secondary humidity-only candidate
+        sht4x_dev = _init_sht4x(chosen)
+        if sht4x_dev:
+            results["sensors"]["sht4x"] = _read_sht4x(sht4x_dev)
 
     # Light/proximity (Multi-Sensor Stick)
     ltr = _init_ltr559(chosen)
