@@ -291,12 +291,16 @@ def _section_column_layout(sections: Sequence[Iterable[dict]]) -> tuple[dict[str
 
 
 def _wildcard_sort_key(team: dict) -> tuple:
+    abbr = str(team.get("abbr", ""))
+    wildcard_sequence = _normalize_int(team.get("wildcardSequence"))
+    if wildcard_sequence > 0:
+        return (0, wildcard_sequence, abbr)
+
     points = _normalize_int(team.get("points"))
     regulation_wins = _normalize_int(team.get("regulationWins"))
     row_wins = _normalize_int(team.get("regulationPlusOvertimeWins"))
     games_played = _normalize_int(team.get("gamesPlayed"))
-    abbr = str(team.get("abbr", ""))
-    return (-points, -regulation_wins, -row_wins, games_played, abbr)
+    return (1, -points, -regulation_wins, -row_wins, games_played, abbr)
 
 
 def _sort_wildcard_teams(teams: Iterable[dict]) -> List[dict]:
@@ -321,7 +325,7 @@ def _build_wildcard_sections(
     sections: List[tuple[str, List[dict], Optional[int]]] = []
     top_abbrs: set[str] = set()
     for division in divisions:
-        teams = standings.get(division, [])
+        teams = sorted(standings.get(division, []), key=_division_sort_key)
         top_three = teams[:3]
         if not top_three:
             continue
@@ -471,14 +475,18 @@ def _normalize_int(value) -> int:
         return 0
 
 
-def _division_sort_key(team: dict) -> tuple[int, int, int, int, str]:
+def _division_sort_key(team: dict) -> tuple:
+    division_sequence = _normalize_int(team.get("divisionSequence"))
+    abbr = str(team.get("abbr", ""))
+    if division_sequence > 0:
+        return (0, division_sequence, abbr)
+
     points = _normalize_int(team.get("points"))
     regulation_wins = _normalize_int(team.get("regulationWins"))
     row_wins = _normalize_int(team.get("regulationPlusOvertimeWins"))
     rank = _normalize_int(team.get("_rank", 99)) or 99
-    abbr = str(team.get("abbr", ""))
     # Sort by points, regulation wins, and regulation+overtime wins (all desc), then fallback rank and abbr.
-    return (-points, -regulation_wins, -row_wins, rank, abbr)
+    return (1, -points, -regulation_wins, -row_wins, rank, abbr)
 
 
 def _normalize_conference_name(name: object) -> str:
@@ -611,6 +619,8 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
             team_info = team_record.get("team", {}) or {}
             abbr = _team_abbreviation(team_info)
             record_info = team_record.get("leagueRecord", {}) or {}
+            division_sequence = _extract_sequence(team_record, DIVISION_SEQUENCE_KEYS)
+            wildcard_sequence = _extract_sequence(team_record, WILDCARD_SEQUENCE_KEYS)
             parsed.append(
                 {
                     "abbr": abbr,
@@ -626,6 +636,8 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
                         else team_record.get("row")
                     ),
                     "points": _normalize_int(team_record.get("points")),
+                    "divisionSequence": division_sequence,
+                    "wildcardSequence": wildcard_sequence,
                     "_rank": _normalize_int(team_record.get("conferenceRank"))
                     or _normalize_int(team_record.get("divisionRank")),
                 }
@@ -685,6 +697,12 @@ def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list
             games_played = _extract_stat(row, ("gamesPlayed", "gp"))
             regulation_wins = _extract_stat(row, ("regulationWins", "rw"))
             row_wins = _extract_stat(row, ("regulationPlusOvertimeWins", "row"))
+            division_sequence = _extract_sequence(row, DIVISION_SEQUENCE_KEYS) or _extract_sequence(
+                team_info, DIVISION_SEQUENCE_KEYS
+            )
+            wildcard_sequence = _extract_sequence(row, WILDCARD_SEQUENCE_KEYS) or _extract_sequence(
+                team_info, WILDCARD_SEQUENCE_KEYS
+            )
 
             team_entry = {
                 "abbr": abbr,
@@ -696,6 +714,8 @@ def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list
                 "regulationWins": regulation_wins,
                 "regulationPlusOvertimeWins": row_wins,
                 "points": points,
+                "divisionSequence": division_sequence,
+                "wildcardSequence": wildcard_sequence,
                 "_rank": _extract_rank(row),
             }
 
@@ -747,6 +767,12 @@ def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]
         games_played = _extract_stat(node, ("gamesPlayed", "gp"))
         regulation_wins = _extract_stat(node, ("regulationWins", "rw"))
         row_wins = _extract_stat(node, ("regulationPlusOvertimeWins", "row"))
+        division_sequence = _extract_sequence(node, DIVISION_SEQUENCE_KEYS) or _extract_sequence(
+            team_info, DIVISION_SEQUENCE_KEYS
+        )
+        wildcard_sequence = _extract_sequence(node, WILDCARD_SEQUENCE_KEYS) or _extract_sequence(
+            team_info, WILDCARD_SEQUENCE_KEYS
+        )
 
         key = (conference_name, division_name, abbr)
         if key in seen:
@@ -763,6 +789,8 @@ def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]
             "regulationWins": regulation_wins,
             "regulationPlusOvertimeWins": row_wins,
             "points": points,
+            "divisionSequence": division_sequence,
+            "wildcardSequence": wildcard_sequence,
             "_rank": _extract_rank(node),
         }
 
@@ -817,6 +845,32 @@ def _coerce_int(value: Any) -> Optional[int]:
             if result is not None:
                 return result
     return None
+
+
+DIVISION_SEQUENCE_KEYS = (
+    "divisionSequence",
+    "divisionSeq",
+    "divisionSequenceNumber",
+    "division_sequence",
+    "divisionOrder",
+)
+WILDCARD_SEQUENCE_KEYS = (
+    "wildcardSequence",
+    "wildCardSequence",
+    "wildcardSeq",
+    "wildCardSeq",
+    "wildcard_sequence",
+)
+
+
+def _extract_sequence(row: dict, keys: Iterable[str]) -> int:
+    if not isinstance(row, dict):
+        return 0
+    for key in keys:
+        value = _coerce_int(row.get(key))
+        if value is not None:
+            return value
+    return 0
 
 
 def _extract_stat(row: dict, names: Iterable[str]) -> int:
@@ -1498,8 +1552,8 @@ def _build_overview_sections_v2(
         return []
 
     first_division, second_division = division_order[:2]
-    first_top = conference.get(first_division, [])[:3]
-    second_top = conference.get(second_division, [])[:3]
+    first_top = sorted(conference.get(first_division, []), key=_division_sort_key)[:3]
+    second_top = sorted(conference.get(second_division, []), key=_division_sort_key)[:3]
     top_abbrs = {
         team.get("abbr")
         for team in [*first_top, *second_top]
@@ -1687,7 +1741,7 @@ def draw_nhl_standings_overview_v2_west(display, transition: bool = True) -> Ren
         display.image(img)
         return ScreenImage(img, displayed=True)
 
-    base, row_positions = _prepare_overview(divisions, OVERVIEW_TITLE_WEST)
+    base, row_positions = _prepare_overview_horizontal(divisions, OVERVIEW_TITLE_WEST)
     final_img, _ = _compose_overview_image(base, row_positions)
 
     clear_display(display)
@@ -1712,7 +1766,7 @@ def draw_nhl_standings_overview_v2_east(display, transition: bool = True) -> Ren
         display.image(img)
         return ScreenImage(img, displayed=True)
 
-    base, row_positions = _prepare_overview(divisions, OVERVIEW_TITLE_EAST)
+    base, row_positions = _prepare_overview_horizontal(divisions, OVERVIEW_TITLE_EAST)
     final_img, _ = _compose_overview_image(base, row_positions)
 
     clear_display(display)
