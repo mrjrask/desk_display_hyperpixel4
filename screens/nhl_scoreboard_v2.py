@@ -836,7 +836,11 @@ def _statsapi_available() -> bool:
             proto=socket.IPPROTO_TCP,
         )
     except socket.gaierror as exc:
-        logging.warning("NHL statsapi DNS lookup failed: %s", exc)
+        logging.info(
+            "NHL statsapi DNS lookup failed; suppressing retries for %ss: %s",
+            _DNS_RETRY_INTERVAL,
+            exc,
+        )
         _dns_block_until = now + _DNS_RETRY_INTERVAL
         return False
     except Exception as exc:  # defensive guard against unexpected errors
@@ -850,7 +854,7 @@ def _statsapi_available() -> bool:
 
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
     if not _statsapi_available():
-        logging.info("Using api-web NHL scoreboard endpoint for %s (statsapi DNS failure)", day)
+        logging.debug("Using api-web NHL scoreboard endpoint for %s (statsapi DNS failure)", day)
         return _fetch_games_api_web(day)
 
     stats_url = (
