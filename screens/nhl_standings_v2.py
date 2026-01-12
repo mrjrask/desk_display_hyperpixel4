@@ -291,14 +291,12 @@ def _section_column_layout(sections: Sequence[Iterable[dict]]) -> tuple[dict[str
 
 
 def _wildcard_sort_key(team: dict) -> tuple:
-    rank = team.get("_rank")
-    if isinstance(rank, int) and rank > 0:
-        return (0, rank)
     points = _normalize_int(team.get("points"))
     regulation_wins = _normalize_int(team.get("regulationWins"))
-    wins = _normalize_int(team.get("wins"))
+    row_wins = _normalize_int(team.get("regulationPlusOvertimeWins"))
     games_played = _normalize_int(team.get("gamesPlayed"))
-    return (1, -points, -regulation_wins, -wins, games_played)
+    abbr = str(team.get("abbr", ""))
+    return (-points, -regulation_wins, -row_wins, games_played, abbr)
 
 
 def _sort_wildcard_teams(teams: Iterable[dict]) -> List[dict]:
@@ -475,12 +473,12 @@ def _normalize_int(value) -> int:
 
 def _division_sort_key(team: dict) -> tuple[int, int, int, int, str]:
     points = _normalize_int(team.get("points"))
-    wins = _normalize_int(team.get("wins"))
-    ot = _normalize_int(team.get("ot"))
+    regulation_wins = _normalize_int(team.get("regulationWins"))
+    row_wins = _normalize_int(team.get("regulationPlusOvertimeWins"))
     rank = _normalize_int(team.get("_rank", 99)) or 99
     abbr = str(team.get("abbr", ""))
-    # Sort by points (desc), wins (desc), overtime losses (asc), then fallback rank and abbr.
-    return (-points, -wins, ot, rank, abbr)
+    # Sort by points, regulation wins, and regulation+overtime wins (all desc), then fallback rank and abbr.
+    return (-points, -regulation_wins, -row_wins, rank, abbr)
 
 
 def _normalize_conference_name(name: object) -> str:
@@ -622,6 +620,11 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
                     "ot": _normalize_int(record_info.get("ot")),
                     "gamesPlayed": _normalize_int(team_record.get("gamesPlayed")),
                     "regulationWins": _normalize_int(team_record.get("regulationWins")),
+                    "regulationPlusOvertimeWins": _normalize_int(
+                        team_record.get("regulationPlusOvertimeWins")
+                        if team_record.get("regulationPlusOvertimeWins") is not None
+                        else team_record.get("row")
+                    ),
                     "points": _normalize_int(team_record.get("points")),
                     "_rank": _normalize_int(team_record.get("conferenceRank"))
                     or _normalize_int(team_record.get("divisionRank")),
@@ -681,6 +684,7 @@ def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list
             points = _extract_stat(row, ("points", "pts"))
             games_played = _extract_stat(row, ("gamesPlayed", "gp"))
             regulation_wins = _extract_stat(row, ("regulationWins", "rw"))
+            row_wins = _extract_stat(row, ("regulationPlusOvertimeWins", "row"))
 
             team_entry = {
                 "abbr": abbr,
@@ -690,6 +694,7 @@ def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list
                 "ot": ot,
                 "gamesPlayed": games_played,
                 "regulationWins": regulation_wins,
+                "regulationPlusOvertimeWins": row_wins,
                 "points": points,
                 "_rank": _extract_rank(row),
             }
@@ -741,6 +746,7 @@ def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]
         points = _extract_stat(node, ("points", "pts"))
         games_played = _extract_stat(node, ("gamesPlayed", "gp"))
         regulation_wins = _extract_stat(node, ("regulationWins", "rw"))
+        row_wins = _extract_stat(node, ("regulationPlusOvertimeWins", "row"))
 
         key = (conference_name, division_name, abbr)
         if key in seen:
@@ -755,6 +761,7 @@ def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]
             "ot": ot,
             "gamesPlayed": games_played,
             "regulationWins": regulation_wins,
+            "regulationPlusOvertimeWins": row_wins,
             "points": points,
             "_rank": _extract_rank(node),
         }
