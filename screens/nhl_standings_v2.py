@@ -327,7 +327,7 @@ def _build_wildcard_sections(
         top_three = teams[:3]
         if not top_three:
             continue
-        sections.append((f"{division} Division", top_three, None))
+        sections.append((f"{division} Leaders", top_three, None))
         top_abbrs.update(team.get("abbr") for team in top_three if team.get("abbr"))
 
     remaining = [
