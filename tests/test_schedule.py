@@ -123,17 +123,23 @@ def test_invalid_configuration_shapes():
         build_scheduler(
             {"screens": {"date": {"frequency": 1, "alt": {"screen": "travel"}}}}
         )
-    with pytest.raises(ValueError):
-        build_scheduler(
-            {
-                "screens": {
-                    "date": {
-                        "frequency": 1,
-                        "alt": {"screen": "travel", "frequency": 0},
-                    }
-                }
+
+
+def test_zero_alternate_frequency_ignores_alternate():
+    config = {
+        "screens": {
+            "date": {
+                "frequency": 1,
+                "alt": {"screen": "travel", "frequency": 0},
             }
-        )
+        }
+    }
+    scheduler = build_scheduler(config)
+    assert scheduler.requested_ids == {"date"}
+
+    registry = make_registry({"date": True, "travel": True})
+    sequence = [scheduler.next_available(registry).id for _ in range(4)]
+    assert sequence == ["date", "date", "date", "date"]
 
 
 def test_zero_frequency_entries_are_skipped():

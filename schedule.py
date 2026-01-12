@@ -86,6 +86,10 @@ class ScreenScheduler:
                         # interval while keeping ``0`` as an "always show" value.
                         entry.cooldown = max(entry.frequency, 0)
                         return alt_def
+                    if entry.alternate.screen_ids:
+                        entry.alternate.current_index = (
+                            entry.alternate.current_index + 1
+                        ) % len(entry.alternate.screen_ids)
 
             definition = registry.get(candidate_id)
             if definition and definition.available:
@@ -191,11 +195,12 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
                     raise ValueError(
                         f"Alternate frequency for '{screen_id}' must be an integer"
                     ) from exc
-                if alt_frequency_int <= 0:
+                if alt_frequency_int < 0:
                     raise ValueError(
-                        f"Alternate frequency for '{screen_id}' must be greater than zero"
+                        f"Alternate frequency for '{screen_id}' cannot be negative"
                     )
-                alternate = _AlternateSchedule(alt_screen_ids, alt_frequency_int)
+                if alt_frequency_int > 0:
+                    alternate = _AlternateSchedule(alt_screen_ids, alt_frequency_int)
         else:
             try:
                 frequency = int(raw)
