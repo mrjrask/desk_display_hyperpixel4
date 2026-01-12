@@ -146,6 +146,8 @@ class Display:
         self._pygame_present_thread: Optional[threading.Thread] = None
         self._pygame_present_stop = threading.Event()
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
+        self._sdl_video_driver: Optional[str] = None
+        self._relative_mouse_enabled = False
 
         preferred_backend = DISPLAY_BACKEND
         if preferred_backend not in {"auto", "pygame"}:
@@ -234,6 +236,22 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
+        driver = self._sdl_video_driver
+        if driver is None:
+            try:
+                driver = pygame.display.get_driver()
+            except Exception:  # pragma: no cover - optional dependency
+                driver = None
+
+        if driver in {"wayland", "x11"}:
+            try:
+                if hasattr(pygame.mouse, "set_relative"):
+                    pygame.mouse.set_relative(True)
+                    self._relative_mouse_enabled = True
+                pygame.mouse.set_visible(False)
+            except Exception:  # pragma: no cover - optional dependency
+                pass
+
     def hide_mouse_cursor(self) -> None:
         """Public wrapper to hide the cursor when a mouse is connected."""
 
@@ -249,6 +267,15 @@ class Display:
             pygame.mouse.set_visible(True)
         except Exception:  # pragma: no cover - optional dependency
             pass
+
+        if self._relative_mouse_enabled:
+            try:
+                if hasattr(pygame.mouse, "set_relative"):
+                    pygame.mouse.set_relative(False)
+                self._relative_mouse_enabled = False
+                pygame.event.set_grab(False)
+            except Exception:  # pragma: no cover - optional dependency
+                pass
 
         try:
             if hasattr(pygame, "SYSTEM_CURSOR_ARROW"):
@@ -340,6 +367,10 @@ class Display:
                 pygame.display.set_caption("Desk Display")
             except Exception:  # pragma: no cover - optional dependency
                 pass
+            try:
+                self._sdl_video_driver = pygame.display.get_driver()
+            except Exception:  # pragma: no cover - optional dependency
+                self._sdl_video_driver = selected_driver
             self._hide_mouse_cursor()
             try:
                 surface.fill((0, 0, 0))
