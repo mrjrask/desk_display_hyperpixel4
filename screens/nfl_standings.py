@@ -26,6 +26,7 @@ from config import (
     SCOREBOARD_SCROLL_PAUSE_TOP,
     SCOREBOARD_SCROLL_PAUSE_BOTTOM,
     SCOREBOARD_BACKGROUND_COLOR,
+    NFL_LOGO_ALIASES,
 )
 from services.http_client import get_session
 from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call, draw_persistent_time, fit_font
@@ -325,6 +326,18 @@ def _load_logo_for_height(
     cache_key = key.upper()
     if cache_key in cache:
         return cache[cache_key]
+
+    alias = NFL_LOGO_ALIASES.get(cache_key)
+    if alias:
+        path = os.path.join(LOGO_DIR, f"{alias}.png")
+        if os.path.exists(path):
+            try:
+                logo = load_team_logo(LOGO_DIR, alias, height=height)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logging.debug("NFL logo load failed for %s: %s", alias, exc)
+                logo = None
+            cache[cache_key] = logo
+            return logo
 
     candidates = [cache_key, cache_key.lower(), cache_key.title()]
     for candidate in candidates:
