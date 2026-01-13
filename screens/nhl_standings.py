@@ -500,7 +500,7 @@ def _statsapi_available() -> bool:
     try:
         socket.getaddrinfo(STATSAPI_HOST, None)
     except socket.gaierror as exc:
-        logging.info(
+        logging.debug(
             "NHL statsapi DNS lookup failed; suppressing retries for %ss: %s",
             _DNS_RETRY_INTERVAL,
             exc,
