@@ -3,13 +3,18 @@
 Interactive tester for individual screen modules.
 """
 import os, re, sys, time, ast, importlib.util, inspect
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCREENS_DIR = PROJECT_ROOT / "screens"
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from config import SCREEN_DELAY
 import utils
 
 def load_display():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    main_path  = os.path.join(script_dir, "main.py")
-    namespace  = {"__file__": main_path}
+    main_path = PROJECT_ROOT / "main.py"
+    namespace = {"__file__": str(main_path)}
     with open(main_path, "r") as f:
         src = f.read()
     guard = src.find("if __name__")
@@ -18,15 +23,15 @@ def load_display():
     exec(compile(src, main_path, "exec"), namespace)
     return namespace.get("display"), namespace
 
-def list_screens(script_dir, namespace):
+def list_screens(screens_dir, namespace):
     screens = []
     # scroll logos
     screens.append({"name":"scroll_all_logos","type":"scroll"})
-    for fname in sorted(os.listdir(script_dir)):
+    for fname in sorted(os.listdir(screens_dir)):
         if not (fname.endswith(".py") and (fname.startswith("draw_") or fname == "mlb_scoreboard.py")):
             continue
         mod = os.path.splitext(fname)[0]
-        path= os.path.join(script_dir,fname)
+        path= os.path.join(screens_dir,fname)
         try:
             tree=ast.parse(open(path).read())
         except:
@@ -53,9 +58,8 @@ def invoke_screen(entry, display, namespace):
                 utils.clear_display(display)
         return
 
-    script_dir=os.path.dirname(os.path.abspath(__file__))
     fname=entry["module"]+".py"
-    spec=importlib.util.spec_from_file_location(entry["module"],os.path.join(script_dir,fname))
+    spec=importlib.util.spec_from_file_location(entry["module"],os.path.join(SCREENS_DIR,fname))
     module=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     fns=[]
@@ -88,10 +92,9 @@ def invoke_screen(entry, display, namespace):
         utils.clear_display(display)
 
 def main():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
     display, namespace = load_display()
     while True:
-        screens=list_screens(script_dir,namespace)
+        screens=list_screens(str(SCREENS_DIR),namespace)
         if not screens:
             print("No screens found."); sys.exit(1)
         print("\nAvailable screens:")

@@ -230,7 +230,16 @@ desk_display_hyperpixel4/
 ├─ screens_catalog.py
 ├─ screens_config.json
 ├─ utils.py
-├─ scripts_2_text.py
+├─ tools/
+│  ├─ scripts_2_text.py
+│  ├─ test_screens.py
+│  └─ maintenance/
+│     ├─ cleanup.sh
+│     ├─ diagnose_apt.sh
+│     ├─ diagnose_weather.py
+│     ├─ fix_apt_sources.sh
+│     ├─ render_all_screens.py
+│     └─ reset_screenshots.sh
 ├─ services/
 │  ├─ __init__.py
 │  ├─ http_client.py              # shared requests.Session + NHL headers
@@ -505,10 +514,10 @@ python3 main.py
 
 ### Render all screens
 
-Use `render_all_screens.py` to produce screenshots for every available screen:
+Use `tools/maintenance/render_all_screens.py` to produce screenshots for every available screen:
 
 ```bash
-python3 render_all_screens.py --all
+python3 tools/maintenance/render_all_screens.py --all
 ```
 
 Available flags:
@@ -541,7 +550,7 @@ Environment=INSIDE_SENSOR_I2C_BUS=15
 SupplementaryGroups=video render input gpio i2c spi
 ExecStartPre=/home/pi/desk_display_hyperpixel4/scripts/wait_and_export_display_env.sh
 ExecStart=/home/pi/desk_display_hyperpixel4/venv/bin/python /home/pi/desk_display_hyperpixel4/main.py
-ExecStop=/bin/bash -lc '/home/pi/desk_display_hyperpixel4/cleanup.sh'
+ExecStop=/bin/bash -lc '/home/pi/desk_display_hyperpixel4/tools/maintenance/cleanup.sh'
 Restart=always
 RestartSec=3
 
@@ -564,7 +573,7 @@ cleanup helper is executable. Make sure to create the venv first and grant execu
 ```bash
 python -m venv /home/pi/desk_display_hyperpixel4/venv
 /home/pi/desk_display_hyperpixel4/venv/bin/pip install -r /home/pi/desk_display_hyperpixel4/requirements.txt
-chmod +x /home/pi/desk_display_hyperpixel4/cleanup.sh
+chmod +x /home/pi/desk_display_hyperpixel4/tools/maintenance/cleanup.sh
 ```
 
 `INSIDE_SENSOR_I2C_BUS` is optional; set it to match the `/dev/i2c-*` bus number
@@ -608,7 +617,7 @@ For example, to run the admin service on port `8081` under a different install r
 ADMIN_PORT=8081 INSTALL_USER=display ./scripts/install_admin_service.sh
 ```
 
-`ExecStop` runs `cleanup.sh` on every shutdown so the LCD blanks immediately and any lingering screenshots or videos are swept
+`ExecStop` runs `tools/maintenance/cleanup.sh` on every shutdown so the LCD blanks immediately and any lingering screenshots or videos are swept
 into the archive folders. The service is marked `Restart=always`, so crashes or manual restarts via `systemctl restart` will
 trigger a fresh boot after cleanup completes.
 
@@ -619,7 +628,7 @@ Systemd stops when a referenced `EnvironmentFile` is missing; either create the 
 ### Display HAT Mini controls
 
 - **X button:** skips the remainder of the current screen and moves on immediately.
-- **Y button:** requests a `systemctl restart desk_display.service`, which stops the service, runs `cleanup.sh`, and starts a
+- **Y button:** requests a `systemctl restart desk_display.service`, which stops the service, runs `tools/maintenance/cleanup.sh`, and starts a
   fresh process.
 - **A/B buttons:** currently unused but logged when pressed so you can build new shortcuts.
 

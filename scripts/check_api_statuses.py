@@ -88,7 +88,7 @@ def build_checks() -> List[Dict[str, object]]:
                     "team": wk_team_id,
                     "service": wk_service_id,
                 },
-                "skip": "Requires private key; validate via diagnose_weather.py",
+                "skip": "Requires private key; validate via tools/maintenance/diagnose_weather.py",
             }
         )
     else:

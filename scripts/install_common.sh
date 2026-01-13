@@ -105,8 +105,8 @@ create_virtualenv() {
 }
 
 prepare_scripts() {
-  ${SUDO} chmod +x "${INSTALL_DIR}/cleanup.sh"
-  ${SUDO} chmod +x "${INSTALL_DIR}/reset_screenshots.sh"
+  ${SUDO} chmod +x "${INSTALL_DIR}/tools/maintenance/cleanup.sh"
+  ${SUDO} chmod +x "${INSTALL_DIR}/tools/maintenance/reset_screenshots.sh"
   ${SUDO} chmod +x "${INSTALL_DIR}/scripts/wait_and_export_display_env.sh"
 }
 
@@ -127,7 +127,7 @@ Environment=INSIDE_SENSOR_I2C_BUS=15
 SupplementaryGroups=video render input gpio i2c spi
 ExecStartPre=${INSTALL_DIR}/scripts/wait_and_export_display_env.sh
 ExecStart=${VENV_PATH}/bin/python ${INSTALL_DIR}/main.py
-ExecStop=/bin/bash -lc '${INSTALL_DIR}/cleanup.sh'
+ExecStop=/bin/bash -lc '${INSTALL_DIR}/tools/maintenance/cleanup.sh'
 Restart=always
 RestartSec=3
 

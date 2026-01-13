@@ -14,8 +14,9 @@ from typing import Dict, Iterable, Optional, Set, Tuple
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env", override=False)
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from PIL import Image, ImageDraw
 
@@ -42,7 +43,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH, CONFIG_LOCAL_PATH = resolve_config_paths()
 CONFIG_PATH = str(CONFIG_PATH)
 CONFIG_LOCAL_PATH = str(CONFIG_LOCAL_PATH)
-IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
+IMAGES_DIR = os.path.join(str(PROJECT_ROOT), "images")
 
 _storage_paths = resolve_storage_paths(logger=logging.getLogger(__name__))
 ARCHIVE_DIR = str(_storage_paths.archive_base)
