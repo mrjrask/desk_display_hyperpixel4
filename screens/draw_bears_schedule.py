@@ -8,7 +8,7 @@ Shows the next Chicago Bears game with:
     or 'vs.' if the Bears are home.
   - Between those and the bottom line, a row of logos: AWAY @ HOME, each logo
     auto-sized similarly to the Hawks schedule screen.
-  - Bottom line with week/date/time (no spaces around the dash).
+  - Two-line footer with week/date above the gametime.
 """
 
 import datetime
@@ -65,7 +65,7 @@ def show_bears_next_game(display, transition=False):
         else:
             away_ab, home_ab, loc_sym = opp_ab, bears_ab, "@"
 
-        # Bottom line text — **no spaces around the dash**
+        # Bottom line text — week/date above gametime
         wk = game["week"]
         try:
             dt0 = datetime.datetime.strptime(game["date"], "%a, %b %d, %Y")
@@ -78,11 +78,12 @@ def show_bears_next_game(display, transition=False):
                 date_txt = game["date"]
         t_txt = game["time"].strip()
         week_text = wk.replace("0.", "Pre")
-        bottom = f"{date_txt} {t_txt}"
-        bw, bh = draw.textsize(bottom, font=config.FONT_DATE_SPORTS)
-        ww, wh = draw.textsize(week_text, font=config.FONT_DATE_SPORTS)
-        bottom_y = config.HEIGHT - bh - BEARS_BOTTOM_MARGIN  # keep on-screen
-        week_y = bottom_y - wh - 2
+        week_line = f"{week_text} {date_txt}".strip()
+        time_line = t_txt
+        time_w, time_h = draw.textsize(time_line, font=config.FONT_DATE_SPORTS)
+        week_w, week_h = draw.textsize(week_line, font=config.FONT_DATE_SPORTS)
+        time_y = config.HEIGHT - time_h - BEARS_BOTTOM_MARGIN  # keep on-screen
+        week_y = time_y - week_h - 2
 
         horizontal_padding = max(12, int(round(config.WIDTH * 0.02)))
         vertical_padding = max(4, int(round(config.HEIGHT * 0.01)))
@@ -200,10 +201,10 @@ def show_bears_next_game(display, transition=False):
                 x += w_sy + spacing
 
         # Draw bottom text
-        draw.text(((config.WIDTH - ww)//2, week_y),
-                  week_text, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
-        draw.text(((config.WIDTH - bw)//2, bottom_y),
-                  bottom, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+        draw.text(((config.WIDTH - week_w)//2, week_y),
+                  week_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+        draw.text(((config.WIDTH - time_w)//2, time_y),
+                  time_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
 
     if transition:
         return img
