@@ -78,6 +78,7 @@ ScreenImage = None
 animate_fade_in = None
 clear_display = None
 draw_text_centered = None
+clone_font = None
 resume_display_updates = None
 suspend_display_updates = None
 temporary_display_led = None
@@ -123,7 +124,7 @@ def _configure_logging() -> None:
 
 def _import_runtime_dependencies() -> None:
     global Image, ImageDraw, Display, ScreenImage, animate_fade_in, clear_display
-    global draw_text_centered, resume_display_updates, suspend_display_updates
+    global draw_text_centered, clone_font, resume_display_updates, suspend_display_updates
     global temporary_display_led, toggle_brightness, data_fetch, wifi_utils
     global resolve_storage_paths, resolve_config_paths, active_config_path
     global draw_date, draw_time
@@ -161,6 +162,7 @@ def _import_runtime_dependencies() -> None:
         animate_fade_in,
         clear_display,
         draw_text_centered,
+        clone_font,
         resume_display_updates,
         suspend_display_updates,
         temporary_display_led,
@@ -995,7 +997,46 @@ cache = {
     "sox":     {"stand":None, "last":None, "live":None, "next":None, "next_home":None},
 }
 
+_weather_fetched_at: Optional[datetime.datetime] = None
+_screen_image_cache: Dict[str, Dict[str, object]] = {}
+_last_wifi_state: str = "ok"
+_outage_live_games: bool = False
+
+WEATHER_CURRENT_TTL = datetime.timedelta(minutes=20)
+WEATHER_HOURLY_TTL = datetime.timedelta(hours=1)
+
+SCOREBOARD_SCREEN_IDS = {
+    "NFL Scoreboard",
+    "NFL Scoreboard v2",
+    "MLB Scoreboard",
+    "MLB Scoreboard v2",
+    "MLB Scoreboard v3",
+    "NBA Scoreboard",
+    "NBA Scoreboard v2",
+    "NHL Scoreboard",
+    "NHL Scoreboard v2",
+}
+
+LIVE_SENSITIVE_SCREEN_IDS = {
+    *SCOREBOARD_SCREEN_IDS,
+    "hawks live",
+    "bulls live",
+    "cubs live",
+    "sox live",
+}
+
 def refresh_all():
+    global _weather_fetched_at
+
+    if ENABLE_WIFI_MONITOR and wifi_utils:
+        wifi_state, _ = wifi_utils.get_wifi_state()
+        if wifi_state != "ok":
+            logging.info(
+                "🔄 Skipping data refresh during Wi-Fi outage (%s).",
+                wifi_state,
+            )
+            return
+
     feeds = required_feeds(_requested_screen_ids)
     if not feeds:
         logging.info("🔄 Skipping data refresh; no feeds requested.")
@@ -1004,7 +1045,10 @@ def refresh_all():
     logging.info("🔄 Refreshing data feeds: %s", ", ".join(sorted(feeds)))
 
     if "weather" in feeds:
-        cache["weather"] = data_fetch.fetch_weather()
+        weather = data_fetch.fetch_weather()
+        if weather is not None:
+            cache["weather"] = weather
+            _weather_fetched_at = datetime.datetime.now(CENTRAL_TIME)
 
     if "bears" in feeds:
         cache["bears"].update({"stand": data_fetch.fetch_bears_standings()})
@@ -1054,12 +1098,83 @@ def _background_refresh() -> None:
         if _shutdown_event.wait(SCHEDULE_UPDATE_INTERVAL):
             break
 
+
+def _is_fresh(timestamp: Optional[datetime.datetime], ttl: datetime.timedelta, now: datetime.datetime) -> bool:
+    if not timestamp:
+        return False
+    return now - timestamp <= ttl
+
+
+def _detect_live_games() -> bool:
+    for team in ("hawks", "bulls", "cubs", "sox"):
+        if (cache.get(team) or {}).get("live"):
+            return True
+    return False
+
+
+def _format_last_connected_time(last_connected: Optional[datetime.datetime]) -> str:
+    if not last_connected:
+        return "Last connected: unknown"
+    stamp = last_connected.strftime("%b %d %I:%M %p")
+    stamp = stamp.lstrip("0").replace(" 0", " ")
+    return f"Last connected: {stamp}"
+
+
+def _render_wifi_status_screen(wifi_state: str, wifi_ssid: Optional[str]) -> Image.Image:
+    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    d = ImageDraw.Draw(img)
+    small_font = clone_font(FONT_DATE_SPORTS, 22)
+    last_connected = None
+    if ENABLE_WIFI_MONITOR and wifi_utils:
+        last_connected = wifi_utils.get_last_connected_time()
+    last_connected_text = _format_last_connected_time(last_connected)
+
+    if wifi_state == "no_wifi":
+        draw_text_centered(d, "No Wi-Fi.", FONT_DATE_SPORTS, y_offset=-12, fill=(255, 0, 0))
+        draw_text_centered(d, last_connected_text, small_font, y_offset=22, fill=(255, 255, 0))
+    else:
+        draw_text_centered(d, "Wi-Fi ok.", FONT_DATE_SPORTS, y_offset=-34, fill=(255, 255, 0))
+        draw_text_centered(d, wifi_ssid or "", small_font, y_offset=-8, fill=(255, 255, 0))
+        draw_text_centered(d, "No internet.", FONT_DATE_SPORTS, y_offset=16, fill=(255, 0, 0))
+        draw_text_centered(d, last_connected_text, small_font, y_offset=44, fill=(255, 255, 0))
+
+    return img
+
+
+def _apply_outage_rules(
+    registry: Dict[str, ScreenDefinition],
+    now: datetime.datetime,
+    *,
+    outage_live_games: bool,
+) -> None:
+    weather_current_ok = _is_fresh(_weather_fetched_at, WEATHER_CURRENT_TTL, now)
+    weather_hourly_ok = _is_fresh(_weather_fetched_at, WEATHER_HOURLY_TTL, now)
+
+    for key in ("weather1", "weather2"):
+        if key in registry:
+            registry[key].available = registry[key].available and weather_current_ok
+
+    for key in ("weather hourly", "weather radar"):
+        if key in registry:
+            registry[key].available = registry[key].available and weather_hourly_ok
+
+    if outage_live_games:
+        for key in LIVE_SENSITIVE_SCREEN_IDS:
+            if key in registry:
+                registry[key].available = False
+
+    for key in SCOREBOARD_SCREEN_IDS:
+        if key in registry:
+            has_cache = bool(_screen_image_cache.get(key, {}).get("image"))
+            registry[key].available = registry[key].available and has_cache and not outage_live_games
+
 # ─── Main loop ───────────────────────────────────────────────────────────────
 loop_count = 0
 _travel_schedule_state: Optional[str] = None
 
 def main_loop():
     global loop_count, _travel_schedule_state, _last_screen_id, _skip_request_pending
+    global _last_wifi_state, _outage_live_games
 
     if not _initialized:
         _initialize_runtime()
@@ -1083,32 +1198,31 @@ def main_loop():
             else:
                 wifi_state, wifi_ssid = ("ok", None)
 
-            if ENABLE_WIFI_MONITOR and wifi_state != "ok":
-                img = Image.new("RGB", (WIDTH, HEIGHT), "black")
-                d   = ImageDraw.Draw(img)
-                if wifi_state == "no_wifi":
-                    draw_text_centered(d, "No Wi-Fi.", FONT_DATE_SPORTS, fill=(255,0,0))
-                else:
-                    draw_text_centered(d, "Wi-Fi ok.",     FONT_DATE_SPORTS, y_offset=-12, fill=(255,255,0))
-                    draw_text_centered(d, wifi_ssid or "", FONT_DATE_SPORTS, fill=(255,255,0))
-                    draw_text_centered(d, "No internet.",  FONT_DATE_SPORTS, y_offset=12,  fill=(255,0,0))
+            outage_active = ENABLE_WIFI_MONITOR and wifi_state != "ok"
+            if outage_active and _last_wifi_state == "ok":
+                _outage_live_games = _detect_live_games()
+                logging.info(
+                    "📡 Wi-Fi outage detected (%s); live_games=%s",
+                    wifi_state,
+                    _outage_live_games,
+                )
+            if not outage_active and _last_wifi_state != "ok":
+                _outage_live_games = False
+                logging.info("📡 Wi-Fi restored; resuming live data updates.")
+
+            _last_wifi_state = wifi_state
+
+            if outage_active:
+                img = _render_wifi_status_screen(wifi_state, wifi_ssid)
                 display.image(img)
                 display.show()
 
                 if _shutdown_event.is_set():
                     break
 
-                if not _wait_with_button_checks(SCREEN_DELAY):
-                    for fn in (draw_date, draw_time):
-                        img2 = fn(display, transition=True)
-                        animate_fade_in(display, img2, steps=15, delay=0.02, easing=True)
-                        if _shutdown_event.is_set():
-                            break
-                        if _wait_with_button_checks(SCREEN_DELAY):
-                            break
-
-                gc.collect()
-                continue
+                if _wait_with_button_checks(SCREEN_DELAY):
+                    gc.collect()
+                    continue
 
             if screen_scheduler is None:
                 logging.warning(
@@ -1123,6 +1237,7 @@ def main_loop():
 
             travel_requested = "travel" in _requested_screen_ids
             resolved_overrides = _resolved_screen_overrides()
+            now = datetime.datetime.now(CENTRAL_TIME)
             context = ScreenContext(
                 display=display,
                 cache=cache,
@@ -1133,11 +1248,14 @@ def main_loop():
                 travel_active=is_travel_screen_active(),
                 travel_window=get_travel_active_window(),
                 previous_travel_state=_travel_schedule_state,
-                now=datetime.datetime.now(CENTRAL_TIME),
+                now=now,
                 overrides=resolved_overrides,
             )
             registry, metadata = build_screen_registry(context)
             _travel_schedule_state = metadata.get("travel_state", _travel_schedule_state)
+
+            if outage_active:
+                _apply_outage_rules(registry, now, outage_live_games=_outage_live_games)
 
             entry = _next_screen_from_registry(registry)
             if entry is None:
@@ -1156,16 +1274,23 @@ def main_loop():
             loop_count += 1
             logging.info("🎬 Presenting '%s' (iteration %d)", sid, loop_count)
 
-            try:
-                result = entry.render()
-            except Exception as exc:
-                logging.error(f"Error in screen '{sid}': {exc}")
-                gc.collect()
-                if _shutdown_event.is_set():
-                    break
-                if _wait_with_button_checks(SCREEN_DELAY):
+            cached_image = None
+            if outage_active and sid in SCOREBOARD_SCREEN_IDS:
+                cached_image = _screen_image_cache.get(sid, {}).get("image")
+
+            if isinstance(cached_image, Image.Image):
+                result = ScreenImage(image=cached_image.copy(), displayed=False)
+            else:
+                try:
+                    result = entry.render()
+                except Exception as exc:
+                    logging.error(f"Error in screen '{sid}': {exc}")
+                    gc.collect()
+                    if _shutdown_event.is_set():
+                        break
+                    if _wait_with_button_checks(SCREEN_DELAY):
+                        continue
                     continue
-                continue
 
             if result is None:
                 logging.info("Screen '%s' returned no image.", sid)
@@ -1185,6 +1310,12 @@ def main_loop():
                 led_override = result.led_override
             elif isinstance(result, Image.Image):
                 img = result
+
+            if isinstance(img, Image.Image) and sid in SCOREBOARD_SCREEN_IDS:
+                _screen_image_cache[sid] = {
+                    "image": img.copy(),
+                    "rendered_at": datetime.datetime.now(CENTRAL_TIME),
+                }
 
             skip_delay = False
             led_context = (
