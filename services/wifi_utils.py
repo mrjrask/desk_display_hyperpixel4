@@ -23,12 +23,14 @@ RETRY_INTERVAL = 60  # seconds between recovery attempts
 # Allow a couple of transient failures before declaring Wi-Fi down. This helps
 # avoid spurious "No Wifi" reports when the network hiccups.
 MAX_FAILS = 3  # failures before triggering recovery
+RECOVERY_DOWN_UP_DELAY = 20  # seconds between down/up operations during recovery
 
 
 # ─── Module globals ───────────────────────────────────────────────────────────
 
 wifi_status = "no_wifi"  # one of "no_wifi", "no_internet", "ok"
 current_ssid: Optional[str] = None
+_last_connected_at: Optional[datetime.datetime] = None
 
 _STATE_LOCK = threading.Lock()
 _STOP_EVENT = threading.Event()
@@ -398,12 +400,36 @@ def _disable_powersave(iface: str) -> None:
 
 
 def _cycle_wifi(iface: str) -> None:
+    if shutil.which("rfkill"):
+        _system_log("Action: rfkill_unblock_wifi")
+        try:
+            _run_command(["rfkill", "unblock", "wifi"])
+        except Exception as exc:
+            _LOGGER.debug("rfkill unblock failed: %s", exc)
+    else:
+        _LOGGER.debug("rfkill not available; skipping rfkill recovery step")
+
+    if shutil.which("nmcli"):
+        _system_log("Action: nmcli_radio_wifi_off")
+        try:
+            _run_command(["nmcli", "radio", "wifi", "off"])
+        except Exception as exc:
+            _LOGGER.debug("nmcli radio wifi off failed: %s", exc)
+        time.sleep(RECOVERY_DOWN_UP_DELAY)
+        _system_log("Action: nmcli_radio_wifi_on")
+        try:
+            _run_command(["nmcli", "radio", "wifi", "on"])
+        except Exception as exc:
+            _LOGGER.debug("nmcli radio wifi on failed: %s", exc)
+    else:
+        _LOGGER.debug("nmcli not available; skipping nmcli recovery step")
+
     _system_log(f"Action: cycle_wifi iface={iface} step=down")
     try:
         _run_command(["ip", "link", "set", iface, "down"])
     except Exception as exc:
         _LOGGER.debug("Failed to bring %s down: %s", iface, exc)
-    time.sleep(2)
+    time.sleep(RECOVERY_DOWN_UP_DELAY)
     _system_log(f"Action: cycle_wifi iface={iface} step=up")
     try:
         _run_command(["ip", "link", "set", iface, "up"])
@@ -418,10 +444,12 @@ def _cycle_wifi(iface: str) -> None:
 
 
 def _update_state(state: str, ssid: Optional[str]) -> None:
-    global wifi_status, current_ssid
+    global wifi_status, current_ssid, _last_connected_at
     with _STATE_LOCK:
         wifi_status = state
         current_ssid = ssid
+        if state == "ok":
+            _last_connected_at = datetime.datetime.now()
 
 
 def _sleep_with_stop(seconds: float) -> bool:
@@ -552,6 +580,13 @@ def get_wifi_state() -> Tuple[str, Optional[str]]:
 
     with _STATE_LOCK:
         return wifi_status, current_ssid
+
+
+def get_last_connected_time() -> Optional[datetime.datetime]:
+    """Return the most recent time Wi-Fi/internet was available."""
+
+    with _STATE_LOCK:
+        return _last_connected_at
 
 
 def stop_monitor(timeout: Optional[float] = 5.0) -> None:
