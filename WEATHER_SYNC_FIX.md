@@ -16,7 +16,7 @@ If your Pis detect different SSIDs (or one fails to detect), they'll fetch weath
 Run this on **both** Raspberry Pis:
 ```bash
 cd /home/user/desk_display_hyperpixel4
-python3 diagnose_weather.py
+python3 tools/maintenance/diagnose_weather.py
 ```
 
 Compare the output from both Pis:
@@ -95,7 +95,7 @@ After applying a fix:
 
 3. **Run diagnostic again**:
    ```bash
-   python3 diagnose_weather.py
+   python3 tools/maintenance/diagnose_weather.py
    ```
 
 4. **Wait 10 minutes** for both to refresh (weather updates every 10 minutes)

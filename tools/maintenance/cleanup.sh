@@ -4,13 +4,14 @@ IFS=$'\n\t'
 
 echo "⏱  Running cleanup at $(date +%Y%m%d_%H%M%S)…"
 
-# Work from the repo root (script directory)
-dir="$(cd -- "$(dirname "$0")" && pwd)"
-cd "$dir"
+# Work from the repo root (two levels up from tools/maintenance)
+script_dir="$(cd -- "$(dirname "$0")" && pwd)"
+repo_dir="$(cd -- "${script_dir}/../.." && pwd)"
+cd "$repo_dir"
 
 # Defaults (can be overridden via env)
-SCREENSHOTS_DIR="${SCREENSHOTS_DIR:-${dir}/screenshots}"
-ARCHIVE_ROOT="${ARCHIVE_ROOT:-${dir}/screenshot_archive}"
+SCREENSHOTS_DIR="${SCREENSHOTS_DIR:-${repo_dir}/screenshots}"
+ARCHIVE_ROOT="${ARCHIVE_ROOT:-${repo_dir}/screenshot_archive}"
 ARCHIVE_DEFAULT_FOLDER="${ARCHIVE_DEFAULT_FOLDER:-_unsorted}"
 
 # --- 1) Clear the display (only when safe) ---

@@ -6,6 +6,7 @@ Run this on both Pis and compare the output.
 import subprocess
 import os
 import sys
+from pathlib import Path
 
 print("=" * 60)
 print("WEATHER SYNC DIAGNOSTIC TOOL")
@@ -65,7 +66,8 @@ print()
 print("4. Testing Weather Fetch:")
 print("-" * 40)
 try:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    project_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(project_root))
     from data_fetch import fetch_weather
 
     weather = fetch_weather()

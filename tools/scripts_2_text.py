@@ -2,12 +2,15 @@
 
 import os
 import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
 def list_script_files():
     # Get all .py and .sh files excluding this script and files starting with '._'
     current_script = os.path.basename(__file__)
     script_files = [
-        f for f in os.listdir('.')
+        f for f in os.listdir(ROOT_DIR)
         if (f.endswith('.py') or f.endswith('.sh'))
            and not f.startswith('._')
            and f != current_script
@@ -32,21 +35,23 @@ def prompt_selection(files):
 
 def get_output_filename(default_name):
     filename = default_name
-    while os.path.exists(filename):
+    output_path = ROOT_DIR / filename
+    while output_path.exists():
         filename = input(f"File '{filename}' already exists. Enter a new filename (with .txt): ").strip()
+        output_path = ROOT_DIR / filename
     return filename
 
 def process_single_file(filename):
     base, _ = os.path.splitext(filename)
     txt_filename = get_output_filename(f"{base}.txt")
-    with open(filename, 'r', encoding='utf-8') as src, \
-         open(txt_filename, 'w', encoding='utf-8', newline='\n') as dst:
+    with open(ROOT_DIR / filename, 'r', encoding='utf-8') as src, \
+         open(ROOT_DIR / txt_filename, 'w', encoding='utf-8', newline='\n') as dst:
         dst.write(src.read())
     print(f"Created '{txt_filename}'")
 
 def process_all_files(files):
     output_filename = get_output_filename('combined_scripts.txt')
-    with open(output_filename, 'w', encoding='utf-8', newline='\n') as dst:
+    with open(ROOT_DIR / output_filename, 'w', encoding='utf-8', newline='\n') as dst:
         # Write the list of filenames
         dst.write("Files included:\n")
         for f in files:
@@ -56,7 +61,7 @@ def process_all_files(files):
         for idx, f in enumerate(files):
             base, _ = os.path.splitext(f)
             dst.write(f"{f}:\n")
-            with open(f, 'r', encoding='utf-8') as src:
+            with open(ROOT_DIR / f, 'r', encoding='utf-8') as src:
                 dst.write(src.read())
             if idx < len(files) - 1:
                 dst.write("\n\n\n")  # 3 newlines between files

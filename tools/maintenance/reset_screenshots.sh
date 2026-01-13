@@ -7,11 +7,12 @@ set -Eeuo pipefail
 
 # Resolve the absolute directory of this script (works with symlinks)
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)"
+REPO_DIR="$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd -P)"
 
 # Target directories (inside the script's directory)
 TARGETS=(
-  "$SCRIPT_DIR/screenshots"
-  "$SCRIPT_DIR/screenshot_archive"
+  "$REPO_DIR/screenshots"
+  "$REPO_DIR/screenshot_archive"
 )
 
 # Safety check to refuse obviously dangerous deletions
@@ -21,14 +22,14 @@ refuse_dangerous_path() {
     echo "❌ Refusing to operate on dangerous path: '$path'"
     exit 1
   fi
-  # Ensure the path is within the script directory
+  # Ensure the path is within the repo root
   case "$path" in
-    "$SCRIPT_DIR"/*) : ;; # ok
-    *) echo "❌ Refusing to operate outside script directory: '$path'"; exit 1 ;;
+    "$REPO_DIR"/*) : ;; # ok
+    *) echo "❌ Refusing to operate outside repo directory: '$path'"; exit 1 ;;
   esac
 }
 
-echo "📂 Working in: $SCRIPT_DIR"
+echo "📂 Working in: $REPO_DIR"
 
 for dir in "${TARGETS[@]}"; do
   refuse_dangerous_path "$dir"
