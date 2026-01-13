@@ -192,9 +192,8 @@ def _import_runtime_dependencies() -> None:
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH, CONFIG_LOCAL_PATH = resolve_config_paths()
-CONFIG_PATH = str(CONFIG_PATH)
-CONFIG_LOCAL_PATH = str(CONFIG_LOCAL_PATH)
+CONFIG_PATH = ""
+CONFIG_LOCAL_PATH = ""
 SCREEN_OVERRIDES_PATH = os.path.join(SCRIPT_DIR, "screen_overrides.json")
 
 _storage_paths = None
@@ -232,7 +231,7 @@ def _initialize_runtime() -> None:
     """Perform runtime-only initialization for the display service."""
 
     global _storage_paths, SCREENSHOT_DIR, CURRENT_SCREENSHOT_DIR, SCREENSHOT_ARCHIVE_BASE
-    global display, LOGOS, _initialized
+    global display, LOGOS, _initialized, CONFIG_PATH, CONFIG_LOCAL_PATH
 
     if _initialized:
         return
@@ -240,6 +239,10 @@ def _initialize_runtime() -> None:
     _prepare_runtime_dir()
     _configure_logging()
     _import_runtime_dependencies()
+
+    config_path, config_local_path = resolve_config_paths()
+    CONFIG_PATH = str(config_path)
+    CONFIG_LOCAL_PATH = str(config_local_path)
 
     _storage_paths = resolve_storage_paths(logger=logging.getLogger("storage"))
     SCREENSHOT_DIR = str(_storage_paths.screenshot_dir)
