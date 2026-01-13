@@ -85,6 +85,7 @@ toggle_brightness = None
 data_fetch = None
 wifi_utils = None
 resolve_storage_paths = None
+resolve_config_paths = None
 draw_date = None
 draw_time = None
 nixie_frame = None
@@ -123,7 +124,8 @@ def _import_runtime_dependencies() -> None:
     global Image, ImageDraw, Display, ScreenImage, animate_fade_in, clear_display
     global draw_text_centered, resume_display_updates, suspend_display_updates
     global temporary_display_led, toggle_brightness, data_fetch, wifi_utils
-    global resolve_storage_paths, draw_date, draw_time, nixie_frame, ScreenContext
+    global resolve_storage_paths, resolve_config_paths, draw_date, draw_time
+    global nixie_frame, ScreenContext
     global ScreenDefinition, build_screen_registry, ScreenScheduler, build_scheduler
     global load_schedule_config, build_logo_map, ResolvedScreenOverride
     global load_screen_overrides, resolve_overrides_for_profile, required_feeds
