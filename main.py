@@ -276,6 +276,7 @@ def _initialize_runtime() -> None:
     _initialized = True
 
 BUTTON_POLL_INTERVAL = 0.1
+TOUCHSCREEN_POLL_INTERVAL = 0.25
 _BUTTON_NAMES = ("A", "B", "X", "Y")
 _BUTTON_STATE = {name: False for name in _BUTTON_NAMES}
 _manual_skip_event = threading.Event()
@@ -565,6 +566,10 @@ def _monitor_touchscreen() -> None:
     except ImportError:
         logging.debug("evdev not available; touchscreen monitor exiting")
         return
+    try:
+        from select import select
+    except Exception:
+        select = None
 
     _touch_device = _find_touchscreen_device()
     if _touch_device is None:
@@ -650,10 +655,14 @@ def _monitor_touchscreen() -> None:
 
         while not _shutdown_event.is_set():
             try:
+                if select is not None:
+                    readable, _, _ = select([_touch_device], [], [], TOUCHSCREEN_POLL_INTERVAL)
+                    if not readable:
+                        continue
+
                 # Set a timeout so we can check shutdown event periodically
                 event = _touch_device.read_one()
                 if event is None:
-                    time.sleep(0.01)
                     continue
 
                 # Track touch position
@@ -692,7 +701,7 @@ def _monitor_touchscreen() -> None:
                 if _shutdown_event.is_set():
                     break
                 logging.debug("Touchscreen monitor loop error: %s", exc)
-                time.sleep(0.1)
+                time.sleep(TOUCHSCREEN_POLL_INTERVAL)
 
     except Exception as exc:
         logging.warning("Touchscreen monitor failed: %s", exc)
