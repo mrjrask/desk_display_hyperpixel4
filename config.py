@@ -788,6 +788,10 @@ SCOREBOARD_NAME_FONT_RATIO = 0.45
 SCOREBOARD_NAME_FONT_MIN_SIZE_FALLBACK = 20
 SCOREBOARD_NAME_FONT_RATIO_FALLBACK = 0.32
 
+# Shared scoreboard logo sizing (team logos and league logos reference this).
+SCOREBOARD_LOGO_HEIGHT = scale_y(150)
+SCOREBOARD_LOGO_HEIGHT_COMPACT = scale_y(114)
+
 # Persistent time display (upper left corner)
 PERSISTENT_TIME_ENABLED = True
 PERSISTENT_TIME_FONT_SIZE = _font_pixels("shared", "persistent_time", 6)
