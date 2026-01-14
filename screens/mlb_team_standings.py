@@ -177,15 +177,22 @@ def draw_standings_screen1(
     logo = None
     try:
         logo_img = Image.open(logo_path).convert("RGBA")
-        ratio = LOGO_SZ / logo_img.height
-        logo = logo_img.resize((int(logo_img.width * ratio), LOGO_SZ), Image.ANTIALIAS)
+        ratio = min(LOGO_SZ / logo_img.width, LOGO_SZ / logo_img.height)
+        logo = logo_img.resize(
+            (
+                max(1, int(round(logo_img.width * ratio))),
+                max(1, int(round(logo_img.height * ratio))),
+            ),
+            Image.ANTIALIAS,
+        )
     except Exception:
         pass
     if logo:
         x0 = (WIDTH - logo.width) // 2
-        img.paste(logo, (x0, 0), logo)
+        y0 = (LOGO_SZ - logo.height) // 2
+        img.paste(logo, (x0, max(0, y0)), logo)
 
-    text_top = (logo.height if logo else 0) + MARGIN
+    text_top = LOGO_SZ + MARGIN
     bottom_limit = HEIGHT - MARGIN
 
     # W/L
@@ -325,12 +332,20 @@ def draw_standings_screen2(
     logo = None
     try:
         logo_img = Image.open(logo_path).convert("RGBA")
-        logo = logo_img.resize((LOGO_SZ, LOGO_SZ), Image.ANTIALIAS)
+        ratio = min(LOGO_SZ / logo_img.width, LOGO_SZ / logo_img.height)
+        logo = logo_img.resize(
+            (
+                max(1, int(round(logo_img.width * ratio))),
+                max(1, int(round(logo_img.height * ratio))),
+            ),
+            Image.ANTIALIAS,
+        )
     except Exception:
         pass
     if logo:
-        x0 = (WIDTH - LOGO_SZ) // 2
-        img.paste(logo, (x0, 0), logo)
+        x0 = (WIDTH - LOGO_SZ) // 2 + (LOGO_SZ - logo.width) // 2
+        y0 = (LOGO_SZ - logo.height) // 2
+        img.paste(logo, (x0, max(0, y0)), logo)
 
     text_top = LOGO_SZ + MARGIN
     bottom_limit = HEIGHT - MARGIN
