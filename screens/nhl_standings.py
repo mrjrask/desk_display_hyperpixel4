@@ -113,7 +113,7 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _CONFERENCE_LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
-_OVERVIEW_LOGO_CACHE: dict[tuple[str, int], Optional[Image.Image]] = {}
+_OVERVIEW_LOGO_CACHE: dict[tuple[str, int, int], Optional[Image.Image]] = {}
 
 STATSAPI_HOST = "statsapi.web.nhl.com"
 _DNS_RETRY_INTERVAL = 600  # seconds
@@ -293,22 +293,41 @@ def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
     return None
 
 
-def _load_overview_logo(abbr: str, height: int) -> Optional[Image.Image]:
+def _load_overview_logo(abbr: str, box_width: int, box_height: int) -> Optional[Image.Image]:
     abbr_key = (abbr or "").strip().upper()
-    if not abbr_key or height <= 0:
+    if not abbr_key or box_height <= 0 or box_width <= 0:
         return None
 
-    cache_key = (abbr_key, height)
+    cache_key = (abbr_key, box_width, box_height)
     if cache_key in _OVERVIEW_LOGO_CACHE:
         return _OVERVIEW_LOGO_CACHE[cache_key]
 
     try:
         from utils import load_team_logo
 
-        logo = load_team_logo(LOGO_DIR, abbr_key, height=height)
-        logo = _constrain_logo_width(logo, height)
+        logo = load_team_logo(LOGO_DIR, abbr_key, height=box_height)
+        if logo:
+            ratio = min(box_width / logo.width, box_height / logo.height)
+            resized = logo.resize(
+                (
+                    max(1, int(round(logo.width * ratio))),
+                    max(1, int(round(logo.height * ratio))),
+                ),
+                Image.ANTIALIAS,
+            )
+            boxed = Image.new("RGBA", (box_width, box_height), (0, 0, 0, 0))
+            x0 = (box_width - resized.width) // 2
+            y0 = (box_height - resized.height) // 2
+            boxed.paste(resized, (x0, y0), resized)
+            logo = boxed
     except Exception as exc:  # pragma: no cover - defensive guard
-        logging.debug("NHL overview logo load failed for %s@%s: %s", abbr_key, height, exc)
+        logging.debug(
+            "NHL overview logo load failed for %s@%sx%s: %s",
+            abbr_key,
+            box_width,
+            box_height,
+            exc,
+        )
         logo = None
 
     _OVERVIEW_LOGO_CACHE[cache_key] = logo
@@ -1074,7 +1093,7 @@ Placement = Tuple[str, Image.Image, int, int]
 def _overview_layout(
     divisions: Sequence[tuple[str, List[dict]]],
     title: str,
-) -> tuple[Image.Image, List[float], float, float, int, int]:
+) -> tuple[Image.Image, List[float], float, float, int, int, int]:
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
@@ -1112,7 +1131,7 @@ def _overview_layout(
     )
     logo_target_height = max(6, logo_target_height)
 
-    return base, col_centers, logos_top, cell_height, logo_target_height, max_rows
+    return base, col_centers, logos_top, cell_height, logo_target_height, max_rows, logo_width_limit
 
 
 def _overview_logo_position(
@@ -1130,12 +1149,16 @@ def _overview_logo_position(
     return x0, y0
 
 
-def _overview_logo_height(base_height: int, is_leader: bool) -> int:
+def _overview_logo_height(base_height: int, is_leader: bool, logo_width_limit: int) -> int:
     target = base_height
     if is_leader:
         scale = OVERVIEW_LEADER_LOGO_SQUARE_SCALE if IS_SQUARE_DISPLAY else OVERVIEW_LEADER_LOGO_RECT_SCALE
         target = int(round(base_height * scale))
-    target = min(OVERVIEW_MAX_LOGO_HEIGHT, max(OVERVIEW_MIN_LOGO_HEIGHT, target))
+    target = min(
+        OVERVIEW_MAX_LOGO_HEIGHT,
+        max(OVERVIEW_MIN_LOGO_HEIGHT, target),
+        logo_width_limit,
+    )
     return max(6, target)
 
 
@@ -1146,6 +1169,7 @@ def _build_overview_rows(
     cell_height: float,
     logo_height: int,
     max_rows: int,
+    logo_width_limit: int,
 ) -> List[List[Placement]]:
     rows: List[List[Placement]] = [[] for _ in range(max_rows)]
 
@@ -1155,8 +1179,12 @@ def _build_overview_rows(
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
                 continue
-            target_height = _overview_logo_height(logo_height, is_leader=row_idx == 0)
-            logo = _load_overview_logo(abbr, target_height)
+            target_height = _overview_logo_height(
+                logo_height,
+                is_leader=row_idx == 0,
+                logo_width_limit=logo_width_limit,
+            )
+            logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
                 continue
             x0, y0 = _overview_logo_position(col_idx, row_idx, col_centers, logos_top, cell_height, logo)
@@ -1260,11 +1288,19 @@ def _prepare_overview(
     divisions: List[tuple[str, List[dict]]],
     title: str,
 ) -> tuple[Image.Image, List[List[Placement]]]:
-    base, col_centers, logos_top, cell_height, logo_height, max_rows = _overview_layout(
+    base, col_centers, logos_top, cell_height, logo_height, max_rows, logo_width_limit = _overview_layout(
         divisions,
         title,
     )
-    row_positions = _build_overview_rows(divisions, col_centers, logos_top, cell_height, logo_height, max_rows)
+    row_positions = _build_overview_rows(
+        divisions,
+        col_centers,
+        logos_top,
+        cell_height,
+        logo_height,
+        max_rows,
+        logo_width_limit,
+    )
     return base, row_positions
 
 
