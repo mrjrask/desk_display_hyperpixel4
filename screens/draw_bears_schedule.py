@@ -31,19 +31,24 @@ def show_bears_next_game(display, transition=False):
     img   = Image.new("RGB", (config.WIDTH, config.HEIGHT), "black")
     draw  = ImageDraw.Draw(img)
 
-    # Title
-    tw, th = draw.textsize(title, font=config.FONT_TITLE_SPORTS)
-    draw.text(((config.WIDTH - tw)//2, 0), title,
-              font=config.FONT_TITLE_SPORTS, fill=(255,255,255))
-
     if game:
+        name_line = game.get("name", title)
+        date_time_line = f"{game.get('date', '').strip()} {game.get('time', '').strip()}".strip()
+
+        name_w, name_h = draw.textsize(name_line, font=config.FONT_TITLE_SPORTS)
+        date_w, date_h = draw.textsize(date_time_line, font=config.FONT_DATE_SPORTS)
+        draw.text(((config.WIDTH - name_w)//2, 0), name_line,
+                  font=config.FONT_TITLE_SPORTS, fill=(255,255,255))
+        draw.text(((config.WIDTH - date_w)//2, name_h + 2), date_time_line,
+                  font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+
         opp = game["opponent"]
         ha  = game["home_away"].lower()
         prefix = "@" if ha=="away" else "vs."
 
         # Opponent text (up to 2 lines)
         lines  = wrap_text(f"{prefix} {opp}", config.FONT_TEAM_SPORTS, config.WIDTH)[:2]
-        y_txt  = th + 4
+        y_txt  = name_h + date_h + 6
         for ln in lines:
             w_ln, h_ln = draw.textsize(ln, font=config.FONT_TEAM_SPORTS)
             draw.text(((config.WIDTH - w_ln)//2, y_txt),
@@ -188,10 +193,14 @@ def show_bears_next_game(display, transition=False):
                 x += w_sy + spacing
 
         # Draw bottom text
-        draw.text(((config.WIDTH - name_w)//2, name_y),
-                  name_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
-        draw.text(((config.WIDTH - date_w)//2, date_y),
-                  date_time_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+        draw.text(((config.WIDTH - week_w)//2, week_y),
+                  week_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+        draw.text(((config.WIDTH - time_w)//2, time_y),
+                  time_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+    else:
+        tw, th = draw.textsize(title, font=config.FONT_TITLE_SPORTS)
+        draw.text(((config.WIDTH - tw)//2, 0), title,
+                  font=config.FONT_TITLE_SPORTS, fill=(255,255,255))
 
     if transition:
         return img
