@@ -1141,24 +1141,22 @@ def _opponent_from_summary(summary: str):
     lowered = summary.lower()
     if "bulls" not in lowered:
         return None, None
-    vs_match = re.split(r"(?i)\bvs\.?\b", summary, maxsplit=1)
-    if len(vs_match) == 2:
-        left, right = vs_match
-        if "bulls" in left.lower():
-            return right.strip(), True
-        if "bulls" in right.lower():
-            return left.strip(), False
-    at_match = re.split(r"(?i)\s@\s|(?i)\bat\b", summary, maxsplit=1)
-    if len(at_match) == 2:
-        left, right = at_match
-        if "bulls" in left.lower():
-            return right.strip(), False
-        if "bulls" in right.lower():
-            return left.strip(), True
-    parts = [piece.strip() for piece in re.split(r"[-–]|\s+", summary) if piece.strip()]
+    for pattern in (r"(?i)\bvs\.?\b|\bv\.?\b", r"(?i)\s@\s|(?i)\bat\b", r"\s[-–—]\s"):
+        match = re.split(pattern, summary, maxsplit=1)
+        if len(match) == 2:
+            left, right = match
+            if "bulls" in left.lower():
+                return right.strip(), True
+            if "bulls" in right.lower():
+                return left.strip(), False
+
+    parts = [piece.strip() for piece in re.split(r"[-–—]|\s+", summary) if piece.strip()]
     for part in parts:
-        if "bulls" not in part.lower():
-            return part, None
+        if "bulls" in part.lower():
+            continue
+        alias = _lookup_nba_team_alias(part)
+        if alias and alias[1] != _BULLS_TEAM_ID:
+            return alias[2], None
     return None, None
 
 

@@ -100,3 +100,23 @@ END:VCALENDAR
     assert start.hour == 19
     assert start.tzinfo
     assert start.astimezone(data_fetch.CENTRAL_TIME).hour == 19
+
+
+def test_parse_bulls_ics_handles_dash_separator():
+    feed = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Chicago Bulls - Cleveland Cavaliers
+DTSTART;TZID=America/Chicago:20241008T193000
+LOCATION:United Center
+END:VEVENT
+END:VCALENDAR
+"""
+
+    events = data_fetch._parse_bulls_ics(feed)
+    assert len(events) == 1
+
+    game = data_fetch._ics_event_to_game(events[0])
+    assert game
+
+    assert game["teams"]["home"]["team"]["id"] == str(data_fetch.NBA_TEAM_ID)
+    assert game["teams"]["away"]["team"]["triCode"] == "CLE"
