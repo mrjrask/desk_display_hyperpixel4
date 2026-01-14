@@ -12,6 +12,7 @@ Changes:
 - Keep archived screenshots sorted and grouped the same way they are saved
   under screenshots/.
 """
+from __future__ import annotations
 import warnings
 from gpiozero.exc import PinFactoryFallback, NativePinFactoryFallback
 
