@@ -1001,6 +1001,7 @@ cache = {
 _weather_fetched_at: Optional[datetime.datetime] = None
 _screen_image_cache: Dict[str, Dict[str, object]] = {}
 _last_wifi_state: str = "ok"
+_wifi_status_ready: bool = False
 _outage_live_games: bool = False
 
 WEATHER_CURRENT_TTL = datetime.timedelta(minutes=20)
@@ -1031,7 +1032,7 @@ def refresh_all():
 
     if ENABLE_WIFI_MONITOR and wifi_utils:
         wifi_state, _ = wifi_utils.get_wifi_state()
-        if wifi_state != "ok":
+        if wifi_state not in ("ok", "unknown"):
             logging.info(
                 "🔄 Skipping data refresh during Wi-Fi outage (%s).",
                 wifi_state,
@@ -1175,7 +1176,7 @@ _travel_schedule_state: Optional[str] = None
 
 def main_loop():
     global loop_count, _travel_schedule_state, _last_screen_id, _skip_request_pending
-    global _last_wifi_state, _outage_live_games
+    global _last_wifi_state, _outage_live_games, _wifi_status_ready
 
     if not _initialized:
         _initialize_runtime()
@@ -1196,10 +1197,19 @@ def main_loop():
             # Wi-Fi outage handling
             if ENABLE_WIFI_MONITOR:
                 wifi_state, wifi_ssid = wifi_utils.get_wifi_state()
+                if wifi_state == "unknown":
+                    wifi_state, wifi_ssid = ("ok", None)
+                else:
+                    _wifi_status_ready = True
             else:
                 wifi_state, wifi_ssid = ("ok", None)
+                _wifi_status_ready = True
 
-            outage_active = ENABLE_WIFI_MONITOR and wifi_state != "ok"
+            outage_active = (
+                ENABLE_WIFI_MONITOR
+                and _wifi_status_ready
+                and wifi_state != "ok"
+            )
             if outage_active and _last_wifi_state == "ok":
                 _outage_live_games = _detect_live_games()
                 logging.info(

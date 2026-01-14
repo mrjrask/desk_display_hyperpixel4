@@ -28,7 +28,7 @@ RECOVERY_DOWN_UP_DELAY = 20  # seconds between down/up operations during recover
 
 # ─── Module globals ───────────────────────────────────────────────────────────
 
-wifi_status = "no_wifi"  # one of "no_wifi", "no_internet", "ok"
+wifi_status = "unknown"  # one of "unknown", "no_wifi", "no_internet", "ok"
 current_ssid: Optional[str] = None
 _last_connected_at: Optional[datetime.datetime] = None
 
