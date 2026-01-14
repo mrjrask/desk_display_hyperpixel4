@@ -119,7 +119,7 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _CONFERENCE_LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
-_OVERVIEW_LOGO_CACHE: dict[tuple[str, int], Optional[Image.Image]] = {}
+_OVERVIEW_LOGO_CACHE: dict[tuple[str, int, int], Optional[Image.Image]] = {}
 
 STATSAPI_HOST = "statsapi.web.nhl.com"
 _DNS_RETRY_INTERVAL = 600  # seconds
@@ -368,22 +368,41 @@ def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
     return None
 
 
-def _load_overview_logo(abbr: str, height: int) -> Optional[Image.Image]:
+def _load_overview_logo(abbr: str, box_width: int, box_height: int) -> Optional[Image.Image]:
     abbr_key = (abbr or "").strip().upper()
-    if not abbr_key or height <= 0:
+    if not abbr_key or box_height <= 0 or box_width <= 0:
         return None
 
-    cache_key = (abbr_key, height)
+    cache_key = (abbr_key, box_width, box_height)
     if cache_key in _OVERVIEW_LOGO_CACHE:
         return _OVERVIEW_LOGO_CACHE[cache_key]
 
     try:
         from utils import load_team_logo
 
-        logo = load_team_logo(LOGO_DIR, abbr_key, height=height)
-        logo = _constrain_logo_width(logo, height)
+        logo = load_team_logo(LOGO_DIR, abbr_key, height=box_height)
+        if logo:
+            ratio = min(box_width / logo.width, box_height / logo.height)
+            resized = logo.resize(
+                (
+                    max(1, int(round(logo.width * ratio))),
+                    max(1, int(round(logo.height * ratio))),
+                ),
+                Image.ANTIALIAS,
+            )
+            boxed = Image.new("RGBA", (box_width, box_height), (0, 0, 0, 0))
+            x0 = (box_width - resized.width) // 2
+            y0 = (box_height - resized.height) // 2
+            boxed.paste(resized, (x0, y0), resized)
+            logo = boxed
     except Exception as exc:  # pragma: no cover - defensive guard
-        logging.debug("NHL overview logo load failed for %s@%s: %s", abbr_key, height, exc)
+        logging.debug(
+            "NHL overview logo load failed for %s@%sx%s: %s",
+            abbr_key,
+            box_width,
+            box_height,
+            exc,
+        )
         logo = None
 
     _OVERVIEW_LOGO_CACHE[cache_key] = logo
@@ -1404,7 +1423,7 @@ def _build_overview_rows(
                 is_leader=is_leader,
                 logo_width_limit=logo_width_limit,
             )
-            logo = _load_overview_logo(abbr, target_height)
+            logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
                 continue
             col_center = col_centers[col_idx]
@@ -1443,7 +1462,7 @@ def _build_overview_rows_horizontal(
                 is_leader=is_leader,
                 logo_width_limit=logo_width_limit,
             )
-            logo = _load_overview_logo(abbr, target_height)
+            logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
                 continue
             col_center = col_centers[col_idx]
