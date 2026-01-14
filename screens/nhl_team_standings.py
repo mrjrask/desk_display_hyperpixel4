@@ -67,20 +67,15 @@ def _format_conference_name(rec):
         return "conference"
 
     lower_name = str(name).lower()
+    if "western" in lower_name:
+        return "the West" if IS_SQUARE_DISPLAY else "Western Conf."
+    if "eastern" in lower_name:
+        return "the East" if IS_SQUARE_DISPLAY else "Eastern Conf."
+
     if "conference" in lower_name:
         trimmed = str(name).replace("Conference", "").strip()
         if not trimmed:
             return "conference"
-
-        trimmed_lower = trimmed.lower()
-        if trimmed_lower.startswith("western"):
-            return "the West"
-        if trimmed_lower.startswith("eastern"):
-            return "the East"
-
-        if IS_SQUARE_DISPLAY:
-            return f"{trimmed} Conf."
-
         return f"{trimmed} Conf."
 
     if "conf" in lower_name:

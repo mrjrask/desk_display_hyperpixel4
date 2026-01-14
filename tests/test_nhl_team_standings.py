@@ -37,7 +37,7 @@ def test_nhl_standings_show_division_and_conference(monkeypatch):
     assert captured["conferenceRank"] == 5
     assert captured["division_label"] == "Central"
     assert captured["conference_label"] == "conference"
-    assert captured["conferenceName"] == "West"
+    assert captured["conferenceName"] == "the West"
     assert captured["divisionName"] == "Central"
 
 
