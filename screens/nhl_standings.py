@@ -44,6 +44,7 @@ CONFERENCE_EAST_KEY = "Eastern"
 LOGO_DIR = NHL_IMAGES_DIR
 LOGO_HEIGHT = 130  # larger logos for standings rows
 LOGO_MAX_ASPECT_RATIO = 1.2
+LOGO_MAX_WIDTH = int(round(LOGO_HEIGHT * LOGO_MAX_ASPECT_RATIO))
 LEFT_MARGIN = 10
 RIGHT_MARGIN = 12
 TEAM_COLUMN_GAP = 10
@@ -163,7 +164,7 @@ TEAM_NICKNAMES = {
 
 
 def _build_column_layout(max_team_name_width: int) -> tuple[dict[str, int], int]:
-    team_x = LEFT_MARGIN + LOGO_HEIGHT + TEAM_COLUMN_GAP
+    team_x = LEFT_MARGIN + LOGO_MAX_WIDTH + TEAM_COLUMN_GAP
     stats_right = WIDTH - RIGHT_MARGIN
 
     layout: dict[str, int] = {"team": team_x}
@@ -1097,13 +1098,7 @@ def _overview_layout(
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
-    conference_logo = _conference_logo_for_title(title)
-
     y = TITLE_MARGIN_TOP
-    if conference_logo:
-        logo_x = (WIDTH - conference_logo.width) // 2
-        base.paste(conference_logo, (logo_x, y), conference_logo)
-        y += conference_logo.height + CONFERENCE_LOGO_GAP
     y += _draw_centered_text(draw, title, TITLE_FONT, y)
     y += OVERVIEW_TITLE_MARGIN_BOTTOM
 
@@ -1317,10 +1312,15 @@ def _build_overview_divisions(
     return divisions
 
 
-def _render_empty(title: str, subtitle: str | None = None) -> Image.Image:
+def _render_empty(
+    title: str,
+    subtitle: str | None = None,
+    *,
+    show_conference_logo: bool = True,
+) -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(img)
-    conference_logo = _conference_logo_for_title(title)
+    conference_logo = _conference_logo_for_title(title) if show_conference_logo else None
     y = TITLE_MARGIN_TOP
     if conference_logo:
         logo_x = (WIDTH - conference_logo.width) // 2
@@ -1367,7 +1367,7 @@ def draw_nhl_standings_overview_west(display, transition: bool = False) -> Scree
 
     if not any(teams for _, teams in divisions):
         clear_display(display)
-        img = _render_empty(OVERVIEW_TITLE_WEST)
+        img = _render_empty(OVERVIEW_TITLE_WEST, show_conference_logo=False)
         if transition:
             return ScreenImage(img, displayed=False)
         display.image(img)
@@ -1397,7 +1397,7 @@ def draw_nhl_standings_overview_east(display, transition: bool = False) -> Scree
 
     if not any(teams for _, teams in divisions):
         clear_display(display)
-        img = _render_empty(OVERVIEW_TITLE_EAST)
+        img = _render_empty(OVERVIEW_TITLE_EAST, show_conference_logo=False)
         if transition:
             return ScreenImage(img, displayed=False)
         display.image(img)
