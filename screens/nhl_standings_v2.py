@@ -61,6 +61,7 @@ DIVISION_MARGIN_TOP = 6
 DIVISION_MARGIN_BOTTOM = 8
 COLUMN_GAP_BELOW = 6
 DIVISION_HEADER_GAP = 10
+CONFERENCE_LOGO_GAP = 6
 
 TITLE_FONT = FONT_TITLE_SPORTS
 _TITLE_SUBTITLE_FONT_SIZE = max(8, getattr(TITLE_FONT, "size", 48) - 12)
@@ -100,6 +101,8 @@ BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
 OVERVIEW_DROP_STAGGER = 0.4  # fraction of steps before next team starts
 DROP_FRAME_DELAY = 0.02
+CONFERENCE_LOGO_HEIGHT = max(40, int(round(HEIGHT * 0.12)))
+CONFERENCE_LOGO_MAX_WIDTH = int(round(WIDTH * 0.6))
 
 
 WHITE = (255, 255, 255)
@@ -115,6 +118,7 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
+_CONFERENCE_LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _OVERVIEW_LOGO_CACHE: dict[tuple[str, int], Optional[Image.Image]] = {}
 
 STATSAPI_HOST = "statsapi.web.nhl.com"
@@ -408,6 +412,37 @@ def _constrain_logo_width(logo: Optional[Image.Image], target_height: int) -> Op
     ratio = max_width / float(logo.width)
     new_height = max(1, int(round(logo.height * ratio)))
     return logo.resize((max_width, new_height), Image.ANTIALIAS)
+
+
+def _load_conference_logo(abbr: str) -> Optional[Image.Image]:
+    cache_key = abbr.upper()
+    cached = _CONFERENCE_LOGO_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        from utils import load_team_logo
+
+        logo = load_team_logo(LOGO_DIR, cache_key, height=CONFERENCE_LOGO_HEIGHT)
+        if logo and logo.width > CONFERENCE_LOGO_MAX_WIDTH:
+            ratio = CONFERENCE_LOGO_MAX_WIDTH / float(logo.width)
+            new_height = max(1, int(round(logo.height * ratio)))
+            logo = logo.resize((CONFERENCE_LOGO_MAX_WIDTH, new_height), Image.ANTIALIAS)
+    except Exception as exc:
+        logging.debug("NHL conference logo load failed for %s: %s", cache_key, exc)
+        logo = None
+
+    _CONFERENCE_LOGO_CACHE[cache_key] = logo
+    return logo
+
+
+def _conference_logo_for_title(title: str) -> Optional[Image.Image]:
+    title_lower = title.lower()
+    if "west" in title_lower:
+        return _load_conference_logo("WC")
+    if "east" in title_lower:
+        return _load_conference_logo("EC")
+    return None
 
 
 def _team_abbreviation(team: dict) -> str:
@@ -1092,7 +1127,12 @@ def _render_conference(
 
     column_layout, team_name_max_width = _conference_column_layout(standings, divisions)
 
+    conference_logo = _conference_logo_for_title(title)
+    logo_height = conference_logo.height if conference_logo else 0
+
     total_height = TITLE_MARGIN_TOP + _text_size(title, TITLE_FONT)[1]
+    if conference_logo:
+        total_height += logo_height + CONFERENCE_LOGO_GAP
     if subtitle:
         total_height += TITLE_SUBTITLE_GAP + _text_size(subtitle, TITLE_SUBTITLE_FONT)[1]
     total_height += TITLE_MARGIN_BOTTOM
@@ -1107,6 +1147,10 @@ def _render_conference(
     draw = ImageDraw.Draw(img)
 
     y = TITLE_MARGIN_TOP
+    if conference_logo:
+        logo_x = (WIDTH - conference_logo.width) // 2
+        img.paste(conference_logo, (logo_x, y), conference_logo)
+        y += conference_logo.height + CONFERENCE_LOGO_GAP
     y += _draw_centered_text(draw, title, TITLE_FONT, y)
     if subtitle:
         y += TITLE_SUBTITLE_GAP
@@ -1146,7 +1190,12 @@ def _render_wildcard_conference(
         [teams for _, teams, _ in sections]
     )
 
+    conference_logo = _conference_logo_for_title(title)
+    logo_height = conference_logo.height if conference_logo else 0
+
     total_height = TITLE_MARGIN_TOP + _text_size(title, TITLE_FONT)[1]
+    if conference_logo:
+        total_height += logo_height + CONFERENCE_LOGO_GAP
     if subtitle:
         total_height += TITLE_SUBTITLE_GAP + _text_size(subtitle, TITLE_SUBTITLE_FONT)[1]
     total_height += TITLE_MARGIN_BOTTOM
@@ -1160,6 +1209,10 @@ def _render_wildcard_conference(
     draw = ImageDraw.Draw(img)
 
     y = TITLE_MARGIN_TOP
+    if conference_logo:
+        logo_x = (WIDTH - conference_logo.width) // 2
+        img.paste(conference_logo, (logo_x, y), conference_logo)
+        y += conference_logo.height + CONFERENCE_LOGO_GAP
     y += _draw_centered_text(draw, title, TITLE_FONT, y)
     if subtitle:
         y += TITLE_SUBTITLE_GAP
@@ -1195,7 +1248,13 @@ def _overview_layout(
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
+    conference_logo = _conference_logo_for_title(title)
+
     y = TITLE_MARGIN_TOP
+    if conference_logo:
+        logo_x = (WIDTH - conference_logo.width) // 2
+        base.paste(conference_logo, (logo_x, y), conference_logo)
+        y += conference_logo.height + CONFERENCE_LOGO_GAP
     y += _draw_centered_text(draw, title, TITLE_FONT, y)
     y += OVERVIEW_TITLE_MARGIN_BOTTOM
 
@@ -1242,7 +1301,13 @@ def _overview_layout_horizontal(
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
+    conference_logo = _conference_logo_for_title(title)
+
     y = TITLE_MARGIN_TOP
+    if conference_logo:
+        logo_x = (WIDTH - conference_logo.width) // 2
+        base.paste(conference_logo, (logo_x, y), conference_logo)
+        y += conference_logo.height + CONFERENCE_LOGO_GAP
     y += _draw_centered_text(draw, title, TITLE_FONT, y)
     y += OVERVIEW_TITLE_MARGIN_BOTTOM
 
@@ -1590,7 +1655,12 @@ def _build_overview_divisions_v2_east(
 def _render_empty(title: str, subtitle: str | None = None) -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(img)
+    conference_logo = _conference_logo_for_title(title)
     y = TITLE_MARGIN_TOP
+    if conference_logo:
+        logo_x = (WIDTH - conference_logo.width) // 2
+        img.paste(conference_logo, (logo_x, y), conference_logo)
+        y += conference_logo.height + CONFERENCE_LOGO_GAP
     y += _draw_centered_text(draw, title, TITLE_FONT, y)
     if subtitle:
         y += TITLE_SUBTITLE_GAP
