@@ -8,10 +8,9 @@ Shows the next Chicago Bears game with:
     or 'vs.' if the Bears are home.
   - Between those and the bottom line, a row of logos: AWAY @ HOME, each logo
     auto-sized similarly to the Hawks schedule screen.
-  - Two-line footer with week/date above the gametime.
+  - Two-line footer with event name above the date/time.
 """
 
-import datetime
 import os
 from typing import Optional
 
@@ -70,32 +69,20 @@ def show_bears_next_game(display, transition=False):
         else:
             away_ab, home_ab, loc_sym = opp_ab, bears_ab, "@"
 
-        # Bottom line text — week/date above gametime
-        wk = game["week"]
-        try:
-            dt0 = datetime.datetime.strptime(game["date"], "%a, %b %d, %Y")
-            date_txt = f"{dt0.month}/{dt0.day}"
-        except Exception:
-            try:
-                dt0 = datetime.datetime.strptime(game["date"], "%a, %b %d")
-                date_txt = f"{dt0.month}/{dt0.day}"
-            except Exception:
-                date_txt = game["date"]
-        t_txt = game["time"].strip()
-        week_text = wk.replace("0.", "Pre")
-        week_line = f"{week_text} {date_txt}".strip()
-        time_line = t_txt
-        time_w, time_h = draw.textsize(time_line, font=config.FONT_DATE_SPORTS)
-        week_w, week_h = draw.textsize(week_line, font=config.FONT_DATE_SPORTS)
-        time_y = config.HEIGHT - time_h - BEARS_BOTTOM_MARGIN  # keep on-screen
-        week_y = time_y - week_h - 2
+        # Bottom dateline text — event name above date/time
+        name_line = game.get("name", title)
+        date_time_line = f"{game.get('date', '').strip()} {game.get('time', '').strip()}".strip()
+        name_w, name_h = draw.textsize(name_line, font=config.FONT_DATE_SPORTS)
+        date_w, date_h = draw.textsize(date_time_line, font=config.FONT_DATE_SPORTS)
+        date_y = config.HEIGHT - date_h - BEARS_BOTTOM_MARGIN  # keep on-screen
+        name_y = date_y - name_h - 2
 
         horizontal_padding = max(12, int(round(config.WIDTH * 0.02)))
         vertical_padding = max(4, int(round(config.HEIGHT * 0.01)))
         min_spacing = max(10, int(round(config.WIDTH * 0.015)))
 
         logo_area_top = y_txt + vertical_padding
-        logo_area_bottom = week_y - vertical_padding
+        logo_area_bottom = name_y - vertical_padding
         available_h = max(10, logo_area_bottom - logo_area_top)
         max_logo_height = max(36, min(available_h, int(round(config.HEIGHT * 0.6))))
         frame_ceiling = max_logo_height
