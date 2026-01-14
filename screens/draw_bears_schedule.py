@@ -193,10 +193,18 @@ def show_bears_next_game(display, transition=False):
                 x += w_sy + spacing
 
         # Draw bottom text
-        draw.text(((config.WIDTH - week_w)//2, week_y),
-                  week_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
-        draw.text(((config.WIDTH - time_w)//2, time_y),
-                  time_line, font=config.FONT_DATE_SPORTS, fill=(255,255,255))
+        draw.text(
+            ((config.WIDTH - name_w) // 2, name_y),
+            name_line,
+            font=config.FONT_DATE_SPORTS,
+            fill=(255, 255, 255),
+        )
+        draw.text(
+            ((config.WIDTH - date_w) // 2, date_y),
+            date_time_line,
+            font=config.FONT_DATE_SPORTS,
+            fill=(255, 255, 255),
+        )
     else:
         tw, th = draw.textsize(title, font=config.FONT_TITLE_SPORTS)
         draw.text(((config.WIDTH - tw)//2, 0), title,
