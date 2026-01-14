@@ -32,6 +32,7 @@ from config import (
     FONT_STATUS,
     CENTRAL_TIME,
     IMAGES_DIR,
+    SCOREBOARD_LOGO_HEIGHT_COMPACT,
     SCOREBOARD_SCROLL_STEP,
     SCOREBOARD_SCROLL_DELAY,
     SCOREBOARD_SCROLL_PAUSE_TOP,
@@ -76,7 +77,7 @@ SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, _SCORE_PT)
 STATUS_FONT             = clone_font(FONT_STATUS, max(8, _STATUS_PT))
 CENTER_FONT             = clone_font(FONT_STATUS, max(8, _CENTER_PT))
 TITLE_FONT              = FONT_TITLE_SPORTS
-LOGO_HEIGHT             = 114
+LOGO_HEIGHT             = SCOREBOARD_LOGO_HEIGHT_COMPACT
 LOGO_GAP_MARGIN         = 6
 LOGO_DIR                = os.path.join(IMAGES_DIR, "mlb")
 LEAGUE_LOGO_KEYS        = ("MLB", "mlb")

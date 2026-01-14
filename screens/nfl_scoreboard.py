@@ -28,6 +28,7 @@ from config import (
     FONT_EMOJI,
     CENTRAL_TIME,
     IMAGES_DIR,
+    SCOREBOARD_LOGO_HEIGHT,
     SCOREBOARD_SCROLL_STEP,
     SCOREBOARD_SCROLL_DELAY,
     SCOREBOARD_SCROLL_PAUSE_TOP,
@@ -64,7 +65,7 @@ SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 75)
 STATUS_FONT             = clone_font(FONT_STATUS, 42)
 CENTER_FONT             = clone_font(FONT_STATUS, 54)
 TITLE_FONT              = FONT_TITLE_SPORTS
-LOGO_HEIGHT             = 150
+LOGO_HEIGHT             = SCOREBOARD_LOGO_HEIGHT
 LOGO_DIR                = os.path.join(IMAGES_DIR, "nfl")
 LEAGUE_LOGO_KEYS        = ("NFL", "nfl")
 LEAGUE_LOGO_GAP         = 10
