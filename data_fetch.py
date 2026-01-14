@@ -2078,8 +2078,14 @@ def _fetch_nba_team_standings(team_tricode: str):
                     url,
                     timeout=10,
                     headers={
+                        "Accept": "application/json,text/plain,*/*",
                         "Origin": "https://www.nba.com",
                         "Referer": "https://www.nba.com/",
+                        "User-Agent": (
+                            "Mozilla/5.0 (X11; Linux x86_64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"
+                        ),
                     },
                 )
                 if resp.status_code == 403:
