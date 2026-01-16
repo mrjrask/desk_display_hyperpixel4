@@ -26,6 +26,7 @@ from utils import (
     get_mlb_abbreviation,
     log_call,
     load_team_logo,
+    square_logo_frame,
     standard_next_game_logo_height,
 )
 
@@ -478,41 +479,6 @@ def draw_sports_screen(display, game, title, transition=False):
             return None
         return load_team_logo(MLB_LOGOS_DIR, ab, height=height)
 
-    def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
-        if size <= 0:
-            return None
-
-        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        if logo is not None:
-            ratio = 1.0
-            try:
-                ratio = min(size / float(logo.height or 1), size / float(logo.width or 1))
-            except Exception:
-                ratio = 1.0
-            if ratio and abs(ratio - 1.0) > 1e-3:
-                logo = logo.resize(
-                    (
-                        max(1, int(round(logo.width * ratio))),
-                        max(1, int(round(logo.height * ratio))),
-                    ),
-                    Image.LANCZOS,
-                )
-            x_off = (size - logo.width) // 2
-            y_off = (size - logo.height) // 2
-            frame.paste(logo, (x_off, y_off), logo)
-            return frame
-
-        if fallback:
-            drawer = ImageDraw.Draw(frame)
-            tw, th = drawer.textsize(fallback, font=FONT_TEAM_SPORTS)
-            drawer.text(
-                ((size - tw) // 2, (size - th) // 2),
-                fallback,
-                font=FONT_TEAM_SPORTS,
-                fill=(255, 255, 255),
-            )
-        return frame
-
     raw_date = game.get('officialDate','') or game.get('gameDate','')[:10]
     raw_time = game.get('startTimeCentral','TBD')
     bottom   = _format_game_label(raw_date, raw_time)
@@ -544,8 +510,18 @@ def draw_sports_screen(display, game, title, transition=False):
             best_layout = (
                 test_h,
                 spacing,
-                _logo_frame(base_away_logo, get_mlb_abbreviation(get_team_display_name(away_tm)).upper(), test_h),
-                _logo_frame(base_home_logo, get_mlb_abbreviation(get_team_display_name(home_tm)).upper(), test_h),
+                square_logo_frame(
+                    base_away_logo,
+                    test_h,
+                    fallback_text=get_mlb_abbreviation(get_team_display_name(away_tm)).upper(),
+                    fallback_font=FONT_TEAM_SPORTS,
+                ),
+                square_logo_frame(
+                    base_home_logo,
+                    test_h,
+                    fallback_text=get_mlb_abbreviation(get_team_display_name(home_tm)).upper(),
+                    fallback_font=FONT_TEAM_SPORTS,
+                ),
             )
             break
 
@@ -555,8 +531,18 @@ def draw_sports_screen(display, game, title, transition=False):
         best_layout = (
             fallback_h,
             spacing,
-            _logo_frame(base_away_logo, get_mlb_abbreviation(get_team_display_name(away_tm)).upper(), fallback_h),
-            _logo_frame(base_home_logo, get_mlb_abbreviation(get_team_display_name(home_tm)).upper(), fallback_h),
+            square_logo_frame(
+                base_away_logo,
+                fallback_h,
+                fallback_text=get_mlb_abbreviation(get_team_display_name(away_tm)).upper(),
+                fallback_font=FONT_TEAM_SPORTS,
+            ),
+            square_logo_frame(
+                base_home_logo,
+                fallback_h,
+                fallback_text=get_mlb_abbreviation(get_team_display_name(home_tm)).upper(),
+                fallback_font=FONT_TEAM_SPORTS,
+            ),
         )
 
     logo_h, spacing, logo_away, logo_home = best_layout

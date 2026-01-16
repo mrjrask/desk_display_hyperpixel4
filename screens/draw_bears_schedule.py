@@ -25,6 +25,7 @@ from config import (
 from utils import (
     load_team_logo,
     next_game_from_schedule,
+    square_logo_frame,
     standard_next_game_logo_height,
     wrap_text,
 )
@@ -101,42 +102,6 @@ def show_bears_next_game(display, transition=False):
         max_width = config.WIDTH - (horizontal_padding * 2)
         spacing_ratio = 0.16
 
-        def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
-            if size <= 0:
-                return None
-
-            frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-            if logo is not None:
-                ratio = 1.0
-                try:
-                    ratio = min(size / float(logo.height or 1), size / float(logo.width or 1))
-                except Exception:
-                    ratio = 1.0
-                if ratio and abs(ratio - 1.0) > 1e-3:
-                    logo = logo.resize(
-                        (
-                            max(1, int(round(logo.width * ratio))),
-                            max(1, int(round(logo.height * ratio))),
-                        ),
-                        Image.LANCZOS,
-                    )
-                x_off = (size - logo.width) // 2
-                y_off = (size - logo.height) // 2
-                frame.paste(logo, (x_off, y_off), logo)
-                return frame
-
-            if fallback:
-                drawer = ImageDraw.Draw(frame)
-                tw = drawer.textsize(fallback, font=config.FONT_TEAM_SPORTS)[0]
-                th = drawer.textsize(fallback, font=config.FONT_TEAM_SPORTS)[1]
-                drawer.text(
-                    ((size - tw) // 2, (size - th) // 2),
-                    fallback,
-                    font=config.FONT_TEAM_SPORTS,
-                    fill=(255, 255, 255),
-                )
-            return frame
-
         def _text_width(text: str) -> int:
             return draw.textsize(text, font=config.FONT_TEAM_SPORTS)[0]
 
@@ -153,8 +118,18 @@ def show_bears_next_game(display, transition=False):
                 best_layout = (
                     test_h,
                     spacing,
-                    _logo_frame(base_away_logo, away_ab.upper(), test_h),
-                    _logo_frame(base_home_logo, home_ab.upper(), test_h),
+                    square_logo_frame(
+                        base_away_logo,
+                        test_h,
+                        fallback_text=away_ab.upper(),
+                        fallback_font=config.FONT_TEAM_SPORTS,
+                    ),
+                    square_logo_frame(
+                        base_home_logo,
+                        test_h,
+                        fallback_text=home_ab.upper(),
+                        fallback_font=config.FONT_TEAM_SPORTS,
+                    ),
                 )
                 break
 
@@ -164,8 +139,18 @@ def show_bears_next_game(display, transition=False):
             best_layout = (
                 fallback_h,
                 spacing,
-                _logo_frame(base_away_logo, away_ab.upper(), fallback_h),
-                _logo_frame(base_home_logo, home_ab.upper(), fallback_h),
+                square_logo_frame(
+                    base_away_logo,
+                    fallback_h,
+                    fallback_text=away_ab.upper(),
+                    fallback_font=config.FONT_TEAM_SPORTS,
+                ),
+                square_logo_frame(
+                    base_home_logo,
+                    fallback_h,
+                    fallback_text=home_ab.upper(),
+                    fallback_font=config.FONT_TEAM_SPORTS,
+                ),
             )
 
         logo_h, spacing, logo_away, logo_home = best_layout

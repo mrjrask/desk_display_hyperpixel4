@@ -26,7 +26,7 @@ from config import (
     SCOREBOARD_BACKGROUND_COLOR,
 )
 from services.http_client import NHL_HEADERS, get_session
-from utils import ScreenImage, clear_display, clone_font, log_call, fit_font
+from utils import ScreenImage, clear_display, clone_font, log_call, fit_font, square_logo_frame
 
 RenderResult = Optional[ScreenImage]
 
@@ -45,8 +45,7 @@ CONFERENCE_EAST_KEY = "Eastern"
 
 LOGO_DIR = NHL_IMAGES_DIR
 LOGO_HEIGHT = 130  # larger logos for standings rows
-LOGO_MAX_ASPECT_RATIO = 1.2
-LOGO_MAX_WIDTH = int(round(LOGO_HEIGHT * LOGO_MAX_ASPECT_RATIO))
+LOGO_MAX_WIDTH = LOGO_HEIGHT
 LEFT_MARGIN = 10
 RIGHT_MARGIN = 12
 TEAM_COLUMN_GAP = 10
@@ -374,28 +373,17 @@ def _load_overview_logo(abbr: str, box_width: int, box_height: int) -> Optional[
     if not abbr_key or box_height <= 0 or box_width <= 0:
         return None
 
-    cache_key = (abbr_key, box_width, box_height)
+    frame_size = min(box_width, box_height)
+    cache_key = (abbr_key, frame_size)
     if cache_key in _OVERVIEW_LOGO_CACHE:
         return _OVERVIEW_LOGO_CACHE[cache_key]
 
     try:
         from utils import load_team_logo
 
-        logo = load_team_logo(LOGO_DIR, abbr_key, height=box_height)
+        logo = load_team_logo(LOGO_DIR, abbr_key, height=frame_size)
         if logo:
-            ratio = min(box_width / logo.width, box_height / logo.height)
-            resized = logo.resize(
-                (
-                    max(1, int(round(logo.width * ratio))),
-                    max(1, int(round(logo.height * ratio))),
-                ),
-                Image.ANTIALIAS,
-            )
-            boxed = Image.new("RGBA", (box_width, box_height), (0, 0, 0, 0))
-            x0 = (box_width - resized.width) // 2
-            y0 = (box_height - resized.height) // 2
-            boxed.paste(resized, (x0, y0), resized)
-            logo = boxed
+            logo = square_logo_frame(logo, frame_size)
     except Exception as exc:  # pragma: no cover - defensive guard
         logging.debug(
             "NHL overview logo load failed for %s@%sx%s: %s",
@@ -415,23 +403,11 @@ def _load_logo(abbr: str) -> Optional[Image.Image]:
         from utils import load_team_logo
 
         logo = load_team_logo(LOGO_DIR, abbr, height=LOGO_HEIGHT)
-        return _constrain_logo_width(logo, LOGO_HEIGHT)
+        return square_logo_frame(logo, LOGO_HEIGHT)
     except Exception as exc:  # pragma: no cover - defensive guard
         logging.debug("NHL logo load failed for %s: %s", abbr, exc)
         return None
 
-
-def _constrain_logo_width(logo: Optional[Image.Image], target_height: int) -> Optional[Image.Image]:
-    if logo is None:
-        return None
-
-    max_width = int(round(target_height * LOGO_MAX_ASPECT_RATIO))
-    if max_width <= 0 or logo.width <= max_width:
-        return logo
-
-    ratio = max_width / float(logo.width)
-    new_height = max(1, int(round(logo.height * ratio)))
-    return logo.resize((max_width, new_height), Image.ANTIALIAS)
 
 
 def _load_conference_logo(abbr: str) -> Optional[Image.Image]:

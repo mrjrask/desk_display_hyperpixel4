@@ -1170,6 +1170,59 @@ def load_team_logo(base_dir: str, abbr: str, height: int = 90) -> Image.Image | 
         logging.warning("Could not load logo '%s': %s", filename, exc)
         return None
 
+
+def square_logo_frame(
+    logo: Image.Image | None,
+    size: int,
+    *,
+    fallback_text: str | None = None,
+    fallback_font: ImageFont.ImageFont | None = None,
+    fallback_fill: tuple[int, int, int] = (255, 255, 255),
+) -> Image.Image | None:
+    """Return a square frame containing the logo scaled to fit while preserving aspect ratio."""
+    if size <= 0:
+        return None
+
+    frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+
+    if logo is not None:
+        try:
+            ratio = min(size / float(logo.width or 1), size / float(logo.height or 1))
+        except Exception:
+            ratio = 1.0
+
+        if ratio and abs(ratio - 1.0) > 1e-3:
+            logo = logo.resize(
+                (
+                    max(1, int(round(logo.width * ratio))),
+                    max(1, int(round(logo.height * ratio))),
+                ),
+                Image.LANCZOS,
+            )
+
+        x_off = (size - logo.width) // 2
+        y_off = (size - logo.height) // 2
+        frame.paste(logo, (x_off, y_off), logo)
+        return frame
+
+    if fallback_text and fallback_font:
+        draw = ImageDraw.Draw(frame)
+        try:
+            l, t, r, b = draw.textbbox((0, 0), fallback_text, font=fallback_font)
+            tw, th = r - l, b - t
+        except Exception:  # pragma: no cover - PIL fallback
+            tw, th = draw.textsize(fallback_text, font=fallback_font)
+            l, t = 0, 0
+        draw.text(
+            ((size - tw) // 2 - l, (size - th) // 2 - t),
+            fallback_text,
+            font=fallback_font,
+            fill=fallback_fill,
+        )
+        return frame
+
+    return None
+
 @log_call
 def colored_image(mono_img: Image.Image, screen_key: str) -> Image.Image:
     rgb = Image.new("RGB", mono_img.size, (0,0,0))
