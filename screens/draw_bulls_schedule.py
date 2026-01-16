@@ -36,6 +36,7 @@ from utils import (
     clear_display,
     draw_persistent_time,
     load_team_logo,
+    square_logo_frame,
     standard_next_game_logo_height,
 )
 
@@ -738,37 +739,6 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     max_width = WIDTH - (horizontal_padding * 2)
     spacing_ratio = 0.16
 
-    def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
-        if size <= 0:
-            return None
-
-        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        if logo is not None:
-            ratio = 1.0
-            try:
-                ratio = min(size / float(logo.height or 1), size / float(logo.width or 1))
-            except Exception:
-                ratio = 1.0
-            if ratio and abs(ratio - 1.0) > 1e-3:
-                logo = logo.resize(
-                    (
-                        max(1, int(round(logo.width * ratio))),
-                        max(1, int(round(logo.height * ratio))),
-                    ),
-                    Image.LANCZOS,
-                )
-            x_off = (size - logo.width) // 2
-            y_off = (size - logo.height) // 2
-            frame.paste(logo, (x_off, y_off), logo)
-            return frame
-
-        if fallback:
-            drawer = ImageDraw.Draw(frame)
-            tw = _text_w(drawer, fallback, FONT_NEXT_OPP)
-            th = _text_h(drawer, FONT_NEXT_OPP)
-            drawer.text(((size - tw) // 2, (size - th) // 2), fallback, font=FONT_NEXT_OPP, fill=TEXT_COLOR)
-        return frame
-
     def _text_width(text: str) -> int:
         return _text_w(draw, text, FONT_NEXT_OPP)
 
@@ -782,8 +752,20 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
         spacing = max(min_spacing, int(round(test_h * spacing_ratio)))
         total = at_w + spacing * 2 + test_h * 2
         if total <= max_width:
-            away_option = _logo_frame(base_away_logo, away.get("tri") or "AWY", test_h)
-            home_option = _logo_frame(base_home_logo, home.get("tri") or "HOME", test_h)
+            away_option = square_logo_frame(
+                base_away_logo,
+                test_h,
+                fallback_text=away.get("tri") or "AWY",
+                fallback_font=FONT_NEXT_OPP,
+                fallback_fill=TEXT_COLOR,
+            )
+            home_option = square_logo_frame(
+                base_home_logo,
+                test_h,
+                fallback_text=home.get("tri") or "HOME",
+                fallback_font=FONT_NEXT_OPP,
+                fallback_fill=TEXT_COLOR,
+            )
             best_layout = (test_h, spacing, away_option, home_option)
             break
 
@@ -793,8 +775,20 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
         best_layout = (
             fallback_h,
             spacing,
-            _logo_frame(base_away_logo, away.get("tri") or "AWY", fallback_h),
-            _logo_frame(base_home_logo, home.get("tri") or "HOME", fallback_h),
+            square_logo_frame(
+                base_away_logo,
+                fallback_h,
+                fallback_text=away.get("tri") or "AWY",
+                fallback_font=FONT_NEXT_OPP,
+                fallback_fill=TEXT_COLOR,
+            ),
+            square_logo_frame(
+                base_home_logo,
+                fallback_h,
+                fallback_text=home.get("tri") or "HOME",
+                fallback_font=FONT_NEXT_OPP,
+                fallback_fill=TEXT_COLOR,
+            ),
         )
 
     logo_h, spacing, away_logo, home_logo = best_layout

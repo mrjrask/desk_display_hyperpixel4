@@ -54,7 +54,7 @@ from config import (
     HEIGHT,
 )
 from services.http_client import NHL_HEADERS, get_session, request_json
-from utils import draw_persistent_time, standard_next_game_logo_height
+from utils import draw_persistent_time, square_logo_frame, standard_next_game_logo_height
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NHL_DIR = NHL_IMAGES_DIR
 
@@ -1102,37 +1102,6 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     max_width = WIDTH - (horizontal_padding * 2)
     spacing_ratio = 0.16
 
-    def _logo_frame(logo: Optional[Image.Image], fallback: str, size: int) -> Optional[Image.Image]:
-        if size <= 0:
-            return None
-
-        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        if logo is not None:
-            ratio = 1.0
-            try:
-                ratio = min(size / float(logo.height or 1), size / float(logo.width or 1))
-            except Exception:
-                ratio = 1.0
-            if ratio and abs(ratio - 1.0) > 1e-3:
-                logo = logo.resize(
-                    (
-                        max(1, int(round(logo.width * ratio))),
-                        max(1, int(round(logo.height * ratio))),
-                    ),
-                    Image.LANCZOS,
-                )
-            x_off = (size - logo.width) // 2
-            y_off = (size - logo.height) // 2
-            frame.paste(logo, (x_off, y_off), logo)
-            return frame
-
-        if fallback:
-            drawer = ImageDraw.Draw(frame)
-            tw = _text_w(drawer, fallback, FONT_NEXT_OPP)
-            th = _text_h(drawer, FONT_NEXT_OPP)
-            drawer.text(((size - tw) // 2, (size - th) // 2), fallback, font=FONT_NEXT_OPP, fill="white")
-        return frame
-
     def _text_width(text: str) -> int:
         return _text_w(d, text, FONT_NEXT_OPP)
 
@@ -1146,8 +1115,18 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
         spacing = max(min_spacing, int(round(test_h * spacing_ratio)))
         total = at_w + spacing * 2 + test_h * 2
         if total <= max_width:
-            away_logo = _logo_frame(base_away_logo, away_tri or "AWY", test_h)
-            home_logo = _logo_frame(base_home_logo, home_tri or "HME", test_h)
+            away_logo = square_logo_frame(
+                base_away_logo,
+                test_h,
+                fallback_text=away_tri or "AWY",
+                fallback_font=FONT_NEXT_OPP,
+            )
+            home_logo = square_logo_frame(
+                base_home_logo,
+                test_h,
+                fallback_text=home_tri or "HME",
+                fallback_font=FONT_NEXT_OPP,
+            )
             best_layout = (test_h, spacing, away_logo, home_logo)
             break
 
@@ -1157,8 +1136,18 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
         best_layout = (
             fallback_h,
             spacing,
-            _logo_frame(base_away_logo, away_tri or "AWY", fallback_h),
-            _logo_frame(base_home_logo, home_tri or "HME", fallback_h),
+            square_logo_frame(
+                base_away_logo,
+                fallback_h,
+                fallback_text=away_tri or "AWY",
+                fallback_font=FONT_NEXT_OPP,
+            ),
+            square_logo_frame(
+                base_home_logo,
+                fallback_h,
+                fallback_text=home_tri or "HME",
+                fallback_font=FONT_NEXT_OPP,
+            ),
         )
 
     logo_h, spacing, away_logo, home_logo = best_layout

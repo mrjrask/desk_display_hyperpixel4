@@ -22,7 +22,7 @@ from config import (
     SCOREBOARD_SCROLL_PAUSE_TOP,
     SCOREBOARD_SCROLL_PAUSE_BOTTOM,
 )
-from utils import clear_display, get_mlb_abbreviation, log_call
+from utils import clear_display, get_mlb_abbreviation, log_call, square_logo_frame
 from screens.mlb_team_standings import format_games_back
 
 # ─── Fonts / geometry from config ────────────────────────────────────────────
@@ -129,9 +129,7 @@ def _load_logo(abbr: str, target: int) -> Optional[Image.Image]:
         return None
     try:
         img = Image.open(path).convert("RGBA")
-        w0, h0 = img.size
-        s = min(target / w0, target / h0)
-        return img.resize((max(1, int(w0*s)), max(1, int(h0*s))), Image.LANCZOS)
+        return square_logo_frame(img, target)
     except Exception as e:
         logging.warning(f"Logo load error {fn}: {e}")
         return None

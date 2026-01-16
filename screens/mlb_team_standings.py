@@ -29,7 +29,7 @@ from config import (
     FONT_STAND2_VALUE,
     SCOREBOARD_BACKGROUND_COLOR,
 )
-from utils import clear_display, log_call
+from utils import clear_display, log_call, square_logo_frame
 
 # Constants tuned per display profile
 LOGO_SZ = max(40, int(min(WIDTH, HEIGHT) * 0.25))
@@ -177,14 +177,7 @@ def draw_standings_screen1(
     logo = None
     try:
         logo_img = Image.open(logo_path).convert("RGBA")
-        ratio = min(LOGO_SZ / logo_img.width, LOGO_SZ / logo_img.height)
-        logo = logo_img.resize(
-            (
-                max(1, int(round(logo_img.width * ratio))),
-                max(1, int(round(logo_img.height * ratio))),
-            ),
-            Image.ANTIALIAS,
-        )
+        logo = square_logo_frame(logo_img, LOGO_SZ)
     except Exception:
         pass
     if logo:
@@ -332,14 +325,7 @@ def draw_standings_screen2(
     logo = None
     try:
         logo_img = Image.open(logo_path).convert("RGBA")
-        ratio = min(LOGO_SZ / logo_img.width, LOGO_SZ / logo_img.height)
-        logo = logo_img.resize(
-            (
-                max(1, int(round(logo_img.width * ratio))),
-                max(1, int(round(logo_img.height * ratio))),
-            ),
-            Image.ANTIALIAS,
-        )
+        logo = square_logo_frame(logo_img, LOGO_SZ)
     except Exception:
         pass
     if logo:

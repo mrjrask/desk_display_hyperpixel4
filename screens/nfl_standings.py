@@ -28,7 +28,16 @@ from config import (
     SCOREBOARD_BACKGROUND_COLOR,
 )
 from services.http_client import get_session
-from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call, draw_persistent_time, fit_font
+from utils import (
+    ScreenImage,
+    clear_display,
+    clone_font,
+    load_team_logo,
+    log_call,
+    draw_persistent_time,
+    fit_font,
+    square_logo_frame,
+)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE_NFC = "NFC Standings"
@@ -332,6 +341,7 @@ def _load_logo_for_height(
         if os.path.exists(path):
             try:
                 logo = load_team_logo(LOGO_DIR, candidate, height=height)
+                logo = square_logo_frame(logo, height)
             except Exception as exc:  # pragma: no cover - defensive guard
                 logging.debug("NFL logo load failed for %s: %s", candidate, exc)
                 logo = None
