@@ -2115,7 +2115,7 @@ def _fetch_nba_team_standings(team_tricode: str):
                     },
                 )
                 if resp.status_code == 403:
-                    logging.warning("NBA standings returned HTTP 403 from %s", base)
+                    logging.debug("NBA standings returned HTTP 403 from %s", base)
                     continue
                 resp.raise_for_status()
                 data = resp.json() or {}
@@ -2131,7 +2131,7 @@ def _fetch_nba_team_standings(team_tricode: str):
                 if status == 403:
                     _NBA_STANDINGS_BACKOFF_UNTIL = now + datetime.timedelta(minutes=30)
                     _NBA_STANDINGS_BACKOFF_LOGGED = False
-                    logging.warning(
+                    logging.debug(
                         "NBA standings returned HTTP 403 from %s; suppressing until %s",
                         base,
                         _NBA_STANDINGS_BACKOFF_UNTIL.isoformat(),
@@ -2139,7 +2139,7 @@ def _fetch_nba_team_standings(team_tricode: str):
                     return None
 
                 if status == 404:
-                    logging.info(
+                    logging.debug(
                         "NBA standings returned HTTP 404 from %s; trying fallback", base
                     )
                     continue
