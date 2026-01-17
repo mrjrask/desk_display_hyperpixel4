@@ -76,25 +76,32 @@ def show_bears_next_game(display, transition=False):
         else:
             away_ab, home_ab, loc_sym = opp_ab, bears_ab, "@"
 
-        # Bottom dateline text — event name above date/time
+        # Bottom dateline text — event name above week above date/time
         name_line = game.get("name", "").strip()
         if name_line == title:
             name_line = ""
+        week_line = game.get("week", "").strip()
         date_time_line = _format_date_time_line(game)
         if name_line:
             name_w, name_h = draw.textsize(name_line, font=config.FONT_DATE_SPORTS)
         else:
             name_w, name_h = 0, 0
+        if week_line:
+            week_w, week_h = draw.textsize(week_line, font=config.FONT_DATE_SPORTS)
+        else:
+            week_w, week_h = 0, 0
         date_w, date_h = draw.textsize(date_time_line, font=config.FONT_DATE_SPORTS)
         date_y = config.HEIGHT - date_h - BEARS_BOTTOM_MARGIN  # keep on-screen
-        name_y = date_y - name_h - 2 if name_line else date_y
+        week_y = date_y - week_h - 2 if week_line else date_y
+        name_y = week_y - name_h - 2 if name_line else week_y
 
         horizontal_padding = max(12, int(round(config.WIDTH * 0.02)))
         vertical_padding = max(4, int(round(config.HEIGHT * 0.01)))
         min_spacing = max(10, int(round(config.WIDTH * 0.015)))
 
         logo_area_top = y_txt + vertical_padding
-        logo_area_bottom = name_y - vertical_padding
+        bottom_text_top = name_y if name_line else week_y if week_line else date_y
+        logo_area_bottom = bottom_text_top - vertical_padding
         available_h = max(10, logo_area_bottom - logo_area_top)
         max_logo_height = max(36, available_h)
         frame_ceiling = max_logo_height
@@ -193,6 +200,13 @@ def show_bears_next_game(display, transition=False):
             draw.text(
                 ((config.WIDTH - name_w) // 2, name_y),
                 name_line,
+                font=config.FONT_DATE_SPORTS,
+                fill=(255, 255, 255),
+            )
+        if week_line:
+            draw.text(
+                ((config.WIDTH - week_w) // 2, week_y),
+                week_line,
                 font=config.FONT_DATE_SPORTS,
                 fill=(255, 255, 255),
             )
