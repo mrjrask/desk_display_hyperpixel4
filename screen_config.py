@@ -81,6 +81,7 @@ def config_to_ui_list(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         frequency = _coerce_int(raw if not isinstance(raw, dict) else raw.get("frequency"))
         alt_screen = ""
         alt_frequency = ""
+        background = ""
 
         if isinstance(raw, dict):
             alt = raw.get("alt")
@@ -93,6 +94,9 @@ def config_to_ui_list(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 alt_frequency_value = alt.get("frequency")
                 if alt_frequency_value is not None:
                     alt_frequency = str(_coerce_int(alt_frequency_value))
+            background_value = raw.get("background")
+            if isinstance(background_value, str):
+                background = background_value.strip()
 
         ui_rows.append(
             {
@@ -100,6 +104,7 @@ def config_to_ui_list(config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "frequency": frequency,
                 "alt_screen": alt_screen,
                 "alt_frequency": alt_frequency,
+                "background": background,
             }
         )
     return ui_rows
@@ -136,6 +141,8 @@ def ui_to_config(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         alt_screen_raw = row.get("alt_screen", "")
         alt_frequency_raw = row.get("alt_frequency", "")
+        background_raw = row.get("background", "")
+        background = _parse_text_field(background_raw)
 
         alt_screen_ids = _parse_alt_screens(alt_screen_raw, screen_id)
         if alt_screen_ids:
@@ -158,16 +165,22 @@ def ui_to_config(payload: Dict[str, Any]) -> Dict[str, Any]:
                 alt_value = alt_screen_ids[0]
             else:
                 alt_value = alt_screen_ids
-            ordered[screen_id] = {
+            payload: Dict[str, Any] = {
                 "frequency": frequency,
                 "alt": {"screen": alt_value, "frequency": alt_frequency},
             }
+            if background:
+                payload["background"] = background
+            ordered[screen_id] = payload
         else:
             if _has_value(alt_frequency_raw):
                 raise ValueError(
                     f"Alternate frequency for '{screen_id}' requires alternate screens"
                 )
-            ordered[screen_id] = frequency
+            if background:
+                ordered[screen_id] = {"frequency": frequency, "background": background}
+            else:
+                ordered[screen_id] = frequency
 
     if not ordered:
         raise ValueError("Configuration must contain at least one screen")
@@ -218,3 +231,11 @@ def _has_value(value: Any) -> bool:
     if isinstance(value, str):
         return bool(value.strip())
     return True
+
+
+def _parse_text_field(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()

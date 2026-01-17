@@ -44,6 +44,7 @@ def test_api_screens_reports_config_list(app_client):
     assert screens[0]["frequency"] == 0
     assert screens[0]["alt_screen"] == ""
     assert screens[0]["alt_frequency"] == ""
+    assert screens[0]["background"] == ""
     assert any(entry["id"] == "travel" for entry in screens)
     assert "date" in payload["screen_ids"]
 
