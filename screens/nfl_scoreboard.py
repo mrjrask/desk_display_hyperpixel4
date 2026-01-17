@@ -47,6 +47,11 @@ from utils import (
 )
 
 # ─── Constants ────────────────────────────────────────────────────────────────
+try:
+    RESAMPLE = Image.Resampling.LANCZOS
+except AttributeError:
+    RESAMPLE = Image.ANTIALIAS
+
 TITLE               = "NFL Scoreboard"
 TITLE_GAP           = 12
 BLOCK_SPACING       = 20
