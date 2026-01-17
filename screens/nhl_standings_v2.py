@@ -93,7 +93,7 @@ OVERVIEW_TITLE_MARGIN_BOTTOM = 18
 OVERVIEW_BOTTOM_MARGIN = 6
 OVERVIEW_MIN_LOGO_HEIGHT = 96
 OVERVIEW_MAX_LOGO_HEIGHT = 184
-OVERVIEW_LOGO_PADDING = 16
+OVERVIEW_LOGO_PADDING = 6
 OVERVIEW_LOGO_OVERLAP = 12
 OVERVIEW_LEADER_LOGO_SCALE = 1.1
 OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
@@ -1407,15 +1407,22 @@ def _build_overview_rows_horizontal(
     max_cols: int,
 ) -> List[List[Placement]]:
     rows: List[List[Placement]] = [[] for _ in range(len(sections))]
+    base_centers = _centered_positions(max_cols, OVERVIEW_MARGIN_X, available_width)
+    col_width = available_width / max(1, max_cols)
 
     for row_idx, (_, teams) in enumerate(sections):
         limited = teams[:max_cols]
-        col_centers = _centered_positions(
-            len(limited),
-            OVERVIEW_MARGIN_X,
-            available_width,
-        )
-        col_width = available_width / max(1, len(limited))
+        if len(limited) == 2 and max_cols == 3 and len(base_centers) == 3:
+            col_centers = [
+                (base_centers[0] + base_centers[1]) / 2,
+                (base_centers[1] + base_centers[2]) / 2,
+            ]
+        else:
+            col_centers = _centered_positions(
+                len(limited),
+                OVERVIEW_MARGIN_X,
+                available_width,
+            )
         logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
         for col_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
