@@ -30,6 +30,11 @@ COLON_SIZE_RATIO = 0.35
 
 LOGGER = logging.getLogger(__name__)
 
+ROLLBACK_SEQUENCE = tuple(str(value) for value in range(9, -1, -1))
+ROLLBACK_DELAY = 0.03
+_LAST_DIGITS: Optional[str] = None
+_LAST_TIME_FORMAT: Optional[str] = None
+
 
 def _get_time_format() -> str:
     """Return the configured time format ('12' or '24'), defaulting to '12'."""
@@ -303,15 +308,17 @@ def _colon_image(height: int) -> Image.Image:
     return combined
 
 
-def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
+def _time_digits(now: dt.datetime | None = None, time_format: Optional[str] = None) -> str:
     now = now or dt.datetime.now()
-
-    # Format time according to user preference (12 or 24 hour)
-    time_format = _get_time_format()
+    time_format = time_format or _get_time_format()
     if time_format == "12":
-        time_digits = now.strftime("%I%M%S")
-    else:
-        time_digits = now.strftime("%H%M%S")
+        return now.strftime("%I%M%S")
+    return now.strftime("%H%M%S")
+
+
+def _compose_frame(now: dt.datetime | None = None, time_digits: Optional[str] = None) -> Image.Image:
+    if time_digits is None:
+        time_digits = _time_digits(now=now)
 
     elements = [time_digits[0], time_digits[1], ":", time_digits[2], time_digits[3], ":", time_digits[4], time_digits[5]]
 
@@ -361,6 +368,52 @@ def nixie_frame(now: dt.datetime | None = None) -> Image.Image:
     """Compose a Nixie clock frame for the provided time (or now)."""
 
     return _compose_frame(now)
+
+
+def _iter_rollover_frames(previous: str, current: str) -> Iterable[str]:
+    if len(previous) != len(current):
+        return ()
+    rollover_positions = [idx for idx, (prev, curr) in enumerate(zip(previous, current)) if prev == "9" and curr == "0"]
+    if not rollover_positions:
+        return ()
+    frames: list[str] = []
+    for step, value in enumerate(ROLLBACK_SEQUENCE):
+        frame_digits = list(current)
+        for idx in rollover_positions:
+            frame_digits[idx] = value
+        frames.append("".join(frame_digits))
+    return frames
+
+
+def _render_to_display(display, frame: Image.Image) -> None:
+    try:
+        display.image(frame)
+        if hasattr(display, "show"):
+            display.show()
+    except Exception:  # pragma: no cover - defensive refresh guard
+        logging.exception("Failed to render Nixie clock")
+
+
+def refresh_nixie(display) -> None:
+    global _LAST_DIGITS, _LAST_TIME_FORMAT
+
+    time_format = _get_time_format()
+    if _LAST_TIME_FORMAT != time_format:
+        _LAST_DIGITS = None
+        _LAST_TIME_FORMAT = time_format
+
+    current_digits = _time_digits(time_format=time_format)
+
+    if _LAST_DIGITS and current_digits != _LAST_DIGITS:
+        rollover_frames = _iter_rollover_frames(_LAST_DIGITS, current_digits)
+        for frame_digits in rollover_frames:
+            frame = _compose_frame(time_digits=frame_digits)
+            _render_to_display(display, frame)
+            time.sleep(ROLLBACK_DELAY)
+
+    frame = _compose_frame(time_digits=current_digits)
+    _render_to_display(display, frame)
+    _LAST_DIGITS = current_digits
 
 
 def _play_flicker(display, base: Image.Image) -> None:
