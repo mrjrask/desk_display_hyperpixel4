@@ -84,6 +84,7 @@ LOGO_DIR                = os.path.join(IMAGES_DIR, "nfl")
 LEAGUE_LOGO_KEYS        = ("NFL", "nfl")
 LEAGUE_LOGO_GAP         = 10
 LEAGUE_LOGO_HEIGHT      = LOGO_HEIGHT
+LEAGUE_LOGO_MAX_WIDTH   = COL_WIDTHS[1] - LOGO_GAP_MARGIN
 IN_PROGRESS_SCORE_COLOR = SCOREBOARD_IN_PROGRESS_SCORE_COLOR
 IN_PROGRESS_STATUS_COLOR = IN_PROGRESS_SCORE_COLOR
 FINAL_WINNING_SCORE_COLOR = SCOREBOARD_FINAL_WINNING_SCORE_COLOR
@@ -156,7 +157,7 @@ def _get_league_logo() -> Optional[Image.Image]:
         for key in LEAGUE_LOGO_KEYS:
             logo = load_team_logo(LOGO_DIR, key, height=LEAGUE_LOGO_HEIGHT)
             if logo is not None:
-                _LEAGUE_LOGO = logo
+                _LEAGUE_LOGO = _fit_logo_to_width(logo, LEAGUE_LOGO_MAX_WIDTH)
                 break
         _LEAGUE_LOGO_LOADED = True
     return _LEAGUE_LOGO
