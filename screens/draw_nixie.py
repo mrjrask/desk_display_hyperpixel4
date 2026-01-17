@@ -394,3 +394,18 @@ def draw_nixie(display, transition: bool = False):
 
     _play_flicker(display, frame)
     return ScreenImage(frame, displayed=True)
+
+
+def refresh_nixie(display) -> ScreenImage:
+    """Refresh the Nixie clock without transitions or flicker."""
+
+    frame = _compose_frame()
+    try:
+        display.image(frame)
+        if hasattr(display, "show"):
+            display.show()
+    except Exception:  # pragma: no cover - defensive refresh guard
+        logging.exception("Failed to refresh Nixie clock")
+        return ScreenImage(frame, displayed=False)
+
+    return ScreenImage(frame, displayed=True)
