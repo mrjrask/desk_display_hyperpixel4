@@ -37,7 +37,6 @@ from utils import (
     draw_persistent_time,
     load_team_logo,
     square_logo_frame,
-    standard_next_game_logo_height,
 )
 
 TS_PATH = TIMES_SQUARE_FONT_PATH
@@ -727,8 +726,7 @@ def _render_next_game(game: Dict, *, title: str) -> Image.Image:
     logo_area_top = y + vertical_padding
     logo_area_bottom = bottom_y - vertical_padding
     available_h = max(10, logo_area_bottom - logo_area_top)
-    preferred_logo_height = standard_next_game_logo_height(HEIGHT)
-    max_logo_height = max(36, min(available_h, preferred_logo_height))
+    max_logo_height = max(36, available_h)
     frame_ceiling = max_logo_height
 
     base_away_logo = _load_logo_cached(away.get("tri"), max_logo_height)

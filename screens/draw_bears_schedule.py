@@ -26,7 +26,6 @@ from utils import (
     load_team_logo,
     next_game_from_schedule,
     square_logo_frame,
-    standard_next_game_logo_height,
     wrap_text,
 )
 
@@ -90,8 +89,7 @@ def show_bears_next_game(display, transition=False):
         logo_area_top = y_txt + vertical_padding
         logo_area_bottom = name_y - vertical_padding
         available_h = max(10, logo_area_bottom - logo_area_top)
-        preferred_logo_height = standard_next_game_logo_height(config.HEIGHT)
-        max_logo_height = max(36, min(available_h, preferred_logo_height))
+        max_logo_height = max(36, available_h)
         frame_ceiling = max_logo_height
 
         base_away_logo = load_team_logo(NFL_LOGO_DIR, away_ab, height=max_logo_height)
