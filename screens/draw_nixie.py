@@ -34,6 +34,10 @@ ROLLBACK_SEQUENCE = tuple(str(value) for value in range(9, -1, -1))
 ROLLBACK_DELAY = 0.03
 _LAST_DIGITS: Optional[str] = None
 _LAST_TIME_FORMAT: Optional[str] = None
+_ROLLBACK_FRAMES: Optional[Sequence[str]] = None
+_ROLLBACK_INDEX = 0
+_ROLLBACK_TARGET: Optional[str] = None
+_ROLLBACK_LAST_FRAME_AT = 0.0
 
 
 def _get_time_format() -> str:
@@ -396,20 +400,52 @@ def _render_to_display(display, frame: Image.Image) -> None:
 
 def refresh_nixie(display) -> None:
     global _LAST_DIGITS, _LAST_TIME_FORMAT
+    global _ROLLBACK_FRAMES, _ROLLBACK_INDEX, _ROLLBACK_TARGET, _ROLLBACK_LAST_FRAME_AT
 
     time_format = _get_time_format()
     if _LAST_TIME_FORMAT != time_format:
         _LAST_DIGITS = None
         _LAST_TIME_FORMAT = time_format
+        _ROLLBACK_FRAMES = None
+        _ROLLBACK_INDEX = 0
+        _ROLLBACK_TARGET = None
 
     current_digits = _time_digits(time_format=time_format)
+    now_monotonic = time.monotonic()
+
+    if _ROLLBACK_FRAMES is not None:
+        if _ROLLBACK_TARGET != current_digits:
+            _ROLLBACK_FRAMES = None
+            _ROLLBACK_INDEX = 0
+            _ROLLBACK_TARGET = None
+            _LAST_DIGITS = None
+        else:
+            if now_monotonic - _ROLLBACK_LAST_FRAME_AT >= ROLLBACK_DELAY:
+                frame_digits = _ROLLBACK_FRAMES[_ROLLBACK_INDEX]
+                frame = _compose_frame(time_digits=frame_digits)
+                _render_to_display(display, frame)
+                _ROLLBACK_INDEX += 1
+                _ROLLBACK_LAST_FRAME_AT = now_monotonic
+                if _ROLLBACK_INDEX >= len(_ROLLBACK_FRAMES):
+                    _ROLLBACK_FRAMES = None
+                    _ROLLBACK_INDEX = 0
+                    _ROLLBACK_TARGET = None
+                    _LAST_DIGITS = current_digits
+                return
+            return
 
     if _LAST_DIGITS and current_digits != _LAST_DIGITS:
         rollover_frames = _iter_rollover_frames(_LAST_DIGITS, current_digits)
-        for frame_digits in rollover_frames:
+        if rollover_frames:
+            _ROLLBACK_FRAMES = tuple(rollover_frames)
+            _ROLLBACK_INDEX = 0
+            _ROLLBACK_TARGET = current_digits
+            _ROLLBACK_LAST_FRAME_AT = now_monotonic
+            frame_digits = _ROLLBACK_FRAMES[_ROLLBACK_INDEX]
             frame = _compose_frame(time_digits=frame_digits)
             _render_to_display(display, frame)
-            time.sleep(ROLLBACK_DELAY)
+            _ROLLBACK_INDEX += 1
+            return
 
     frame = _compose_frame(time_digits=current_digits)
     _render_to_display(display, frame)
