@@ -12,6 +12,7 @@ def _home_game(state: str) -> dict:
             "away": {"team": {"id": "0000000000"}},
         },
         "status": {"detailedState": state},
+        "gameDate": "2024-10-10T00:00:00Z",
     }
 
 
@@ -23,6 +24,7 @@ def test_bulls_next_home_prefers_scheduled_over_placeholder(monkeypatch):
         yield from (placeholder, scheduled)
 
     monkeypatch.setattr(data_fetch, "_future_bulls_games", _fake_future)
+    monkeypatch.setattr(data_fetch, "fetch_bulls_next_game", lambda: None)
 
     assert data_fetch.fetch_bulls_next_home_game() is scheduled
 
@@ -42,12 +44,14 @@ def test_bulls_next_home_returns_first_non_final_home_game(monkeypatch):
         yield from (non_home, fallback, final_game)
 
     monkeypatch.setattr(data_fetch, "_future_bulls_games", _fake_future)
+    monkeypatch.setattr(data_fetch, "fetch_bulls_next_game", lambda: None)
 
     assert data_fetch.fetch_bulls_next_home_game() is fallback
 
 
 def test_bulls_next_home_falls_back_to_ics(monkeypatch):
     monkeypatch.setattr(data_fetch, "_future_bulls_games", lambda _days_forward: iter(()))
+    monkeypatch.setattr(data_fetch, "fetch_bulls_next_game", lambda: None)
 
     ics_game = {"teams": {"home": {"team": {"id": str(data_fetch.NBA_TEAM_ID)}}}}
 
@@ -60,6 +64,7 @@ def test_bulls_next_home_falls_back_to_ics(monkeypatch):
 
 def test_bulls_next_home_extends_ics_window(monkeypatch):
     monkeypatch.setattr(data_fetch, "_future_bulls_games", lambda _days_forward: iter(()))
+    monkeypatch.setattr(data_fetch, "fetch_bulls_next_game", lambda: None)
 
     target_game = {"teams": {"home": {"team": {"id": str(data_fetch.NBA_TEAM_ID)}}}}
     seen_windows = []
@@ -74,6 +79,20 @@ def test_bulls_next_home_extends_ics_window(monkeypatch):
 
     assert data_fetch.fetch_bulls_next_home_game() is target_game
     assert seen_windows == [data_fetch._NBA_LOOKAHEAD_DAYS, data_fetch._NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS]
+
+
+def test_bulls_next_home_skips_duplicate_of_next_game(monkeypatch):
+    next_home = _home_game("Scheduled")
+    following_home = _home_game("Scheduled")
+    following_home["gameDate"] = "2024-10-30T00:00:00Z"
+
+    def _fake_future(_days_forward):
+        yield from (next_home, following_home)
+
+    monkeypatch.setattr(data_fetch, "_future_bulls_games", _fake_future)
+    monkeypatch.setattr(data_fetch, "fetch_bulls_next_game", lambda: next_home)
+
+    assert data_fetch.fetch_bulls_next_home_game() is following_home
 
 
 def test_parse_bulls_ics_shapes_game_correctly():
