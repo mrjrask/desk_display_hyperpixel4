@@ -27,7 +27,6 @@ from utils import (
     log_call,
     load_team_logo,
     square_logo_frame,
-    standard_next_game_logo_height,
 )
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -486,9 +485,8 @@ def draw_sports_screen(display, game, title, transition=False):
     bottom_y   = HEIGHT - bl_h - BOTTOM_MARGIN
 
     available_h = max(10, bottom_y - (y_text + 2))
-    max_logo_height = max(36, min(available_h, int(round(HEIGHT * 0.6))))
-    preferred_logo_h = standard_next_game_logo_height(HEIGHT)
-    frame_ceiling = min(max_logo_height, preferred_logo_h)
+    max_logo_height = max(36, available_h)
+    frame_ceiling = max_logo_height
 
     base_away_logo = load_logo_for_tm(away_tm, max_logo_height)
     base_home_logo = load_logo_for_tm(home_tm, max_logo_height)

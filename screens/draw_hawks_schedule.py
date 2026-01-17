@@ -54,7 +54,7 @@ from config import (
     HEIGHT,
 )
 from services.http_client import NHL_HEADERS, get_session, request_json
-from utils import draw_persistent_time, square_logo_frame, standard_next_game_logo_height
+from utils import draw_persistent_time, square_logo_frame
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NHL_DIR = NHL_IMAGES_DIR
 
@@ -1090,8 +1090,7 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     logo_area_top = y_top + vertical_padding
     logo_area_bottom = bottom_y - vertical_padding
     available_h = max(10, logo_area_bottom - logo_area_top)
-    preferred_logo_height = standard_next_game_logo_height(HEIGHT)
-    max_logo_height = max(36, min(available_h, preferred_logo_height))
+    max_logo_height = max(36, available_h)
     frame_ceiling = max_logo_height
 
     base_away_logo = _load_logo_png(away_tri, height=max_logo_height)
