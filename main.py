@@ -181,7 +181,7 @@ def _import_runtime_dependencies() -> None:
     from paths import resolve_storage_paths
 
     from screens.draw_date_time import draw_date, draw_time
-    from screens.draw_nixie import nixie_frame
+    from screens.draw_nixie import refresh_nixie
     from screens.draw_travel_time import (
         get_travel_active_window,
         is_travel_screen_active,
@@ -1373,11 +1373,8 @@ def main_loop():
                     if now_monotonic < nixie_refresh_after:
                         return
 
-                    frame = nixie_frame()
                     try:
-                        display.image(frame)
-                        if hasattr(display, "show"):
-                            display.show()
+                        refresh_nixie(display)
                     except Exception as exc:
                         logging.debug("Nixie refresh failed: %s", exc)
                     nixie_refresh_after = now_monotonic + 0.5
