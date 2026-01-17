@@ -12,7 +12,13 @@ from typing import Dict, Iterable, Optional, Sequence
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
-from config import HEIGHT, WIDTH, TIMES_SQUARE_FONT_PATH, DISPLAY_OVERRIDES
+from config import (
+    CENTRAL_TIME,
+    DISPLAY_OVERRIDES,
+    HEIGHT,
+    TIMES_SQUARE_FONT_PATH,
+    WIDTH,
+)
 from utils import ScreenImage, clear_display, log_call
 
 BACKGROUND_COLOR = (0, 0, 0)
@@ -304,7 +310,12 @@ def _colon_image(height: int) -> Image.Image:
 
 
 def _compose_frame(now: dt.datetime | None = None) -> Image.Image:
-    now = now or dt.datetime.now()
+    if now is None:
+        now = dt.datetime.now(CENTRAL_TIME)
+    elif now.tzinfo is None:
+        now = CENTRAL_TIME.localize(now)
+    else:
+        now = now.astimezone(CENTRAL_TIME)
 
     # Format time according to user preference (12 or 24 hour)
     time_format = _get_time_format()
