@@ -70,6 +70,7 @@ STATUS_FONT             = clone_font(FONT_STATUS, 42)
 CENTER_FONT             = clone_font(FONT_STATUS, 54)
 TITLE_FONT              = FONT_TITLE_SPORTS
 LOGO_HEIGHT             = SCOREBOARD_LOGO_HEIGHT
+LOGO_GAP_MARGIN         = 8
 LOGO_DIR                = os.path.join(IMAGES_DIR, "nba")
 LEAGUE_LOGO_KEYS        = ("NBA", "nba")
 LEAGUE_LOGO_GAP         = 10
@@ -139,6 +140,19 @@ def _get_league_logo() -> Optional[Image.Image]:
                 break
         _LEAGUE_LOGO_LOADED = True
     return _LEAGUE_LOGO
+
+
+def _fit_logo_to_width(logo: Image.Image, max_width: int) -> Optional[Image.Image]:
+    if logo is None or max_width <= 0:
+        return None
+    if logo.width <= max_width:
+        return logo
+    scale = max_width / float(logo.width)
+    new_width = max(1, int(round(logo.width * scale)))
+    new_height = max(1, int(round(logo.height * scale)))
+    if new_width == logo.width:
+        return logo
+    return logo.resize((new_width, new_height), resample=RESAMPLE)
 
 
 def _load_intro_logo() -> Optional[Image.Image]:
@@ -479,9 +493,13 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         logo = _load_logo_cached(abbr) if abbr else None
         if not logo:
             continue
-        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo.width) // 2
-        y0 = score_top + (SCORE_ROW_H - logo.height) // 2
-        canvas.paste(logo, (x0, y0), logo)
+        max_width = max(1, COL_WIDTHS[idx] - LOGO_GAP_MARGIN)
+        fitted_logo = _fit_logo_to_width(logo, max_width)
+        if not fitted_logo:
+            continue
+        x0 = COL_X[idx] + (COL_WIDTHS[idx] - fitted_logo.width) // 2
+        y0 = score_top + (SCORE_ROW_H - fitted_logo.height) // 2
+        canvas.paste(fitted_logo, (x0, y0), fitted_logo)
 
     status_top = score_top + SCORE_ROW_H
     status_text = _format_status(game)
