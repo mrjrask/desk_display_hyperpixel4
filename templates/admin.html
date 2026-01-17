@@ -110,7 +110,7 @@
     }
     .config-table {
       display: grid;
-      grid-template-columns: 40px minmax(160px, 1.5fr) minmax(120px, 0.9fr) minmax(220px, 1.4fr) minmax(140px, 0.9fr);
+      grid-template-columns: 40px minmax(160px, 1.5fr) minmax(160px, 1fr) minmax(240px, 1.5fr) minmax(150px, 0.9fr) minmax(160px, 1fr);
       gap: 0.75rem 1rem;
       align-items: center;
     }
@@ -135,6 +135,60 @@
       background: transparent;
       color: inherit;
       font-size: 0.95rem;
+      outline: none;
+    }
+    .frequency-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .hide-zero-toggle {
+      font-size: 0.7rem;
+      color: #cbd5f5;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .hide-zero-toggle input {
+      accent-color: #38bdf8;
+    }
+    .alt-screen-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .alt-screen-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .alt-screen-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.5rem 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.2);
+      font-size: 0.8rem;
+    }
+    .alt-screen-tag button {
+      border: none;
+      background: transparent;
+      color: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      padding: 0;
+    }
+    .alt-screen-select {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.9rem;
       outline: none;
     }
     .drag-handle {
@@ -173,9 +227,16 @@
       <div class="config-table config-table__header" aria-hidden="true">
         <div>Drag</div>
         <div>Screen</div>
-        <div>Frequency</div>
+        <div class="frequency-header">
+          <div>Frequency</div>
+          <label class="hide-zero-toggle" for="hide-zero-toggle">
+            <input type="checkbox" id="hide-zero-toggle">
+            Hide 0
+          </label>
+        </div>
         <div>Alternate screens</div>
         <div>Alternate frequency</div>
+        <div>Background color</div>
       </div>
       <div class="config-table" id="config-list"></div>
       <div class="config-actions">
@@ -193,7 +254,9 @@
       const configSaveButtons = Array.from(document.querySelectorAll('.config-save'));
       const configDefaultsButtons = Array.from(document.querySelectorAll('.config-defaults'));
       const configExportButtons = Array.from(document.querySelectorAll('.config-export'));
+      const hideZeroToggle = document.getElementById('hide-zero-toggle');
       let configDirty = false;
+      let availableScreenIds = [];
 
       function setConfigStatus(message, tone = 'info') {
         configStatus.textContent = message;
@@ -217,6 +280,107 @@
         });
       }
 
+      function parseAltScreens(value) {
+        if (!value) {
+          return [];
+        }
+        return value
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function updateAltScreenValue(hiddenInput, values) {
+        hiddenInput.value = values.join(', ');
+        markConfigDirty(true);
+      }
+
+      function renderAltSelector(cell, screenId, currentValue) {
+        cell.innerHTML = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'alt-screen-selector';
+
+        const tags = document.createElement('div');
+        tags.className = 'alt-screen-tags';
+
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.className = 'alt-screen-input';
+        hiddenInput.value = currentValue ?? '';
+
+        const select = document.createElement('select');
+        select.className = 'alt-screen-select';
+        select.innerHTML = '<option value="">Add alternate…</option>';
+        availableScreenIds
+          .filter((id) => id !== screenId)
+          .forEach((id) => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = id;
+            select.appendChild(option);
+          });
+
+        const renderTags = () => {
+          tags.innerHTML = '';
+          const values = parseAltScreens(hiddenInput.value);
+          if (!values.length) {
+            const empty = document.createElement('div');
+            empty.style.fontSize = '0.8rem';
+            empty.style.color = '#94a3b8';
+            empty.textContent = 'No alternates selected';
+            tags.appendChild(empty);
+            return;
+          }
+          values.forEach((value) => {
+            const tag = document.createElement('span');
+            tag.className = 'alt-screen-tag';
+            tag.textContent = value;
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.setAttribute('aria-label', `Remove ${value}`);
+            removeButton.textContent = '×';
+            removeButton.addEventListener('click', () => {
+              const updated = parseAltScreens(hiddenInput.value).filter((entry) => entry !== value);
+              updateAltScreenValue(hiddenInput, updated);
+              renderTags();
+            });
+            tag.appendChild(removeButton);
+            tags.appendChild(tag);
+          });
+        };
+
+        select.addEventListener('change', () => {
+          const value = select.value;
+          if (!value) {
+            return;
+          }
+          const existing = parseAltScreens(hiddenInput.value);
+          if (!existing.includes(value)) {
+            updateAltScreenValue(hiddenInput, [...existing, value]);
+            renderTags();
+          }
+          select.value = '';
+        });
+
+        wrapper.append(tags, select, hiddenInput);
+        cell.appendChild(wrapper);
+        renderTags();
+      }
+
+      function applyHideZero() {
+        const hideZeros = hideZeroToggle.checked;
+        configList.querySelectorAll('.freq-input').forEach((input) => {
+          const value = input.value.trim();
+          if (hideZeros && value === '0') {
+            input.dataset.zeroHidden = 'true';
+            input.value = '';
+          } else if (!hideZeros && input.dataset.zeroHidden === 'true' && value === '') {
+            input.value = '0';
+            delete input.dataset.zeroHidden;
+          }
+        });
+      }
+
       function renderConfigRows(screens) {
         configList.innerHTML = '';
         screens.forEach((screen) => {
@@ -231,16 +395,23 @@
             <div class="config-cell">
               <input type="number" min="0" inputmode="numeric" class="freq-input" value="${screen.frequency ?? ''}">
             </div>
-            <div class="config-cell">
-              <input type="text" class="alt-screen-input" placeholder="alternate_a, alternate_b" value="${screen.alt_screen ?? ''}">
-            </div>
+            <div class="config-cell alt-screen-cell"></div>
             <div class="config-cell">
               <input type="number" min="0" inputmode="numeric" class="alt-frequency-input" placeholder="Optional" value="${screen.alt_frequency ?? ''}">
             </div>
+            <div class="config-cell">
+              <input type="text" class="background-input" placeholder="#000000" value="${screen.background ?? ''}">
+            </div>
           `;
+
+          const altCell = row.querySelector('.alt-screen-cell');
+          renderAltSelector(altCell, screen.id, screen.alt_screen ?? '');
 
           row.querySelectorAll('input').forEach((input) => {
             input.addEventListener('input', () => {
+              if (input.classList.contains('freq-input') && input.dataset.zeroHidden === 'true') {
+                delete input.dataset.zeroHidden;
+              }
               markConfigDirty(true);
             });
           });
@@ -262,6 +433,7 @@
 
           configList.appendChild(row);
         });
+        applyHideZero();
       }
 
       function getDragAfterElement(container, y) {
@@ -298,6 +470,7 @@
             frequency: row.querySelector('.freq-input').value,
             alt_screen: row.querySelector('.alt-screen-input').value,
             alt_frequency: row.querySelector('.alt-frequency-input').value,
+            background: row.querySelector('.background-input').value,
           })),
         };
       }
@@ -310,6 +483,7 @@
         if (!resp.ok || payload.status !== 'ok') {
           throw new Error(payload.message || 'Unable to load configuration');
         }
+        availableScreenIds = payload.screen_ids || [];
         renderConfigRows(payload.screens || []);
         markConfigDirty(false);
         setConfigStatus('Configuration loaded.', 'success');
@@ -361,6 +535,10 @@
         button.addEventListener('click', () => {
           window.location.href = '/api/screens/export';
         });
+      });
+
+      hideZeroToggle.addEventListener('change', () => {
+        applyHideZero();
       });
 
       loadConfig('/api/screens').catch((err) => {
