@@ -148,6 +148,7 @@ class Display:
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
         self._sdl_video_driver: Optional[str] = None
         self._relative_mouse_enabled = False
+        self._cursor_rehide_timer: Optional[threading.Timer] = None
 
         preferred_backend = DISPLAY_BACKEND
         if preferred_backend not in {"auto", "pygame"}:
@@ -252,10 +253,27 @@ class Display:
             except Exception:  # pragma: no cover - optional dependency
                 pass
 
+    def _schedule_cursor_rehide(self, delay: float = 0.75) -> None:
+        """Re-apply cursor hiding shortly after startup or restarts."""
+
+        if pygame is None:  # pragma: no cover - optional dependency
+            return
+        timer = self._cursor_rehide_timer
+        if timer and timer.is_alive():
+            timer.cancel()
+        timer = threading.Timer(delay, self._hide_mouse_cursor)
+        timer.daemon = True
+        self._cursor_rehide_timer = timer
+        try:
+            timer.start()
+        except Exception:  # pragma: no cover - optional dependency
+            self._cursor_rehide_timer = None
+
     def hide_mouse_cursor(self) -> None:
         """Public wrapper to hide the cursor when a mouse is connected."""
 
         self._hide_mouse_cursor()
+        self._schedule_cursor_rehide()
 
     def show_mouse_cursor(self) -> None:
         """Show the cursor and reset it to the default when possible."""
@@ -267,6 +285,11 @@ class Display:
             pygame.mouse.set_visible(True)
         except Exception:  # pragma: no cover - optional dependency
             pass
+
+        timer = self._cursor_rehide_timer
+        if timer and timer.is_alive():
+            timer.cancel()
+        self._cursor_rehide_timer = None
 
         if self._relative_mouse_enabled:
             try:
@@ -372,6 +395,7 @@ class Display:
             except Exception:  # pragma: no cover - optional dependency
                 self._sdl_video_driver = selected_driver
             self._hide_mouse_cursor()
+            self._schedule_cursor_rehide()
             try:
                 surface.fill((0, 0, 0))
                 pygame.display.flip()
@@ -457,6 +481,7 @@ class Display:
 
         # Reinforce cursor hiding whenever the presenter starts or restarts.
         self._hide_mouse_cursor()
+        self._schedule_cursor_rehide()
         if self._pygame_present_queue is None:
             self._pygame_present_queue = queue.Queue(maxsize=1)
         if self._pygame_present_thread and self._pygame_present_thread.is_alive():
@@ -557,6 +582,7 @@ class Display:
                 success, reason = self._init_pygame_backend()
             if success:
                 self._hide_mouse_cursor()
+                self._schedule_cursor_rehide()
                 logging.info("✅ Pygame display reset succeeded.")
                 self._start_pygame_presenter()
                 return
