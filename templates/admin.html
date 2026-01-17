@@ -110,7 +110,7 @@
     }
     .config-table {
       display: grid;
-      grid-template-columns: 40px minmax(160px, 1.5fr) minmax(160px, 1fr) minmax(240px, 1.5fr) minmax(150px, 0.9fr) minmax(160px, 1fr);
+      grid-template-columns: 40px minmax(160px, 1.5fr) minmax(160px, 1fr) minmax(160px, 1fr) minmax(240px, 1.5fr) minmax(150px, 0.9fr);
       gap: 0.75rem 1rem;
       align-items: center;
     }
@@ -234,9 +234,9 @@
             Hide 0
           </label>
         </div>
+        <div>Background color</div>
         <div>Alternate screens</div>
         <div>Alternate frequency</div>
-        <div>Background color</div>
       </div>
       <div class="config-table" id="config-list"></div>
       <div class="config-actions">
@@ -395,12 +395,12 @@
             <div class="config-cell">
               <input type="number" min="0" inputmode="numeric" class="freq-input" value="${screen.frequency ?? ''}">
             </div>
+            <div class="config-cell">
+              <input type="text" class="background-input" placeholder="#000000" value="${screen.background ?? ''}">
+            </div>
             <div class="config-cell alt-screen-cell"></div>
             <div class="config-cell">
               <input type="number" min="0" inputmode="numeric" class="alt-frequency-input" placeholder="Optional" value="${screen.alt_frequency ?? ''}">
-            </div>
-            <div class="config-cell">
-              <input type="text" class="background-input" placeholder="#000000" value="${screen.background ?? ''}">
             </div>
           `;
 
