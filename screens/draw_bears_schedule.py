@@ -8,10 +8,11 @@ Shows the next Chicago Bears game with:
     or 'vs.' if the Bears are home.
   - Between those and the bottom line, a row of logos: AWAY @ HOME, each logo
     auto-sized similarly to the Hawks schedule screen.
-  - Two-line footer with event name above the date/time.
+  - Footer with optional event name above the date/time.
 """
 
 import os
+import re
 from typing import Optional
 
 from PIL import Image, ImageDraw
@@ -37,15 +38,16 @@ def show_bears_next_game(display, transition=False):
     draw  = ImageDraw.Draw(img)
 
     if game:
-        name_line = game.get("name", title)
-        date_time_line = f"{game.get('date', '').strip()} {game.get('time', '').strip()}".strip()
+        def _format_date_time_line(game_data: dict) -> str:
+            date_text = game_data.get("date", "").strip()
+            time_text = game_data.get("time", "").strip()
+            date_text = re.sub(r"\b\d{4}\b", "", date_text).strip()
+            date_text = " ".join(date_text.split())
+            return f"{date_text} {time_text}".strip()
 
-        name_w, name_h = draw.textsize(name_line, font=config.FONT_TITLE_SPORTS)
-        date_w, date_h = draw.textsize(date_time_line, font=config.FONT_DATE_SPORTS)
-        draw.text(((config.WIDTH - name_w)//2, 0), name_line,
+        title_w, title_h = draw.textsize(title, font=config.FONT_TITLE_SPORTS)
+        draw.text(((config.WIDTH - title_w)//2, 0), title,
                   font=config.FONT_TITLE_SPORTS, fill=(255,255,255))
-        draw.text(((config.WIDTH - date_w)//2, name_h + 2), date_time_line,
-                  font=config.FONT_DATE_SPORTS, fill=(255,255,255))
 
         opp = game["opponent"]
         ha  = game["home_away"].lower()
@@ -53,7 +55,7 @@ def show_bears_next_game(display, transition=False):
 
         # Opponent text (up to 2 lines)
         lines  = wrap_text(f"{prefix} {opp}", config.FONT_TEAM_SPORTS, config.WIDTH)[:2]
-        y_txt  = name_h + date_h + 6
+        y_txt  = title_h + 6
         for ln in lines:
             w_ln, h_ln = draw.textsize(ln, font=config.FONT_TEAM_SPORTS)
             draw.text(((config.WIDTH - w_ln)//2, y_txt),
@@ -75,12 +77,17 @@ def show_bears_next_game(display, transition=False):
             away_ab, home_ab, loc_sym = opp_ab, bears_ab, "@"
 
         # Bottom dateline text — event name above date/time
-        name_line = game.get("name", title)
-        date_time_line = f"{game.get('date', '').strip()} {game.get('time', '').strip()}".strip()
-        name_w, name_h = draw.textsize(name_line, font=config.FONT_DATE_SPORTS)
+        name_line = game.get("name", "").strip()
+        if name_line == title:
+            name_line = ""
+        date_time_line = _format_date_time_line(game)
+        if name_line:
+            name_w, name_h = draw.textsize(name_line, font=config.FONT_DATE_SPORTS)
+        else:
+            name_w, name_h = 0, 0
         date_w, date_h = draw.textsize(date_time_line, font=config.FONT_DATE_SPORTS)
         date_y = config.HEIGHT - date_h - BEARS_BOTTOM_MARGIN  # keep on-screen
-        name_y = date_y - name_h - 2
+        name_y = date_y - name_h - 2 if name_line else date_y
 
         horizontal_padding = max(12, int(round(config.WIDTH * 0.02)))
         vertical_padding = max(4, int(round(config.HEIGHT * 0.01)))
@@ -182,12 +189,13 @@ def show_bears_next_game(display, transition=False):
                 x += w_sy + spacing
 
         # Draw bottom text
-        draw.text(
-            ((config.WIDTH - name_w) // 2, name_y),
-            name_line,
-            font=config.FONT_DATE_SPORTS,
-            fill=(255, 255, 255),
-        )
+        if name_line:
+            draw.text(
+                ((config.WIDTH - name_w) // 2, name_y),
+                name_line,
+                font=config.FONT_DATE_SPORTS,
+                fill=(255, 255, 255),
+            )
         draw.text(
             ((config.WIDTH - date_w) // 2, date_y),
             date_time_line,
