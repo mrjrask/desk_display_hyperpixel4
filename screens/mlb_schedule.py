@@ -585,8 +585,8 @@ def draw_sports_screen(display, game, title, transition=False):
 
 @log_call
 def draw_next_home_game(display, game, transition=False):
-    """Wrapper to render the 'Next at home...' screen using sports layout."""
-    return draw_sports_screen(display, game, "Next at home...", transition=transition)
+    """Wrapper to render the 'Following at home...' screen using sports layout."""
+    return draw_sports_screen(display, game, "Following at home...", transition=transition)
 
 # ── Back-compat: main.py may still import this even though we no longer use it
 @log_call
