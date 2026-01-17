@@ -847,10 +847,30 @@ def _same_game(a, b):
     a_date = a.get("gameDate")
     b_date = b.get("gameDate")
     if a_date and b_date and a_date == b_date:
-        a_home = _team_id(a.get("homeTeam") or a.get("home_team") or {})
-        b_home = _team_id(b.get("homeTeam") or b.get("home_team") or {})
-        a_away = _team_id(a.get("awayTeam") or a.get("away_team") or {})
-        b_away = _team_id(b.get("awayTeam") or b.get("away_team") or {})
+        a_home = _team_id(
+            a.get("homeTeam")
+            or a.get("home_team")
+            or (a.get("teams") or {}).get("home")
+            or {}
+        )
+        b_home = _team_id(
+            b.get("homeTeam")
+            or b.get("home_team")
+            or (b.get("teams") or {}).get("home")
+            or {}
+        )
+        a_away = _team_id(
+            a.get("awayTeam")
+            or a.get("away_team")
+            or (a.get("teams") or {}).get("away")
+            or {}
+        )
+        b_away = _team_id(
+            b.get("awayTeam")
+            or b.get("away_team")
+            or (b.get("teams") or {}).get("away")
+            or {}
+        )
         return a_home == b_home and a_away == b_away
     return False
 
@@ -1334,11 +1354,13 @@ def fetch_bulls_next_game():
     return None
 
 
-def _next_bulls_home_game_from_nba():
+def _next_bulls_home_game_from_nba(next_game=None, days_forward=_NBA_LOOKAHEAD_DAYS):
     fallback_game = None
-    for game in _future_bulls_games(_NBA_LOOKAHEAD_DAYS):
+    for game in _future_bulls_games(days_forward):
         teams = game.get("teams") or {}
         if not _is_bulls_team(teams.get("home")):
+            continue
+        if next_game and _same_game(next_game, game):
             continue
 
         state = _nba_game_state(game)
@@ -1349,27 +1371,31 @@ def _next_bulls_home_game_from_nba():
     return fallback_game
 
 
-def _next_bulls_home_game_from_ics(days_forward=_NBA_LOOKAHEAD_DAYS):
+def _next_bulls_home_game_from_ics(next_game=None, days_forward=_NBA_LOOKAHEAD_DAYS):
     for game in _future_bulls_home_games_from_ics(days_forward):
+        if next_game and _same_game(next_game, game):
+            continue
         return game
     return None
 
 
 def fetch_bulls_next_home_game():
+    next_game = fetch_bulls_next_game()
     try:
-        nba_game = _next_bulls_home_game_from_nba()
+        nba_game = _next_bulls_home_game_from_nba(next_game)
         if nba_game:
             return nba_game
     except Exception as exc:
         logging.error("Error fetching next Bulls home game from NBA: %s", exc)
 
     try:
-        game = _next_bulls_home_game_from_ics(_NBA_LOOKAHEAD_DAYS)
+        game = _next_bulls_home_game_from_ics(next_game, _NBA_LOOKAHEAD_DAYS)
         if game:
             return game
         if _NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS > _NBA_LOOKAHEAD_DAYS:
             return _next_bulls_home_game_from_ics(
-                _NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS
+                next_game,
+                _NBA_HOME_GAME_EXTENDED_LOOKAHEAD_DAYS,
             )
     except Exception as exc:
         logging.error("Error fetching next Bulls home game from ICS: %s", exc)
