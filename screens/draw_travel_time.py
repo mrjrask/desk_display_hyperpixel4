@@ -497,19 +497,27 @@ def is_travel_screen_active(now: Optional[dt.time] = None) -> bool:
     if start == end:
         return True
 
-    if isinstance(now, dt.datetime):
-        now = now.timetz() if now.tzinfo else now.time()
-    elif now is None:
-        now = dt.datetime.now(CENTRAL_TIME).time()
-
-    if not isinstance(now, dt.time):
+    if now is None:
+        now_dt = dt.datetime.now(CENTRAL_TIME)
+    elif isinstance(now, dt.datetime):
+        now_dt = now
+    elif isinstance(now, dt.time):
+        today = dt.datetime.now(CENTRAL_TIME).date()
+        now_dt = dt.datetime.combine(today, now)
+    else:
         logging.warning("Travel screen: could not interpret current time %r.", now)
         return True
 
+    if now_dt.weekday() >= 5:
+        logging.debug("Travel screen skipped—weekend.")
+        return False
+
+    now_time = now_dt.timetz() if now_dt.tzinfo else now_dt.time()
+
     if start <= end:
-        active = start <= now < end
+        active = start <= now_time < end
     else:
-        active = now >= start or now < end
+        active = now_time >= start or now_time < end
 
     if not active:
         logging.debug("Travel screen skipped—outside active window.")
