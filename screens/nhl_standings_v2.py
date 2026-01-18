@@ -1309,16 +1309,8 @@ def _overview_layout_horizontal(
     row_centers = [logos_top + row_height * (idx + 0.5) for idx in range(row_count)]
 
     col_width = available_width / max_cols
-    logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
-    logo_base_height = max(6, int(row_height - OVERVIEW_LOGO_PADDING))
-    logo_target_height = int(
-        min(
-            OVERVIEW_MAX_LOGO_HEIGHT,
-            max(OVERVIEW_MIN_LOGO_HEIGHT, logo_base_height),
-            logo_width_limit,
-        )
-    )
-    logo_target_height = max(6, logo_target_height)
+    logo_box_size = int(min(row_height, col_width) - OVERVIEW_LOGO_PADDING)
+    logo_target_height = max(6, logo_box_size)
 
     return base, row_centers, available_width, logo_target_height, max_cols
 
@@ -1346,6 +1338,9 @@ def _overview_logo_height(
     base_height: int,
     is_leader: bool,
     logo_width_limit: int,
+    *,
+    max_logo_height: int | None = None,
+    min_logo_height: int | None = None,
 ) -> int:
     target = base_height
     if is_leader:
@@ -1353,9 +1348,13 @@ def _overview_logo_height(
         if IS_SQUARE_DISPLAY:
             scale = OVERVIEW_LEADER_LOGO_SQUARE_SCALE
         target = int(round(base_height * scale))
+    if max_logo_height is None:
+        max_logo_height = OVERVIEW_MAX_LOGO_HEIGHT
+    if min_logo_height is None:
+        min_logo_height = OVERVIEW_MIN_LOGO_HEIGHT
     target = min(
-        OVERVIEW_MAX_LOGO_HEIGHT,
-        max(OVERVIEW_MIN_LOGO_HEIGHT, target),
+        max_logo_height,
+        max(min_logo_height, target),
         logo_width_limit,
     )
     return max(6, target)
@@ -1424,6 +1423,8 @@ def _build_overview_rows_horizontal(
                 available_width,
             )
         logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
+        max_logo_height = min(logo_height, logo_width_limit)
+        min_logo_height = min(OVERVIEW_MIN_LOGO_HEIGHT, max_logo_height)
         for col_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
@@ -1433,6 +1434,8 @@ def _build_overview_rows_horizontal(
                 logo_height,
                 is_leader=is_leader,
                 logo_width_limit=logo_width_limit,
+                max_logo_height=max_logo_height,
+                min_logo_height=min_logo_height,
             )
             logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
