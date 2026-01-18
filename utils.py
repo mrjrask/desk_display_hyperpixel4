@@ -22,7 +22,7 @@ import queue
 from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import functools
 import logging
@@ -1724,6 +1724,16 @@ def fetch_weather_icon(icon_code: str, size: int) -> Image.Image | None:
 
     _WEATHER_ICON_CACHE[cache_key] = icon
     return icon
+
+
+def preload_weather_icons(icon_codes: Iterable[str], sizes: Iterable[int]) -> None:
+    for icon_code in icon_codes:
+        if not icon_code:
+            continue
+        for size in sizes:
+            if size <= 0:
+                continue
+            fetch_weather_icon(icon_code, size)
 
 
 def uv_index_color(uvi: int) -> tuple[int, int, int]:
