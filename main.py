@@ -104,11 +104,13 @@ ResolvedScreenOverride = None
 load_screen_overrides = None
 resolve_overrides_for_profile = None
 required_feeds = None
+preload_weather_icons = None
 
 WIDTH = HEIGHT = SCREEN_DELAY = LOGO_SCREEN_DELAY = SCHEDULE_UPDATE_INTERVAL = None
 FONT_DATE_SPORTS = None
 ENABLE_SCREENSHOTS = ENABLE_VIDEO = ENABLE_WIFI_MONITOR = VIDEO_FPS = None
 CENTRAL_TIME = TRAVEL_ACTIVE_WINDOW = DISPLAY_PROFILE = None
+WEATHER_ICON_SIZE = HOURLY_FORECAST_HOURS = None
 
 def _configure_logging() -> None:
     logging.basicConfig(
@@ -139,6 +141,7 @@ def _import_runtime_dependencies() -> None:
     global ENABLE_WIFI_MONITOR, CENTRAL_TIME, TRAVEL_ACTIVE_WINDOW
     global DISPLAY_PROFILE
     global get_travel_active_window, is_travel_screen_active
+    global WEATHER_ICON_SIZE, HOURLY_FORECAST_HOURS
 
     from PIL import Image, ImageDraw
 
@@ -156,6 +159,8 @@ def _import_runtime_dependencies() -> None:
         CENTRAL_TIME,
         TRAVEL_ACTIVE_WINDOW,
         DISPLAY_PROFILE,
+        WEATHER_ICON_SIZE,
+        HOURLY_FORECAST_HOURS,
     )
     from data_feeds import required_feeds
     from utils import (
@@ -169,6 +174,7 @@ def _import_runtime_dependencies() -> None:
         suspend_display_updates,
         temporary_display_led,
         toggle_brightness,
+        preload_weather_icons,
     )
     try:
         import data_fetch
@@ -1028,6 +1034,55 @@ LIVE_SENSITIVE_SCREEN_IDS = {
     "sox live",
 }
 
+def _collect_weather_icon_codes(weather: object) -> Set[str]:
+    codes: Set[str] = set()
+    if not isinstance(weather, dict):
+        return codes
+
+    def _add_from(entry: object) -> None:
+        if not isinstance(entry, dict):
+            return
+        weather_list = entry.get("weather") if isinstance(entry.get("weather"), list) else []
+        if not weather_list:
+            return
+        icon = weather_list[0].get("icon") if isinstance(weather_list[0], dict) else None
+        if icon:
+            codes.add(str(icon))
+
+    _add_from(weather.get("current"))
+
+    daily = weather.get("daily")
+    if isinstance(daily, list):
+        for day in daily:
+            _add_from(day)
+
+    hourly = weather.get("hourly")
+    if isinstance(hourly, list):
+        for hour in hourly:
+            _add_from(hour)
+
+    return codes
+
+
+def _weather_hourly_icon_size(hours_to_show: int) -> int:
+    safe_hours = max(1, hours_to_show)
+    gap = 4
+    available_width = WIDTH - gap * (safe_hours + 1)
+    col_w = max(1, available_width // safe_hours)
+    return max(32, min(WEATHER_ICON_SIZE, col_w - 10))
+
+
+def _preload_weather_icons(weather: object) -> None:
+    if preload_weather_icons is None:
+        return
+    codes = _collect_weather_icon_codes(weather)
+    if not codes:
+        return
+    hourly_size = _weather_hourly_icon_size(HOURLY_FORECAST_HOURS or 1)
+    sizes = {WEATHER_ICON_SIZE, hourly_size}
+    preload_weather_icons(codes, sizes)
+
+
 def refresh_all():
     global _weather_fetched_at
 
@@ -1052,6 +1107,7 @@ def refresh_all():
         if weather is not None:
             cache["weather"] = weather
             _weather_fetched_at = datetime.datetime.now(CENTRAL_TIME)
+            _preload_weather_icons(weather)
 
     if "bears" in feeds:
         cache["bears"].update({"stand": data_fetch.fetch_bears_standings()})
