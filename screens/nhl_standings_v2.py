@@ -97,6 +97,7 @@ OVERVIEW_LOGO_PADDING = 6
 OVERVIEW_LOGO_OVERLAP = 12
 OVERVIEW_LEADER_LOGO_SCALE = 1.1
 OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
+OVERVIEW_HORIZONTAL_LARGE_ROWS = 3
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
 OVERVIEW_DROP_STAGGER = 0.4  # fraction of steps before next team starts
@@ -1287,7 +1288,7 @@ def _overview_layout(
 def _overview_layout_horizontal(
     sections: Sequence[tuple[str, List[dict]]],
     title: str,
-) -> tuple[Image.Image, List[float], float, int, int]:
+) -> tuple[Image.Image, List[float], float, int, int, float]:
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
@@ -1312,7 +1313,7 @@ def _overview_layout_horizontal(
     logo_box_size = int(min(row_height, col_width) - OVERVIEW_LOGO_PADDING)
     logo_target_height = max(6, logo_box_size)
 
-    return base, row_centers, available_width, logo_target_height, max_cols
+    return base, row_centers, available_width, logo_target_height, max_cols, row_height
 
 
 def _overview_logo_position_center(
@@ -1404,6 +1405,7 @@ def _build_overview_rows_horizontal(
     available_width: float,
     logo_height: int,
     max_cols: int,
+    row_height: float,
 ) -> List[List[Placement]]:
     rows: List[List[Placement]] = [[] for _ in range(len(sections))]
     base_centers = _centered_positions(max_cols, OVERVIEW_MARGIN_X, available_width)
@@ -1422,8 +1424,12 @@ def _build_overview_rows_horizontal(
                 OVERVIEW_MARGIN_X,
                 available_width,
             )
-        logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
-        max_logo_height = min(logo_height, logo_width_limit)
+        row_padding = 0 if row_idx < OVERVIEW_HORIZONTAL_LARGE_ROWS else OVERVIEW_LOGO_PADDING
+        row_logo_height = max(6, int(min(row_height, col_width) - row_padding))
+        if row_idx >= OVERVIEW_HORIZONTAL_LARGE_ROWS:
+            row_logo_height = logo_height
+        logo_width_limit = max(6, int(col_width - row_padding))
+        max_logo_height = min(row_logo_height, logo_width_limit)
         min_logo_height = min(OVERVIEW_MIN_LOGO_HEIGHT, max_logo_height)
         for col_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
@@ -1431,7 +1437,7 @@ def _build_overview_rows_horizontal(
                 continue
             is_leader = col_idx == 0
             target_height = _overview_logo_height(
-                logo_height,
+                row_logo_height,
                 is_leader=is_leader,
                 logo_width_limit=logo_width_limit,
                 max_logo_height=max_logo_height,
@@ -1579,12 +1585,13 @@ def _prepare_overview_horizontal(
         available_width,
         logo_height,
         max_cols,
+        row_height,
     ) = _overview_layout_horizontal(
         sections,
         title,
     )
     row_positions = _build_overview_rows_horizontal(
-        sections, row_centers, available_width, logo_height, max_cols
+        sections, row_centers, available_width, logo_height, max_cols, row_height
     )
     return base, row_positions
 
