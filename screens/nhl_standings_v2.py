@@ -97,6 +97,7 @@ OVERVIEW_LOGO_PADDING = 6
 OVERVIEW_LOGO_OVERLAP = 12
 OVERVIEW_LEADER_LOGO_SCALE = 1.1
 OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
+WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.25
 OVERVIEW_HORIZONTAL_LARGE_ROWS = 3
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
@@ -1342,12 +1343,17 @@ def _overview_logo_height(
     *,
     max_logo_height: int | None = None,
     min_logo_height: int | None = None,
+    leader_square_scale: float | None = None,
 ) -> int:
     target = base_height
     if is_leader:
         scale = OVERVIEW_LEADER_LOGO_SCALE
         if IS_SQUARE_DISPLAY:
-            scale = OVERVIEW_LEADER_LOGO_SQUARE_SCALE
+            scale = (
+                OVERVIEW_LEADER_LOGO_SQUARE_SCALE
+                if leader_square_scale is None
+                else leader_square_scale
+            )
         target = int(round(base_height * scale))
     if max_logo_height is None:
         max_logo_height = OVERVIEW_MAX_LOGO_HEIGHT
@@ -1442,6 +1448,7 @@ def _build_overview_rows_horizontal(
                 logo_width_limit=logo_width_limit,
                 max_logo_height=max_logo_height,
                 min_logo_height=min_logo_height,
+                leader_square_scale=WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE,
             )
             logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
