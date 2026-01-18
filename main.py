@@ -92,6 +92,7 @@ active_config_path = None
 draw_date = None
 draw_time = None
 nixie_frame = None
+refresh_nixie = None
 ScreenContext = None
 ScreenDefinition = None
 build_screen_registry = None
@@ -128,7 +129,7 @@ def _import_runtime_dependencies() -> None:
     global draw_text_centered, clone_font, resume_display_updates, suspend_display_updates
     global temporary_display_led, toggle_brightness, data_fetch, wifi_utils
     global resolve_storage_paths, resolve_config_paths, active_config_path
-    global draw_date, draw_time
+    global draw_date, draw_time, refresh_nixie
     global nixie_frame, ScreenContext
     global ScreenDefinition, build_screen_registry, ScreenScheduler, build_scheduler
     global load_schedule_config, build_logo_map, ResolvedScreenOverride
