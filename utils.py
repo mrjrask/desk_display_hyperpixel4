@@ -1840,6 +1840,7 @@ def fetch_directions_routes(
     api_key: str,
     *,
     avoid_highways: bool = False,
+    avoid_tolls: bool = False,
     url: str,
 ) -> List[Dict[str, Any]]:
     if not api_key:
@@ -1855,8 +1856,13 @@ def fetch_directions_routes(
         "region": "us",
         "key": api_key,
     }
+    avoid_tokens = []
     if avoid_highways:
-        params["avoid"] = "highways"
+        avoid_tokens.append("highways")
+    if avoid_tolls:
+        avoid_tokens.append("tolls")
+    if avoid_tokens:
+        params["avoid"] = "|".join(avoid_tokens)
 
     try:
         response = requests.get(url, params=params, timeout=10)
