@@ -2,15 +2,13 @@
 """
 Main display loop driving the Pimoroni HyperPixel 4.0 Square LCD,
 with optional screenshot capture, H.264 MP4 video capture, Wi-Fi triage,
-screen-config sequencing, and batch screenshot archiving.
+screen-config sequencing, and per-screen screenshot archiving.
 
 Changes:
-- Stop pruning single files; instead, when screenshots/ has >= ARCHIVE_THRESHOLD
-  images, archive the whole set into screenshot_archive/<screen>/.
-- Avoid creating empty archive folders.
+- Keep a fixed number of screenshots per screen in the live folder, moving
+  older images into screenshot_archive/<screen>/.
+- Trim archives per screen to a fixed cap.
 - Guard logo screens when the image file is missing.
-- Keep archived screenshots sorted and grouped the same way they are saved
-  under screenshots/.
 """
 from __future__ import annotations
 import warnings
@@ -218,11 +216,12 @@ display = None
 _initialized = False
 
 
-# ─── Screenshot archiving (batch) ────────────────────────────────────────────
-ARCHIVE_THRESHOLD       = 500  # archive when we reach this many images
+# ─── Screenshot archiving (per screen) ──────────────────────────────────────
+SCREENSHOT_KEEP_PER_SCREEN = 5
+ARCHIVE_KEEP_PER_SCREEN = 50
 SCREENSHOT_ARCHIVE_BASE = ""
-ARCHIVE_DEFAULT_FOLDER  = "Screens"
-ALLOWED_SCREEN_EXTS     = (".png", ".jpg", ".jpeg")  # images only
+ARCHIVE_DEFAULT_FOLDER = "Screens"
+ALLOWED_SCREEN_EXTS = (".png", ".jpg", ".jpeg")  # images only
 _screenshot_file_index: Optional[Set[str]] = None
 
 _screen_config_mtime: Optional[float] = None
@@ -928,60 +927,86 @@ def _register_screenshot(path: str) -> None:
     if rel_path and rel_path.lower().endswith(ALLOWED_SCREEN_EXTS):
         _ensure_screenshot_index().add(rel_path)
 
-def maybe_archive_screenshots():
-    """
-    When screenshots/ reaches ARCHIVE_THRESHOLD images, move the current images
-    into screenshot_archive/<screen>/ so the archive mirrors the live
-    screenshots/ folder layout. Avoid creating empty archive folders.
-    """
+def _list_screenshot_files(folder: str) -> list[str]:
+    try:
+        entries = []
+        for fname in os.listdir(folder):
+            if not fname.lower().endswith(ALLOWED_SCREEN_EXTS):
+                continue
+            path = os.path.join(folder, fname)
+            if os.path.isfile(path):
+                entries.append(fname)
+        return sorted(entries)
+    except Exception:
+        return []
+
+
+def _resolve_archive_collision(dest_dir: str, filename: str) -> str:
+    base, ext = os.path.splitext(filename)
+    candidate = os.path.join(dest_dir, filename)
+    counter = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(dest_dir, f"{base}_{counter}{ext}")
+        counter += 1
+    return candidate
+
+
+def _archive_screenshot_file(screen_folder: str, filename: str) -> bool:
+    src = os.path.join(SCREENSHOT_DIR, screen_folder, filename)
+    if not os.path.isfile(src):
+        return False
+
+    dest_dir = os.path.join(SCREENSHOT_ARCHIVE_BASE, screen_folder)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = _resolve_archive_collision(dest_dir, filename)
+    try:
+        shutil.move(src, dest)
+    except Exception as exc:
+        logging.warning("⚠️  Could not move '%s' to archive: %s", filename, exc)
+        return False
+
+    rel_path = os.path.join(screen_folder, filename)
+    _ensure_screenshot_index().discard(rel_path)
+    return True
+
+
+def _prune_archive_folder(screen_folder: str) -> None:
+    archive_dir = os.path.join(SCREENSHOT_ARCHIVE_BASE, screen_folder)
+    files = _list_screenshot_files(archive_dir)
+    if len(files) <= ARCHIVE_KEEP_PER_SCREEN:
+        return
+    for fname in files[: len(files) - ARCHIVE_KEEP_PER_SCREEN]:
+        path = os.path.join(archive_dir, fname)
+        try:
+            os.remove(path)
+        except Exception as exc:
+            logging.debug("Unable to remove archived screenshot '%s': %s", path, exc)
+
+
+def maybe_archive_screenshots(screen_id: str) -> None:
+    """Keep the live screenshot folder small, archiving older files per screen."""
     if not ENABLE_SCREENSHOTS:
         return
-    index = _ensure_screenshot_index()
-    if len(index) < ARCHIVE_THRESHOLD:
-        return
 
-    with _archive_lock:
-        index = _ensure_screenshot_index()
-        if len(index) < ARCHIVE_THRESHOLD:
-            return
+    screen_folder = _sanitize_directory_name(screen_id)
+    live_dir = os.path.join(SCREENSHOT_DIR, screen_folder)
+    live_files = _list_screenshot_files(live_dir)
+    if len(live_files) > SCREENSHOT_KEEP_PER_SCREEN:
+        with _archive_lock:
+            live_files = _list_screenshot_files(live_dir)
+            to_archive = live_files[: len(live_files) - SCREENSHOT_KEEP_PER_SCREEN]
+            moved = 0
+            for fname in to_archive:
+                if _archive_screenshot_file(screen_folder, fname):
+                    moved += 1
+            if moved:
+                logging.info(
+                    "🗃️  Archived %s screenshot(s) → screenshot_archive/%s/",
+                    moved,
+                    screen_folder,
+                )
 
-        moved = 0
-        created_dirs = set()
-        files = sorted(index)
-
-        for fname in files:
-            src = os.path.join(SCREENSHOT_DIR, fname)
-            if not os.path.isfile(src):
-                index.discard(fname)
-                continue
-            try:
-                parts = fname.split(os.sep)
-                if len(parts) > 1:
-                    screen_folder, remainder = parts[0], os.path.join(*parts[1:])
-                else:
-                    screen_folder, remainder = ARCHIVE_DEFAULT_FOLDER, parts[0]
-
-                dest = os.path.join(SCREENSHOT_ARCHIVE_BASE, screen_folder, remainder)
-                dest_dir = os.path.dirname(dest)
-                if dest_dir and not os.path.exists(dest_dir):
-                    os.makedirs(dest_dir, exist_ok=True)
-                    created_dirs.add(dest_dir)
-                shutil.move(src, dest)
-                moved += 1
-                index.discard(fname)
-            except Exception as e:
-                logging.warning(f"⚠️  Could not move '{fname}' to archive: {e}")
-
-        if moved == 0:
-            for dest_dir in sorted(created_dirs, reverse=True):
-                if os.path.isdir(dest_dir) and not os.listdir(dest_dir):
-                    try:
-                        os.rmdir(dest_dir)
-                    except Exception:
-                        pass
-
-        if moved:
-            logging.info("🗃️  Archived %s screenshot(s) → screenshot_archive/", moved)
+    _prune_archive_folder(screen_folder)
 
 # ─── SIGTERM handler ─────────────────────────────────────────────────────────
 def _handle_sigterm(signum, frame):
@@ -1396,7 +1421,7 @@ def main_loop():
                     if "logo" in sid:
                         if ENABLE_SCREENSHOTS:
                             _save_screenshot(sid, img)
-                            maybe_archive_screenshots()
+                            maybe_archive_screenshots(sid)
                         if ENABLE_VIDEO and video_out:
                             import cv2, numpy as np
 
@@ -1407,7 +1432,7 @@ def main_loop():
                             animate_fade_in(display, img, steps=15, delay=0.02, easing=True)
                         if ENABLE_SCREENSHOTS:
                             _save_screenshot(sid, img)
-                            maybe_archive_screenshots()
+                            maybe_archive_screenshots(sid)
                         if ENABLE_VIDEO and video_out:
                             import cv2, numpy as np
 
