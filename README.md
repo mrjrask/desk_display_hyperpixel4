@@ -356,7 +356,8 @@ chmod +x /home/pi/desk_display_hyperpixel4/tools/maintenance/cleanup.sh
 
 - Screenshots are saved to `~/.local/share/desk_display_hyperpixel4/screenshots/` when `ENABLE_SCREENSHOTS=True`.
 - Override with `DESK_DISPLAY_SCREENSHOT_DIR` or edit `storage_overrides.py`.
-- When the live folder reaches **500** images, the entire batch moves to `screenshot_archive/<screen>/` to mirror the live layout.
+- Each screen keeps the most recent **5** screenshots in the live folder; older images are moved to `screenshot_archive/<screen>/`.
+- Each screen archive is capped at **50** screenshots (oldest files are removed).
 - Videos (if enabled) are written to `screenshots/display_output.mp4` and are not archived.
 
 ---
