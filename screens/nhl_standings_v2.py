@@ -1458,7 +1458,6 @@ def _build_overview_rows_horizontal(
                 max_logo_height=max_logo_height,
                 min_logo_height=min_logo_height,
                 leader_square_scale=leader_square_scale,
-                use_square_display=_SQUARE_DISPLAY_PROFILE,
             )
             logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
