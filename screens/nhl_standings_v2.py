@@ -18,6 +18,7 @@ from config import (
     FONT_TITLE_SPORTS,
     FONT_STATUS,
     NHL_IMAGES_DIR,
+    DISPLAY_PROFILE,
     IS_SQUARE_DISPLAY,
     SCOREBOARD_SCROLL_STEP,
     SCOREBOARD_SCROLL_DELAY,
@@ -117,6 +118,8 @@ _SESSION = get_session()
 
 _MEASURE_IMG = Image.new("RGB", (1, 1))
 _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
+
+_SQUARE_DISPLAY_PROFILE = "square" in DISPLAY_PROFILE.lower()
 
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
@@ -1437,6 +1440,11 @@ def _build_overview_rows_horizontal(
         logo_width_limit = max(6, int(col_width - row_padding))
         max_logo_height = min(row_logo_height, logo_width_limit)
         min_logo_height = min(OVERVIEW_MIN_LOGO_HEIGHT, max_logo_height)
+        leader_square_scale = (
+            WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE
+            if row_idx < OVERVIEW_HORIZONTAL_LARGE_ROWS and _SQUARE_DISPLAY_PROFILE
+            else None
+        )
         for col_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
@@ -1448,7 +1456,7 @@ def _build_overview_rows_horizontal(
                 logo_width_limit=logo_width_limit,
                 max_logo_height=max_logo_height,
                 min_logo_height=min_logo_height,
-                leader_square_scale=WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE,
+                leader_square_scale=leader_square_scale,
             )
             logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
