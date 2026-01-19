@@ -1347,11 +1347,12 @@ def _overview_logo_height(
     max_logo_height: int | None = None,
     min_logo_height: int | None = None,
     leader_square_scale: float | None = None,
+    use_square_display: bool = IS_SQUARE_DISPLAY,
 ) -> int:
     target = base_height
     if is_leader:
         scale = OVERVIEW_LEADER_LOGO_SCALE
-        if IS_SQUARE_DISPLAY:
+        if use_square_display:
             scale = (
                 OVERVIEW_LEADER_LOGO_SQUARE_SCALE
                 if leader_square_scale is None
