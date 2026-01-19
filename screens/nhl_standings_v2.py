@@ -18,6 +18,7 @@ from config import (
     FONT_TITLE_SPORTS,
     FONT_STATUS,
     NHL_IMAGES_DIR,
+    DISPLAY_PROFILE,
     IS_SQUARE_DISPLAY,
     SCOREBOARD_SCROLL_STEP,
     SCOREBOARD_SCROLL_DELAY,
@@ -97,7 +98,7 @@ OVERVIEW_LOGO_PADDING = 6
 OVERVIEW_LOGO_OVERLAP = 12
 OVERVIEW_LEADER_LOGO_SCALE = 1.1
 OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
-WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.25
+WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE = OVERVIEW_LEADER_LOGO_SQUARE_SCALE * 1.25
 OVERVIEW_HORIZONTAL_LARGE_ROWS = 3
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
@@ -117,6 +118,8 @@ _SESSION = get_session()
 
 _MEASURE_IMG = Image.new("RGB", (1, 1))
 _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
+
+_SQUARE_DISPLAY_PROFILE = "square" in DISPLAY_PROFILE.lower()
 
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
@@ -1344,11 +1347,12 @@ def _overview_logo_height(
     max_logo_height: int | None = None,
     min_logo_height: int | None = None,
     leader_square_scale: float | None = None,
+    use_square_display: bool = IS_SQUARE_DISPLAY,
 ) -> int:
     target = base_height
     if is_leader:
         scale = OVERVIEW_LEADER_LOGO_SCALE
-        if IS_SQUARE_DISPLAY:
+        if use_square_display:
             scale = (
                 OVERVIEW_LEADER_LOGO_SQUARE_SCALE
                 if leader_square_scale is None
@@ -1437,6 +1441,11 @@ def _build_overview_rows_horizontal(
         logo_width_limit = max(6, int(col_width - row_padding))
         max_logo_height = min(row_logo_height, logo_width_limit)
         min_logo_height = min(OVERVIEW_MIN_LOGO_HEIGHT, max_logo_height)
+        leader_square_scale = (
+            WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE
+            if row_idx < OVERVIEW_HORIZONTAL_LARGE_ROWS and _SQUARE_DISPLAY_PROFILE
+            else None
+        )
         for col_idx, team in enumerate(limited):
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
@@ -1448,7 +1457,8 @@ def _build_overview_rows_horizontal(
                 logo_width_limit=logo_width_limit,
                 max_logo_height=max_logo_height,
                 min_logo_height=min_logo_height,
-                leader_square_scale=WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE,
+                leader_square_scale=leader_square_scale,
+                use_square_display=_SQUARE_DISPLAY_PROFILE,
             )
             logo = _load_overview_logo(abbr, logo_width_limit, target_height)
             if not logo:
