@@ -70,17 +70,43 @@ def _pop_route(pool: List[dict], tokens: Sequence[str]) -> Optional[dict]:
         pool.remove(fallback)
     return fallback
 
+
+def _traffic_color_for_ratio(ratio: Optional[float]) -> Tuple[int, int, int]:
+    if ratio is None:
+        return (160, 160, 160)
+
+    if ratio <= 1.1:
+        return (40, 200, 120)
+    if ratio <= 1.35:
+        return (255, 195, 60)
+    return (240, 80, 80)
+
+
+def _traffic_color(route: Optional[dict]) -> Tuple[int, int, int]:
+    if not route:
+        return (180, 180, 180)
+
+    traffic = route.get("_duration_sec")
+    baseline = route.get("_duration_base_sec")
+    if traffic and baseline:
+        ratio = traffic / baseline if baseline else None
+        return _traffic_color_for_ratio(ratio)
+
+    return (160, 160, 160)
+
+
 @dataclass
 class TravelTimeResult:
     """Container for travel time results."""
 
     raw_text: str
     seconds: Optional[int] = None
+    color: Tuple[int, int, int] = (160, 160, 160)
 
     @classmethod
     def from_route(cls, route: Optional[dict]) -> "TravelTimeResult":
         if not route:
-            return cls("N/A")
+            return cls("N/A", None, _traffic_color(route))
 
         seconds_raw = route.get("_duration_sec")
         seconds: Optional[int]
@@ -89,7 +115,7 @@ class TravelTimeResult:
         else:
             seconds = None
 
-        return cls(format_duration_text(route), seconds)
+        return cls(format_duration_text(route), seconds, _traffic_color(route))
 
     def normalized(self) -> str:
         text = (self.raw_text or "").strip()
@@ -308,26 +334,21 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
             return right - left, bottom - top
         return measurement_draw.textsize(text, font=font)
 
-    lane_definitions: List[
-        Tuple[str, str, Callable[[], Image.Image], Tuple[int, int, int]]
-    ] = [
+    lane_definitions: List[Tuple[str, str, Callable[[], Image.Image]]] = [
         (
             "lake_shore",
             "Lake Shore → Sheridan → Dundee",
             lambda: _compose_icons([TRAVEL_ICON_LSD], height=ROUTE_ICON_HEIGHT),
-            (120, 200, 255),
         ),
         (
             "kennedy_edens",
             "Kennedy → Edens → Dundee",
             lambda: _compose_icons([TRAVEL_ICON_90, TRAVEL_ICON_94], height=ROUTE_ICON_HEIGHT),
-            (200, 170, 255),
         ),
         (
             "kennedy_294",
             "Kennedy → 294 → Willow",
             lambda: _compose_icons([TRAVEL_ICON_90, TRAVEL_ICON_294], height=ROUTE_ICON_HEIGHT),
-            (255, 200, 160),
         ),
     ]
 
@@ -337,8 +358,8 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     max_sign_height = 0
     max_time_height = 0
 
-    for key, _label, factory, color in lane_definitions:
-        time_result = times.get(key, TravelTimeResult("N/A"))
+    for key, _label, factory in lane_definitions:
+        time_result = times.get(key, TravelTimeResult("N/A", None, _traffic_color(None)))
         normalized = time_result.normalized()
         sign_image = factory()
         time_width, time_height = _measure(normalized, time_font)
@@ -350,7 +371,7 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
             {
                 "sign": sign_image,
                 "normalized": normalized,
-                "color": color,
+                "color": time_result.color,
                 "time_width": time_width,
                 "time_height": time_height,
             }
@@ -410,8 +431,7 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     for row, box_height in zip(rows, row_box_heights):
         sign_image = row["sign"]
         normalized = row["normalized"]
-        color = row["color"]
-        display_color = color if normalized.upper() != "N/A" else (230, 230, 230)
+        display_color = row["color"]
 
         row_top = y
         row_bottom = y + box_height
