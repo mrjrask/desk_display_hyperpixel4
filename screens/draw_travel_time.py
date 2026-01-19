@@ -49,12 +49,13 @@ def _api_key() -> str:
 # Helpers: Google Directions fetching/parsing
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _fetch_routes(avoid_highways: bool = False) -> List[Dict[str, Any]]:
+def _fetch_routes(avoid_highways: bool = False, avoid_tolls: bool = False) -> List[Dict[str, Any]]:
     return fetch_directions_routes(
         TRAVEL_ORIGIN,
         TRAVEL_DESTINATION,
         _api_key(),
         avoid_highways=avoid_highways,
+        avoid_tolls=avoid_tolls,
         url=TRAVEL_DIRECTIONS_URL,
     )
 
@@ -209,22 +210,24 @@ def get_travel_routes() -> Dict[str, Optional[dict]]:
     """Return the selected travel routes keyed by identifier."""
 
     try:
-        routes_all = list(_fetch_routes(avoid_highways=False))
+        routes_all = list(_fetch_routes())
         remaining = list(routes_all)
+        lake_shore_routes = list(_fetch_routes(avoid_highways=True, avoid_tolls=True))
+        kennedy_edens_routes = list(_fetch_routes(avoid_tolls=True))
 
         lake_shore_tokens = [
-            "lake shore",
-            "lake shore dr",
-            "lake shore drive",
-            "us-41",
-            "us 41",
-            "lsd",
-            "sheridan",
-            "sheridan rd",
-            "sheridan road",
-            "dundee",
-            "dundee rd",
-            "dundee road",
+            "N La Salle Dr",
+            "N Jean Baptiste Pointe du Sable Lake Shore Dr",
+            "Lake Shore Dr",
+            "Sheridan Rd",
+            "Burnham Pl",
+            "Forest Ave",
+            "Sheridan Rd",
+            "Park Ave",
+            "Green Bay Rd",
+            "Dundee Rd",
+            "Sutton Dr",
+            "Rutgers Ln",
         ]
         kennedy_edens_tokens = [
             "edens",
@@ -234,7 +237,6 @@ def get_travel_routes() -> Dict[str, Optional[dict]]:
             "i94",
             "90/94",
             "kennedy",
-            "dan ryan",
         ]
         kennedy_294_tokens = [
             "i-294",
@@ -248,8 +250,8 @@ def get_travel_routes() -> Dict[str, Optional[dict]]:
             "willow road",
         ]
 
-        lake_shore = _pop_route(remaining, lake_shore_tokens)
-        kennedy_edens = _pop_route(remaining, kennedy_edens_tokens)
+        lake_shore = _pop_route(lake_shore_routes, lake_shore_tokens)
+        kennedy_edens = _pop_route(kennedy_edens_routes, kennedy_edens_tokens)
         kennedy_294 = _pop_route(remaining, kennedy_294_tokens)
 
         return {
