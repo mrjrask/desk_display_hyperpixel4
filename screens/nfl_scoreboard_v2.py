@@ -85,6 +85,10 @@ LEAGUE_LOGO_KEYS        = ("NFL", "nfl")
 LEAGUE_LOGO_GAP         = 10
 LEAGUE_LOGO_HEIGHT      = LOGO_HEIGHT
 LEAGUE_LOGO_MAX_WIDTH   = COL_WIDTHS[1] - LOGO_GAP_MARGIN
+SUPER_BOWL_LOGO_NAME    = "SB"
+SUPER_BOWL_LOGO_GAP     = 16
+SUPER_BOWL_LOGO_MAX_WIDTH = WIDTH - 180
+SUPER_BOWL_LOGO_MAX_HEIGHT = 120
 IN_PROGRESS_SCORE_COLOR = SCOREBOARD_IN_PROGRESS_SCORE_COLOR
 IN_PROGRESS_STATUS_COLOR = IN_PROGRESS_SCORE_COLOR
 FINAL_WINNING_SCORE_COLOR = SCOREBOARD_FINAL_WINNING_SCORE_COLOR
@@ -107,9 +111,38 @@ _LEAGUE_LOGO: Optional[Image.Image] = None
 _LEAGUE_LOGO_LOADED = False
 _POSSESSION_ICON: Optional[Image.Image] = None
 _POSSESSION_FONT_SIZE = max(18, LOGO_HEIGHT // 3)
+_SUPER_BOWL_LOGO: Optional[Image.Image] = None
+_SUPER_BOWL_LOGO_LOADED = False
 
 
 # ─── Helpers (reused from original) ──────────────────────────────────────────
+def _in_playoff_window(now: datetime.datetime) -> bool:
+    return now.month in (1, 2)
+
+
+def _playoff_cutoff(week_start: datetime.date, game_count: int) -> Optional[datetime.datetime]:
+    if game_count == 6:
+        cutoff_date = week_start + datetime.timedelta(days=5)
+        cutoff_time = datetime.time(hour=15, minute=0)
+    elif game_count in (2, 4):
+        cutoff_date = week_start + datetime.timedelta(days=4)
+        cutoff_time = datetime.time(hour=15, minute=15)
+    else:
+        return None
+    return CENTRAL_TIME.localize(datetime.datetime.combine(cutoff_date, cutoff_time))
+
+
+def _should_advance_playoff_week(
+    now: datetime.datetime, week_start: datetime.date, game_count: int
+) -> bool:
+    if not _in_playoff_window(now):
+        return False
+    cutoff = _playoff_cutoff(week_start, game_count)
+    if cutoff is None:
+        return False
+    return now >= cutoff
+
+
 def _week_start(now: Optional[datetime.datetime] = None) -> datetime.date:
     now = now or datetime.datetime.now(CENTRAL_TIME)
 
@@ -161,6 +194,34 @@ def _get_league_logo() -> Optional[Image.Image]:
                 break
         _LEAGUE_LOGO_LOADED = True
     return _LEAGUE_LOGO
+
+
+def _fit_logo_to_bounds(
+    logo: Image.Image, max_width: int, max_height: int
+) -> Optional[Image.Image]:
+    if logo is None or max_width <= 0 or max_height <= 0:
+        return None
+    scale = min(max_width / logo.width, max_height / logo.height, 1.0)
+    if scale >= 1.0:
+        return logo
+    new_width = max(1, int(round(logo.width * scale)))
+    new_height = max(1, int(round(logo.height * scale)))
+    return logo.resize((new_width, new_height), resample=RESAMPLE)
+
+
+def _get_super_bowl_logo() -> Optional[Image.Image]:
+    global _SUPER_BOWL_LOGO, _SUPER_BOWL_LOGO_LOADED
+    if not _SUPER_BOWL_LOGO_LOADED:
+        path = os.path.join(LOGO_DIR, f"{SUPER_BOWL_LOGO_NAME}.png")
+        try:
+            _SUPER_BOWL_LOGO = Image.open(path).convert("RGBA")
+        except Exception as exc:
+            logging.warning("Could not load Super Bowl logo '%s': %s", path, exc)
+            _SUPER_BOWL_LOGO = None
+        _SUPER_BOWL_LOGO_LOADED = True
+    if _SUPER_BOWL_LOGO is None:
+        return None
+    return _fit_logo_to_bounds(_SUPER_BOWL_LOGO, SUPER_BOWL_LOGO_MAX_WIDTH, SUPER_BOWL_LOGO_MAX_HEIGHT)
 
 
 def _get_possession_icon() -> Optional[Image.Image]:
@@ -742,7 +803,7 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     _center_text(draw, status_text, STATUS_FONT, col_x[2], COL_WIDTHS[2], status_top, STATUS_ROW_H, fill=status_fill)
 
 
-def _compose_canvas(games: list[dict]) -> Image.Image:
+def _compose_canvas(games: list[dict], *, show_super_bowl: bool = False) -> Image.Image:
     """Compose canvas with dual-game layout (2 games per row)."""
     if not games:
         return Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
@@ -751,9 +812,13 @@ def _compose_canvas(games: list[dict]) -> Image.Image:
     num_rows = (len(games) + GAMES_PER_ROW - 1) // GAMES_PER_ROW
 
     # Calculate total height
-    total_height = GAME_HEIGHT * num_rows
+    base_height = GAME_HEIGHT * num_rows
     if num_rows > 1:
-        total_height += BLOCK_SPACING * (num_rows - 1)
+        base_height += BLOCK_SPACING * (num_rows - 1)
+    super_bowl_logo = _get_super_bowl_logo() if show_super_bowl else None
+    total_height = base_height
+    if super_bowl_logo:
+        total_height = base_height + SUPER_BOWL_LOGO_GAP + super_bowl_logo.height
 
     canvas = Image.new("RGB", (WIDTH, total_height), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(canvas)
@@ -784,6 +849,11 @@ def _compose_canvas(games: list[dict]) -> Image.Image:
                 x_start = 30 if col == 0 else x_offset + 30
                 x_end = WIDTH - 30 if col == GAMES_PER_ROW - 1 else x_offset + GAME_WIDTH - 30
                 draw.line((x_start, sep_y, x_end, sep_y), fill=(45, 45, 45))
+
+    if super_bowl_logo:
+        logo_x = (WIDTH - super_bowl_logo.width) // 2
+        logo_y = base_height + SUPER_BOWL_LOGO_GAP
+        canvas.paste(super_bowl_logo, (logo_x, logo_y), super_bowl_logo)
 
     return canvas
 
@@ -854,15 +924,23 @@ def _fetch_games_for_date(day: datetime.date) -> list[dict]:
 
 
 def _fetch_games_for_week(now: Optional[datetime.datetime] = None) -> list[dict]:
+    now = now or datetime.datetime.now(CENTRAL_TIME)
     games: list[dict] = []
-    for day in _week_dates(now):
+    week_dates = _week_dates(now)
+    for day in week_dates:
         games.extend(_fetch_games_for_date(day))
     games.sort(key=_game_sort_key)
+    if games and _should_advance_playoff_week(now, week_dates[0], len(games)):
+        next_week_dates = [day + datetime.timedelta(days=7) for day in week_dates]
+        games = []
+        for day in next_week_dates:
+            games.extend(_fetch_games_for_date(day))
+        games.sort(key=_game_sort_key)
     return games
 
 
-def _render_scoreboard(games: list[dict]) -> Image.Image:
-    canvas = _compose_canvas(games)
+def _render_scoreboard(games: list[dict], *, show_super_bowl: bool = False) -> Image.Image:
+    canvas = _compose_canvas(games, show_super_bowl=show_super_bowl)
 
     dummy = Image.new("RGB", (WIDTH, 10), BACKGROUND_COLOR)
     dd = ImageDraw.Draw(dummy)
@@ -924,7 +1002,8 @@ def _scroll_display(display, full_img: Image.Image):
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_nfl_scoreboard_v2(display, transition: bool = False) -> ScreenImage:
-    games = _fetch_games_for_week()
+    now = datetime.datetime.now(CENTRAL_TIME)
+    games = _fetch_games_for_week(now)
 
     if not games:
         clear_display(display)
@@ -953,7 +1032,8 @@ def draw_nfl_scoreboard_v2(display, transition: bool = False) -> ScreenImage:
         time.sleep(SCOREBOARD_SCROLL_PAUSE_BOTTOM)
         return ScreenImage(img, displayed=True)
 
-    full_img = _render_scoreboard(games)
+    show_super_bowl = _in_playoff_window(now) and len(games) == 1
+    full_img = _render_scoreboard(games, show_super_bowl=show_super_bowl)
     if transition:
         _scroll_display(display, full_img)
         return ScreenImage(full_img, displayed=True)
