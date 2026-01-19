@@ -223,6 +223,7 @@ SCREENSHOT_ARCHIVE_BASE = ""
 ARCHIVE_DEFAULT_FOLDER = "Screens"
 ALLOWED_SCREEN_EXTS = (".png", ".jpg", ".jpeg")  # images only
 _screenshot_file_index: Optional[Set[str]] = None
+_archive_lock = threading.Lock()
 
 _screen_config_mtime: Optional[float] = None
 screen_scheduler: Optional[ScreenScheduler] = None
@@ -787,6 +788,7 @@ if ENABLE_SCREENSHOTS:
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
     os.makedirs(CURRENT_SCREENSHOT_DIR, exist_ok=True)
     os.makedirs(SCREENSHOT_ARCHIVE_BASE, exist_ok=True)
+    _enforce_screenshot_limits_on_startup()
 
 video_out = None
 if ENABLE_VIDEO:
@@ -798,9 +800,6 @@ if ENABLE_VIDEO:
     if not video_out.isOpened():
         logging.error("❌ Cannot open video writer; disabling video output")
         video_out = None
-
-_archive_lock = threading.Lock()
-
 
 def _release_video_writer() -> None:
     global video_out
@@ -927,6 +926,76 @@ def _register_screenshot(path: str) -> None:
     if rel_path and rel_path.lower().endswith(ALLOWED_SCREEN_EXTS):
         _ensure_screenshot_index().add(rel_path)
 
+
+def _archive_root_screenshot_file(filename: str) -> bool:
+    src = os.path.join(SCREENSHOT_DIR, filename)
+    if not os.path.isfile(src):
+        return False
+
+    dest_dir = os.path.join(SCREENSHOT_ARCHIVE_BASE, ARCHIVE_DEFAULT_FOLDER)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = _resolve_archive_collision(dest_dir, filename)
+    try:
+        shutil.move(src, dest)
+    except Exception as exc:
+        logging.warning("⚠️  Could not move '%s' to archive: %s", filename, exc)
+        return False
+
+    _ensure_screenshot_index().discard(filename)
+    return True
+
+
+def _enforce_screenshot_limits_on_startup() -> None:
+    if not ENABLE_SCREENSHOTS:
+        return
+
+    with _archive_lock:
+        try:
+            entries = os.listdir(SCREENSHOT_DIR)
+        except Exception as exc:
+            logging.debug("Unable to scan screenshot directory: %s", exc)
+            return
+
+        moved_total = 0
+        for entry in entries:
+            path = os.path.join(SCREENSHOT_DIR, entry)
+            if os.path.abspath(path) == os.path.abspath(CURRENT_SCREENSHOT_DIR):
+                continue
+            if os.path.isdir(path):
+                live_files = _list_screenshot_files(path)
+                if len(live_files) > SCREENSHOT_KEEP_PER_SCREEN:
+                    to_archive = live_files[: len(live_files) - SCREENSHOT_KEEP_PER_SCREEN]
+                    moved = 0
+                    for fname in to_archive:
+                        if _archive_screenshot_file(entry, fname):
+                            moved += 1
+                    moved_total += moved
+                    if moved:
+                        logging.info(
+                            "🗃️  Archived %s screenshot(s) → screenshot_archive/%s/",
+                            moved,
+                            entry,
+                        )
+                _prune_archive_folder(entry)
+
+        root_files = _list_screenshot_files(SCREENSHOT_DIR)
+        if len(root_files) > SCREENSHOT_KEEP_PER_SCREEN:
+            to_archive = root_files[: len(root_files) - SCREENSHOT_KEEP_PER_SCREEN]
+            moved = 0
+            for fname in to_archive:
+                if _archive_root_screenshot_file(fname):
+                    moved += 1
+            moved_total += moved
+            if moved:
+                logging.info(
+                    "🗃️  Archived %s screenshot(s) → screenshot_archive/%s/",
+                    moved,
+                    ARCHIVE_DEFAULT_FOLDER,
+                )
+        _prune_archive_folder(ARCHIVE_DEFAULT_FOLDER)
+
+        if moved_total:
+            logging.info("🧹 Startup cleanup archived %s screenshot(s).", moved_total)
 def _list_screenshot_files(folder: str) -> list[str]:
     try:
         entries = []
