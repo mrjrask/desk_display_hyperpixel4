@@ -22,7 +22,7 @@ import queue
 from pathlib import Path
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import functools
 import logging
@@ -148,7 +148,7 @@ class Display:
         self._button_pins: Dict[str, Optional[int]] = {name: None for name in self._BUTTON_NAMES}
         self._sdl_video_driver: Optional[str] = None
         self._relative_mouse_enabled = False
-        self._cursor_rehide_timer: Optional[threading.Timer] = None
+        self._cursor_rehide_timers: List[threading.Timer] = []
 
         preferred_backend = DISPLAY_BACKEND
         if preferred_backend not in {"auto", "pygame"}:
@@ -253,21 +253,31 @@ class Display:
             except Exception:  # pragma: no cover - optional dependency
                 pass
 
-    def _schedule_cursor_rehide(self, delay: float = 0.75) -> None:
+    def _clear_cursor_rehide_timers(self) -> None:
+        timers = self._cursor_rehide_timers
+        if not timers:
+            return
+        for timer in timers:
+            if timer.is_alive():
+                timer.cancel()
+        self._cursor_rehide_timers = []
+
+    def _schedule_cursor_rehide(self, delays: Sequence[float] = (0.75, 2.0, 5.0)) -> None:
         """Re-apply cursor hiding shortly after startup or restarts."""
 
         if pygame is None:  # pragma: no cover - optional dependency
             return
-        timer = self._cursor_rehide_timer
-        if timer and timer.is_alive():
-            timer.cancel()
-        timer = threading.Timer(delay, self._hide_mouse_cursor)
-        timer.daemon = True
-        self._cursor_rehide_timer = timer
-        try:
-            timer.start()
-        except Exception:  # pragma: no cover - optional dependency
-            self._cursor_rehide_timer = None
+        self._clear_cursor_rehide_timers()
+        timers: List[threading.Timer] = []
+        for delay in delays:
+            timer = threading.Timer(delay, self._hide_mouse_cursor)
+            timer.daemon = True
+            try:
+                timer.start()
+            except Exception:  # pragma: no cover - optional dependency
+                continue
+            timers.append(timer)
+        self._cursor_rehide_timers = timers
 
     def hide_mouse_cursor(self) -> None:
         """Public wrapper to hide the cursor when a mouse is connected."""
@@ -286,10 +296,7 @@ class Display:
         except Exception:  # pragma: no cover - optional dependency
             pass
 
-        timer = self._cursor_rehide_timer
-        if timer and timer.is_alive():
-            timer.cancel()
-        self._cursor_rehide_timer = None
+        self._clear_cursor_rehide_timers()
 
         if self._relative_mouse_enabled:
             try:
