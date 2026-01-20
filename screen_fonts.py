@@ -38,6 +38,7 @@ for logo in LOGO_SCREENS:
 
 SPORTS_SCREENS: Sequence[str] = (
     "bears next",
+    "bears next season",
     "NFL Scoreboard",
     "NFL Scoreboard v2",
     "NFL Overview NFC",
