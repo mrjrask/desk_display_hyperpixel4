@@ -253,6 +253,14 @@ def _detect_weather_alert(weather: object) -> Tuple[Optional[str], Optional[Tupl
     return severity, ALERT_LED_COLORS.get(severity)
 
 
+def _pressure_trend_marker(trend: Optional[str]) -> tuple[Optional[str], Tuple[int, int, int]]:
+    if trend == "rising":
+        return "↑", (0, 255, 0)
+    if trend == "falling":
+        return "↓", (255, 64, 64)
+    return "↔", (255, 255, 255)
+
+
 def _draw_alert_indicator(draw: ImageDraw.ImageDraw, severity: Optional[str]) -> None:
     if not severity:
         return
@@ -820,15 +828,16 @@ def draw_weather_screen_2(display, weather, transition=False):
         if dt:
             events.append((label, dt))
 
+    base_color = (255, 255, 255)
     items = []
     for label, dt in sorted(events, key=lambda it: it[1]):
         if now < dt + grace_period:
-            items = [(label, dt.strftime("%-I:%M %p"))]
+            items = [(label, dt.strftime("%-I:%M %p"), base_color, None, None)]
             break
 
     if not items and events:
         label, dt = max(events, key=lambda it: it[1])
-        items = [(label, dt.strftime("%-I:%M %p"))]
+        items = [(label, dt.strftime("%-I:%M %p"), base_color, None, None)]
 
     # Other details
     wind_speed = _safe_round(current.get('wind_speed'))
@@ -837,19 +846,24 @@ def draw_weather_screen_2(display, weather, transition=False):
     if wind_dir:
         wind_value = f"{wind_value} {wind_dir}"
 
+    pressure_trend = current.get("pressure_trend")
+    trend_symbol, trend_color = _pressure_trend_marker(pressure_trend)
     items += [
-        ("Wind:",     wind_value),
-        ("Gust:",     f"{_safe_round(current.get('wind_gust'))} mph"),
-        ("Humidity:", _format_humidity(current.get("humidity"))),
+        ("Wind:",     wind_value, base_color, None, None),
+        ("Gust:",     f"{_safe_round(current.get('wind_gust'))} mph", base_color, None, None),
+        ("Humidity:", _format_humidity(current.get("humidity")), base_color, None, None),
         (
             "Pressure:",
             f"{round(_safe_float(current.get('pressure'))*0.0338639,2)} inHg",
+            base_color,
+            trend_symbol,
+            trend_color,
         ),
     ]
 
     uvi = _safe_round(current.get("uvi"))
     uv_col = uv_index_color(uvi)
-    items.append(("UV Index:", str(uvi), uv_col))
+    items.append(("UV Index:", str(uvi), uv_col, None, None))
 
     clear_display(display)
     img  = Image.new("RGB", (WIDTH, HEIGHT), "black")
@@ -858,12 +872,16 @@ def draw_weather_screen_2(display, weather, transition=False):
     # compute per-row heights
     row_metrics = []
     total_h = 0
-    for it in items:
-        lbl, val = it[0], it[1]
+    for lbl, val, color, suffix, suffix_color in items:
         h1 = draw.textsize(lbl, font=FONT_WEATHER_DETAILS_BOLD)[1]
         h2 = draw.textsize(val, font=FONT_WEATHER_DETAILS)[1]
-        row_h = max(h1, h2)
-        row_metrics.append((lbl, val, row_h, h1, h2, it[2] if len(it)==3 else (255,255,255)))
+        suffix_w = suffix_h = 0
+        if suffix:
+            suffix_w, suffix_h = draw.textsize(suffix, font=FONT_WEATHER_DETAILS)
+        row_h = max(h1, h2, suffix_h)
+        row_metrics.append(
+            (lbl, val, row_h, h1, h2, color, suffix, suffix_w, suffix_h, suffix_color)
+        )
         total_h += row_h
 
     # vertical spacing
@@ -871,17 +889,26 @@ def draw_weather_screen_2(display, weather, transition=False):
     y = space
 
     # render each row, vertically centering label & value
-    for lbl, val, row_h, h_lbl, h_val, color in row_metrics:
+    for lbl, val, row_h, h_lbl, h_val, color, suffix, suffix_w, suffix_h, suffix_color in row_metrics:
         lw, _ = draw.textsize(lbl, font=FONT_WEATHER_DETAILS_BOLD)
         vw, _ = draw.textsize(val, font=FONT_WEATHER_DETAILS)
-        row_w = lw + 4 + vw
+        suffix_gap = 4 if suffix else 0
+        row_w = lw + 4 + vw + (suffix_gap + suffix_w if suffix else 0)
         x0    = (WIDTH - row_w)//2
 
         y_lbl = y + (row_h - h_lbl)//2
         y_val = y + (row_h - h_val)//2
 
-        draw.text((x0,          y_lbl), lbl, font=FONT_WEATHER_DETAILS_BOLD, fill=(255,255,255))
+        draw.text((x0,          y_lbl), lbl, font=FONT_WEATHER_DETAILS_BOLD, fill=base_color)
         draw.text((x0 + lw + 4, y_val), val, font=FONT_WEATHER_DETAILS,      fill=color)
+        if suffix:
+            y_suffix = y + (row_h - suffix_h) // 2
+            draw.text(
+                (x0 + lw + 4 + vw + suffix_gap, y_suffix),
+                suffix,
+                font=FONT_WEATHER_DETAILS,
+                fill=suffix_color or base_color,
+            )
         y += row_h + space
 
     _draw_alert_indicator(draw, severity)
