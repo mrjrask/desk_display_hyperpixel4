@@ -13,7 +13,7 @@ import config
 from utils import ScreenImage, animate_scroll, timestamp_to_datetime
 from screen_overrides import ResolvedScreenOverride
 from screen_runtime_overrides import apply_override_to_result
-from screens.draw_bears_schedule import show_bears_next_game
+from screens.draw_bears_schedule import show_bears_next_game, show_bears_next_season
 from screens.draw_bulls_schedule import (
     draw_bulls_next_home_game,
     draw_last_bulls_game,
@@ -393,6 +393,10 @@ def build_screen_registry(context: ScreenContext) -> Tuple[Dict[str, ScreenDefin
         )
 
     register("bears next", lambda: show_bears_next_game(context.display, transition=True))
+    register(
+        "bears next season",
+        lambda: show_bears_next_season(context.display, transition=True),
+    )
     register("NFL Scoreboard", lambda: draw_nfl_scoreboard(context.display, transition=True))
     register("NFL Scoreboard v2", lambda: draw_nfl_scoreboard_v2(context.display, transition=True))
     register("NFL Overview NFC", lambda: draw_nfl_overview_nfc(context.display, transition=True))

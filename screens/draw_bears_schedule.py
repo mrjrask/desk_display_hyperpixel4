@@ -13,9 +13,10 @@ Shows the next Chicago Bears game with:
 
 import os
 import re
+import time
 from typing import Optional
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 import config
 from config import (
@@ -31,6 +32,34 @@ from utils import (
 )
 
 NFL_LOGO_DIR = os.path.join(config.IMAGES_DIR, "nfl")
+
+DROP_MARGIN = 24
+DROP_STEPS = 24
+DROP_STAGGER = 0.4
+DROP_FRAME_DELAY = 0.02
+
+
+def _ease_out_cubic(t: float) -> float:
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+    inv = 1.0 - t
+    return 1.0 - inv * inv * inv
+
+
+def _text_size(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+) -> tuple[int, int]:
+    try:
+        l, t, r, b = draw.textbbox((0, 0), text, font=font)
+        return r - l, b - t
+    except Exception:  # pragma: no cover - PIL fallback
+        return draw.textsize(text, font=font)
+
+
 def show_bears_next_game(display, transition=False):
     game = next_game_from_schedule(BEARS_SCHEDULE)
     title = "Next for Da Bears:"
@@ -226,4 +255,195 @@ def show_bears_next_game(display, transition=False):
 
     display.image(img)
     display.show()
+    return None
+
+
+def _render_drop_frames(
+    display,
+    header: Image.Image,
+    placements: list[dict],
+    *,
+    transition: bool,
+) -> Image.Image:
+    if not placements:
+        if transition:
+            return header
+        display.image(header)
+        display.show()
+        return header
+
+    steps = max(2, DROP_STEPS)
+    stagger = max(1, int(round(steps * DROP_STAGGER)))
+    schedule: list[tuple[int, dict]] = []
+    start_step = 0
+    for placement in placements:
+        schedule.append((start_step, placement))
+        start_step += stagger
+
+    total_duration = schedule[-1][0] + steps + 1
+    placed: list[dict] = []
+    completed = [False] * len(schedule)
+
+    for current_step in range(total_duration):
+        for idx, (start, placement) in enumerate(schedule):
+            if current_step >= start + steps and not completed[idx]:
+                placed.append(
+                    {
+                        "logo": placement["logo"],
+                        "x": placement["x"],
+                        "y": placement["y"],
+                    }
+                )
+                completed[idx] = True
+
+        frame = header.copy()
+        for placement in placed:
+            frame.paste(placement["logo"], (placement["x"], placement["y"]), placement["logo"])
+
+        for start, placement in schedule:
+            progress = current_step - start
+            if progress < 0 or progress >= steps:
+                continue
+
+            frac = progress / (steps - 1) if steps > 1 else 1.0
+            eased = _ease_out_cubic(frac)
+            start_y = placement["drop_start"]
+            target_y = placement["y"]
+            y_pos = int(start_y + (target_y - start_y) * eased)
+            if y_pos > target_y:
+                y_pos = target_y
+            frame.paste(placement["logo"], (placement["x"], y_pos), placement["logo"])
+
+        display.image(frame)
+        display.show()
+        time.sleep(DROP_FRAME_DELAY)
+
+    final = header.copy()
+    for placement in placements:
+        final.paste(placement["logo"], (placement["x"], placement["y"]), placement["logo"])
+    display.image(final)
+    display.show()
+    return final
+
+
+def show_bears_next_season(display, transition=False):
+    title = "2026 Bears Opponents"
+    img = Image.new("RGB", (config.WIDTH, config.HEIGHT), "black")
+    draw = ImageDraw.Draw(img)
+
+    title_w, title_h = _text_size(draw, title, config.FONT_TITLE_SPORTS)
+    draw.text(
+        ((config.WIDTH - title_w) // 2, 0),
+        title,
+        font=config.FONT_TITLE_SPORTS,
+        fill=(255, 255, 255),
+    )
+
+    header_gap = max(8, int(round(config.HEIGHT * 0.02)))
+    heading_y = title_h + header_gap
+    heading_font = config.FONT_TEAM_SPORTS
+    heading_spacing = max(6, int(round(config.WIDTH * 0.02)))
+
+    home_heading = "Home"
+    away_heading = "Away"
+    home_w, home_h = _text_size(draw, home_heading, heading_font)
+    away_w, away_h = _text_size(draw, away_heading, heading_font)
+
+    content_top = heading_y + max(home_h, away_h) + header_gap
+    content_bottom = config.HEIGHT - max(8, int(round(config.HEIGHT * 0.03)))
+    content_height = max(10, content_bottom - content_top)
+
+    half_width = config.WIDTH // 2
+    side_padding = max(12, int(round(config.WIDTH * 0.03)))
+    section_width = half_width - side_padding * 2
+
+    home_center = half_width // 2
+    away_center = half_width + home_center
+
+    draw.text(
+        (home_center - home_w // 2, heading_y),
+        home_heading,
+        font=heading_font,
+        fill=(255, 255, 255),
+    )
+    draw.text(
+        (away_center - away_w // 2, heading_y),
+        away_heading,
+        font=heading_font,
+        fill=(255, 255, 255),
+    )
+
+    home_teams = ["DET", "GB", "MIN", "TB", "PHI", "JAX", "NYJ", "NE", "NO"]
+    away_teams = ["DET", "GB", "MIN", "BUF", "MIA", "ATL", "CAR", "SEA"]
+
+    cols = 2
+    rows = max(
+        (len(home_teams) + cols - 1) // cols,
+        (len(away_teams) + cols - 1) // cols,
+    )
+    col_gap = max(6, int(round(section_width * 0.08)))
+    row_gap = max(6, int(round(content_height * 0.06)))
+
+    cell_width = max(
+        12,
+        int(round((section_width - col_gap * (cols - 1)) / cols)),
+    )
+    cell_height = max(
+        12,
+        int(round((content_height - row_gap * (rows - 1)) / rows)),
+    )
+    logo_size = max(20, min(cell_width, cell_height))
+
+    def _placements_for(
+        teams: list[str],
+        center_x: int,
+    ) -> list[dict]:
+        grid_width = logo_size * cols + col_gap * (cols - 1)
+        grid_height = logo_size * rows + row_gap * (rows - 1)
+        start_x = center_x - grid_width // 2
+        start_y = content_top + max(0, (content_height - grid_height) // 2)
+        placements: list[dict] = []
+
+        for idx, abbr in enumerate(teams):
+            row = idx // cols
+            col = idx % cols
+            if row >= rows:
+                break
+            base_logo = load_team_logo(NFL_LOGO_DIR, abbr.lower(), height=logo_size)
+            framed = square_logo_frame(
+                base_logo,
+                logo_size,
+                fallback_text=abbr,
+                fallback_font=config.FONT_TEAM_SPORTS,
+            )
+            if not framed:
+                continue
+            x = start_x + col * (logo_size + col_gap)
+            y = start_y + row * (logo_size + row_gap)
+            drop_start = min(-logo_size, content_top - logo_size - DROP_MARGIN)
+            placements.append(
+                {
+                    "logo": framed,
+                    "x": x,
+                    "y": y,
+                    "drop_start": drop_start,
+                }
+            )
+        return placements
+
+    placements = _placements_for(home_teams, home_center) + _placements_for(
+        away_teams, away_center
+    )
+
+    if transition:
+        final = img.copy()
+        for placement in placements:
+            final.paste(
+                placement["logo"],
+                (placement["x"], placement["y"]),
+                placement["logo"],
+            )
+        return final
+
+    _render_drop_frames(display, img, placements, transition=False)
     return None
