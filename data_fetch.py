@@ -14,6 +14,7 @@ import os
 import re
 import socket
 import time
+from collections import deque
 from typing import Optional
 
 import pytz
@@ -65,6 +66,9 @@ _WEATHER_BACKOFF_UNTIL: dict[str, datetime.datetime] = {}
 _WEATHER_BACKOFF_LOGGED: set[str] = set()
 _WEATHER_BACKOFF_DEFAULT = datetime.timedelta(minutes=10)
 _WEATHER_BACKOFF_RATELIMIT = datetime.timedelta(minutes=90)
+_PRESSURE_TREND_WINDOW = datetime.timedelta(hours=3)
+_PRESSURE_TREND_THRESHOLD_HPA = 0.5
+_pressure_history: deque[tuple[datetime.datetime, float]] = deque()
 
 
 def _set_weather_backoff(source: str, until: datetime.datetime):
@@ -94,6 +98,29 @@ def _should_skip_weather_source(source: str, now: datetime.datetime) -> bool:
         )
         _WEATHER_BACKOFF_LOGGED.add(source)
     return True
+
+
+def _update_pressure_trend(now: datetime.datetime, pressure_hpa: object) -> Optional[str]:
+    try:
+        pressure = float(pressure_hpa)
+    except (TypeError, ValueError):
+        return None
+
+    _pressure_history.append((now, pressure))
+    cutoff = now - _PRESSURE_TREND_WINDOW
+    while _pressure_history and _pressure_history[0][0] < cutoff:
+        _pressure_history.popleft()
+
+    if not _pressure_history:
+        return None
+
+    baseline = _pressure_history[0][1]
+    delta = pressure - baseline
+    if delta > _PRESSURE_TREND_THRESHOLD_HPA:
+        return "rising"
+    if delta < -_PRESSURE_TREND_THRESHOLD_HPA:
+        return "falling"
+    return "steady"
 
 
 def load_weatherkit_private_key(key_path: str):
@@ -755,6 +782,13 @@ def fetch_weather():
         mapped = fetcher(now)
         if mapped:
             _clear_weather_backoff(source)
+            current = mapped.get("current")
+            if isinstance(current, dict):
+                trend = _update_pressure_trend(now, current.get("pressure"))
+                if trend:
+                    current["pressure_trend"] = trend
+                else:
+                    current.pop("pressure_trend", None)
             fetch_weather._last_success = mapped  # type: ignore[attr-defined]
             fetch_weather._last_fetched = now  # type: ignore[attr-defined]
             return mapped
