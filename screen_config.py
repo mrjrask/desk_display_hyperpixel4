@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, List, Sequence
 
 from screens_catalog import SCREEN_IDS
 
@@ -45,9 +45,20 @@ def load_config(path: Path, *, allow_missing: bool = False) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Configuration must be a JSON object")
     screens = data.get("screens")
-    if not isinstance(screens, dict):
+    groups = data.get("groups")
+    if screens is None and groups is None:
+        raise ValueError("Configuration must contain 'screens' or 'groups'")
+    if screens is not None and not isinstance(screens, dict):
         raise ValueError("Configuration must contain a 'screens' mapping")
-    return {"screens": screens}
+    if groups is not None and not isinstance(groups, list):
+        raise ValueError("Configuration must contain a 'groups' list")
+
+    payload: Dict[str, Any] = {}
+    if screens is not None:
+        payload["screens"] = screens
+    if groups is not None:
+        payload["groups"] = groups
+    return payload
 
 
 def load_active_config(*, allow_missing: bool = False) -> Dict[str, Any]:
@@ -71,11 +82,65 @@ def write_config(path: Path, payload: Dict[str, Any]) -> None:
     tmp_path.replace(path)
 
 
-def config_to_ui_list(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+def config_to_ui_groups(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    groups = config.get("groups")
+    if isinstance(groups, list):
+        ui_groups: List[Dict[str, Any]] = []
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                continue
+            name = _parse_text_field(group.get("name")) or f"Group {index + 1}"
+            screens = group.get("screens")
+            if not isinstance(screens, dict):
+                screens = {}
+            ui_groups.append({"name": name, "screens": _screens_to_ui_list(screens)})
+        if ui_groups:
+            return ui_groups
+
     screens = config.get("screens")
     if not isinstance(screens, dict):
         return []
+    return [{"name": "Playlist", "screens": _screens_to_ui_list(screens)}]
 
+
+def ui_to_config(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Payload must be a JSON object")
+
+    groups = payload.get("groups")
+    if groups is not None:
+        if not isinstance(groups, Sequence):
+            raise ValueError("Payload must contain a 'groups' list")
+        seen: set[str] = set()
+        parsed_groups: List[Dict[str, Any]] = []
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                raise ValueError(f"Group entry at index {index} must be an object")
+            name = _parse_text_field(group.get("name")) or f"Group {index + 1}"
+            rows = group.get("screens", [])
+            if not isinstance(rows, Sequence):
+                raise ValueError(f"Screens for group '{name}' must be a list")
+            ordered = _parse_screen_rows(rows, seen=seen)
+            if ordered:
+                parsed_groups.append({"name": name, "screens": ordered})
+
+        if not parsed_groups:
+            raise ValueError("Configuration must contain at least one screen")
+
+        return {"groups": parsed_groups}
+
+    screens = payload.get("screens")
+    if not isinstance(screens, Sequence):
+        raise ValueError("Payload must contain a 'screens' list")
+
+    ordered = _parse_screen_rows(screens, seen=set())
+    if not ordered:
+        raise ValueError("Configuration must contain at least one screen")
+
+    return {"screens": ordered}
+
+
+def _screens_to_ui_list(screens: Dict[str, Any]) -> List[Dict[str, Any]]:
     ui_rows: List[Dict[str, Any]] = []
     for screen_id, raw in screens.items():
         frequency = _coerce_int(raw if not isinstance(raw, dict) else raw.get("frequency"))
@@ -110,18 +175,9 @@ def config_to_ui_list(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     return ui_rows
 
 
-def ui_to_config(payload: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(payload, dict):
-        raise ValueError("Payload must be a JSON object")
-
-    screens = payload.get("screens")
-    if not isinstance(screens, Sequence):
-        raise ValueError("Payload must contain a 'screens' list")
-
+def _parse_screen_rows(rows: Sequence[Any], *, seen: set[str]) -> Dict[str, Any]:
     ordered: Dict[str, Any] = {}
-    seen = set()
-
-    for index, row in enumerate(screens):
+    for index, row in enumerate(rows):
         if not isinstance(row, dict):
             raise ValueError(f"Screen entry at index {index} must be an object")
 
@@ -182,10 +238,7 @@ def ui_to_config(payload: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 ordered[screen_id] = frequency
 
-    if not ordered:
-        raise ValueError("Configuration must contain at least one screen")
-
-    return {"screens": ordered}
+    return ordered
 
 
 def _parse_alt_screens(raw_value: Any, screen_id: str) -> List[str]:

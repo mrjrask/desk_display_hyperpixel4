@@ -175,6 +175,17 @@ def summarise_diff(old: Dict[str, Any], new: Dict[str, Any]) -> str:
     """Generate a human-readable summary of configuration changes."""
 
     def _normalise_screens(config: Dict[str, Any]) -> Dict[str, Any]:
+        groups = config.get("groups")
+        if isinstance(groups, list):
+            flattened: Dict[str, Any] = {}
+            for group in groups:
+                if not isinstance(group, dict):
+                    continue
+                screens = group.get("screens")
+                if isinstance(screens, dict):
+                    flattened.update(screens)
+            return flattened
+
         screens = config.get("screens")
         if isinstance(screens, dict):
             return screens

@@ -10,7 +10,7 @@ from typing import Any, Dict
 from flask import Flask, Response, jsonify, render_template, request
 
 from screen_config import (
-    config_to_ui_list,
+    config_to_ui_groups,
     load_active_config,
     load_default_config,
     resolve_config_paths,
@@ -30,7 +30,7 @@ app = Flask(__name__)
 
 def _load_screen_config_payload(config: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "screens": config_to_ui_list(config),
+        "groups": config_to_ui_groups(config),
         "screen_ids": list(SCREEN_IDS),
     }
 
