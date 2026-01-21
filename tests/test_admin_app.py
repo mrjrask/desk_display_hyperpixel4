@@ -39,7 +39,9 @@ def test_api_screens_reports_config_list(app_client):
     assert resp.status_code == 200
     assert payload["status"] == "ok"
 
-    screens = payload["screens"]
+    groups = payload["groups"]
+    assert groups[0]["name"] == "Playlist"
+    screens = groups[0]["screens"]
     assert screens[0]["id"] == "date"
     assert screens[0]["frequency"] == 0
     assert screens[0]["alt_screen"] == ""
@@ -55,19 +57,28 @@ def test_api_defaults_returns_defaults(app_client):
     payload = resp.get_json()
     assert resp.status_code == 200
     assert payload["status"] == "ok"
-    assert any(entry["id"] == "travel" for entry in payload["screens"])
+    assert any(
+        entry["id"] == "travel"
+        for group in payload["groups"]
+        for entry in group["screens"]
+    )
 
 
 def test_api_screens_updates_local_override(app_client):
     client, _, local_path = app_client
     payload = {
-        "screens": [
-            {"id": "date", "frequency": "1", "alt_screen": "", "alt_frequency": ""},
-            {"id": "travel", "frequency": "2", "alt_screen": "", "alt_frequency": ""},
-        ]
+        "groups": [
+            {
+                "name": "Core",
+                "screens": [
+                    {"id": "date", "frequency": "1", "alt_screen": "", "alt_frequency": ""},
+                    {"id": "travel", "frequency": "2", "alt_screen": "", "alt_frequency": ""},
+                ],
+            }
+        ],
     }
     resp = client.post("/api/screens", json=payload)
     assert resp.status_code == 200
     assert local_path.exists()
     on_disk = json.loads(Path(local_path).read_text())
-    assert on_disk["screens"]["date"] == 1
+    assert on_disk["groups"][0]["screens"]["date"] == 1

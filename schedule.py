@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from screens_catalog import SCREEN_IDS
 from screens.registry import ScreenDefinition
@@ -131,12 +131,12 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
     if not isinstance(config, dict):
         raise ValueError("Schedule configuration must be a JSON object")
 
-    screens = config.get("screens")
-    if not isinstance(screens, dict) or not screens:
+    screen_rows = _flatten_config_screens(config)
+    if not screen_rows:
         raise ValueError("Configuration must provide a non-empty 'screens' mapping")
 
     entries: List[_ScheduleEntry] = []
-    for screen_id, raw in screens.items():
+    for screen_id, raw in screen_rows:
         if not isinstance(screen_id, str):
             raise ValueError("Screen identifiers must be strings")
         if screen_id not in KNOWN_SCREENS:
@@ -223,3 +223,25 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
         raise ValueError("Configuration must contain at least one enabled screen")
 
     return ScreenScheduler(entries)
+
+
+def _flatten_config_screens(config: Dict[str, Any]) -> List[Tuple[str, Any]]:
+    groups = config.get("groups")
+    if isinstance(groups, list):
+        flattened: List[Tuple[str, Any]] = []
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                raise ValueError(f"Group entry at index {index} must be an object")
+            screens = group.get("screens")
+            if screens is None:
+                continue
+            if not isinstance(screens, dict):
+                raise ValueError(f"Screens for group at index {index} must be a mapping")
+            for screen_id, raw in screens.items():
+                flattened.append((screen_id, raw))
+        return flattened
+
+    screens = config.get("screens")
+    if not isinstance(screens, dict):
+        return []
+    return list(screens.items())

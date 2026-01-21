@@ -120,6 +120,56 @@
       letter-spacing: 0.08em;
       color: #94a3b8;
     }
+    .config-group-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .config-group {
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 18px;
+      background: rgba(2, 6, 23, 0.65);
+      padding: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+    .group-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 14px;
+      padding: 0.6rem 0.8rem;
+    }
+    .group-name-input {
+      flex: 1;
+      min-width: 180px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font-size: 1rem;
+      outline: none;
+    }
+    .group-add-select {
+      min-width: 160px;
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 999px;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .group-remove {
+      padding: 0.45rem 1rem;
+      font-size: 0.85rem;
+    }
+    .group-screens {
+      min-height: 1.5rem;
+    }
     .config-row {
       display: contents;
     }
@@ -197,6 +247,9 @@
       text-align: center;
       user-select: none;
     }
+    .dragging-group {
+      opacity: 0.6;
+    }
     .dragging .config-cell {
       opacity: 0.5;
     }
@@ -207,17 +260,18 @@
     <header class="page__header">
       <div>
         <h1>Screen configuration</h1>
-        <p>Reorder screens and adjust frequencies for the active playlist.</p>
+        <p>Organize screens into playlist groups and adjust frequencies for the active playlist.</p>
       </div>
     </header>
     <section class="config-panel" aria-label="Screen configuration">
       <div class="config-header">
         <div>
           <h2>Playlist editor</h2>
-          <p>Drag to reorder, set frequencies, and add alternate screens.</p>
+          <p>Drag to reorder groups and screens, set frequencies, and add alternate screens.</p>
         </div>
         <div class="config-actions">
           <button type="button" class="config-save" disabled>Save changes</button>
+          <button type="button" class="secondary config-add-group">Add group</button>
           <button type="button" class="secondary config-defaults">Load defaults</button>
           <button type="button" class="secondary config-export">Export configuration</button>
         </div>
@@ -238,9 +292,10 @@
         <div>Alternate screens</div>
         <div>Alternate frequency</div>
       </div>
-      <div class="config-table" id="config-list"></div>
+      <div class="config-group-list" id="config-list"></div>
       <div class="config-actions">
         <button type="button" class="config-save" disabled>Save changes</button>
+        <button type="button" class="secondary config-add-group">Add group</button>
         <button type="button" class="secondary config-defaults">Load defaults</button>
         <button type="button" class="secondary config-export">Export configuration</button>
       </div>
@@ -252,11 +307,13 @@
       const configStatus = document.getElementById('config-status');
       const configError = document.getElementById('config-error');
       const configSaveButtons = Array.from(document.querySelectorAll('.config-save'));
+      const configAddGroupButtons = Array.from(document.querySelectorAll('.config-add-group'));
       const configDefaultsButtons = Array.from(document.querySelectorAll('.config-defaults'));
       const configExportButtons = Array.from(document.querySelectorAll('.config-export'));
       const hideZeroToggle = document.getElementById('hide-zero-toggle');
       let configDirty = false;
       let availableScreenIds = [];
+      let groupCounter = 0;
 
       function setConfigStatus(message, tone = 'info') {
         configStatus.textContent = message;
@@ -381,59 +438,81 @@
         });
       }
 
-      function renderConfigRows(screens) {
-        configList.innerHTML = '';
-        screens.forEach((screen) => {
-          const row = document.createElement('div');
-          row.className = 'config-row';
-          row.dataset.screenId = screen.id;
-          row.draggable = true;
+      function nextGroupName() {
+        groupCounter += 1;
+        return `Group ${groupCounter}`;
+      }
 
-          row.innerHTML = `
-            <div class="config-cell drag-handle" title="Drag to reorder" aria-label="Drag handle">⠿</div>
-            <div class="config-cell">${screen.id}</div>
-            <div class="config-cell">
-              <input type="number" min="0" inputmode="numeric" class="freq-input" value="${screen.frequency ?? ''}">
-            </div>
-            <div class="config-cell">
-              <input type="text" class="background-input" placeholder="#000000" value="${screen.background ?? ''}">
-            </div>
-            <div class="config-cell alt-screen-cell"></div>
-            <div class="config-cell">
-              <input type="number" min="0" inputmode="numeric" class="alt-frequency-input" placeholder="Optional" value="${screen.alt_frequency ?? ''}">
-            </div>
-          `;
+      function getUsedScreenIds() {
+        return new Set(
+          Array.from(configList.querySelectorAll('.config-row')).map((row) => row.dataset.screenId)
+        );
+      }
 
-          const altCell = row.querySelector('.alt-screen-cell');
-          renderAltSelector(altCell, screen.id, screen.alt_screen ?? '');
-
-          row.querySelectorAll('input').forEach((input) => {
-            input.addEventListener('input', () => {
-              if (input.classList.contains('freq-input') && input.dataset.zeroHidden === 'true') {
-                delete input.dataset.zeroHidden;
-              }
-              markConfigDirty(true);
-            });
+      function refreshAddScreenOptions() {
+        const used = getUsedScreenIds();
+        const available = availableScreenIds.filter((id) => !used.has(id));
+        configList.querySelectorAll('.group-add-select').forEach((select) => {
+          select.innerHTML = '<option value="">Add screen…</option>';
+          available.forEach((id) => {
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = id;
+            select.appendChild(option);
           });
+        });
+      }
 
-          row.addEventListener('dragstart', (event) => {
-            const handle = event.target.closest('.drag-handle');
-            if (!handle) {
-              event.preventDefault();
-              return;
+      function buildScreenRow(screen) {
+        const row = document.createElement('div');
+        row.className = 'config-row';
+        row.dataset.screenId = screen.id;
+        row.draggable = true;
+
+        row.innerHTML = `
+          <div class="config-cell drag-handle" title="Drag to reorder" aria-label="Drag handle">⠿</div>
+          <div class="config-cell">${screen.id}</div>
+          <div class="config-cell">
+            <input type="number" min="0" inputmode="numeric" class="freq-input" value="${screen.frequency ?? ''}">
+          </div>
+          <div class="config-cell">
+            <input type="text" class="background-input" placeholder="#000000" value="${screen.background ?? ''}">
+          </div>
+          <div class="config-cell alt-screen-cell"></div>
+          <div class="config-cell">
+            <input type="number" min="0" inputmode="numeric" class="alt-frequency-input" placeholder="Optional" value="${screen.alt_frequency ?? ''}">
+          </div>
+        `;
+
+        const altCell = row.querySelector('.alt-screen-cell');
+        renderAltSelector(altCell, screen.id, screen.alt_screen ?? '');
+
+        row.querySelectorAll('input').forEach((input) => {
+          input.addEventListener('input', () => {
+            if (input.classList.contains('freq-input') && input.dataset.zeroHidden === 'true') {
+              delete input.dataset.zeroHidden;
             }
-            row.classList.add('dragging');
-            event.dataTransfer.effectAllowed = 'move';
-          });
-
-          row.addEventListener('dragend', () => {
-            row.classList.remove('dragging');
             markConfigDirty(true);
           });
-
-          configList.appendChild(row);
         });
-        applyHideZero();
+
+        row.addEventListener('dragstart', (event) => {
+          const handle = event.target.closest('.drag-handle');
+          if (!handle) {
+            event.preventDefault();
+            return;
+          }
+          row.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+        });
+
+        row.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          markConfigDirty(true);
+          refreshAddScreenOptions();
+        });
+
+        return row;
       }
 
       function getDragAfterElement(container, y) {
@@ -448,29 +527,144 @@
         }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
       }
 
+      function getGroupAfterElement(container, y) {
+        const draggableElements = Array.from(container.querySelectorAll('.config-group:not(.dragging-group)'));
+        return draggableElements.reduce((closest, child) => {
+          const box = child.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, element: child };
+          }
+          return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+      }
+
+      function buildGroup(group, groupIndex) {
+        const groupElement = document.createElement('div');
+        groupElement.className = 'config-group';
+        groupElement.dataset.groupId = `group-${groupIndex}`;
+        groupElement.draggable = true;
+
+        groupElement.innerHTML = `
+          <div class="group-header">
+            <div class="drag-handle group-drag-handle" title="Drag group" aria-label="Drag group">⠿</div>
+            <input type="text" class="group-name-input" value="${group.name}" placeholder="Group name">
+            <select class="group-add-select"></select>
+            <button type="button" class="secondary group-remove">Remove group</button>
+          </div>
+          <div class="config-table group-screens"></div>
+        `;
+
+        const groupNameInput = groupElement.querySelector('.group-name-input');
+        groupNameInput.addEventListener('input', () => {
+          markConfigDirty(true);
+        });
+
+        const addSelect = groupElement.querySelector('.group-add-select');
+        addSelect.addEventListener('change', () => {
+          const value = addSelect.value;
+          if (!value) {
+            return;
+          }
+          const screenRow = buildScreenRow({
+            id: value,
+            frequency: '',
+            alt_screen: '',
+            alt_frequency: '',
+            background: '',
+          });
+          groupElement.querySelector('.group-screens').appendChild(screenRow);
+          addSelect.value = '';
+          markConfigDirty(true);
+          applyHideZero();
+          refreshAddScreenOptions();
+        });
+
+        const removeButton = groupElement.querySelector('.group-remove');
+        removeButton.addEventListener('click', () => {
+          groupElement.remove();
+          markConfigDirty(true);
+          refreshAddScreenOptions();
+        });
+
+        const screensContainer = groupElement.querySelector('.group-screens');
+        (group.screens || []).forEach((screen) => {
+          screensContainer.appendChild(buildScreenRow(screen));
+        });
+
+        groupElement.addEventListener('dragstart', (event) => {
+          const handle = event.target.closest('.group-drag-handle');
+          if (!handle) {
+            event.preventDefault();
+            return;
+          }
+          groupElement.classList.add('dragging-group');
+          event.dataTransfer.effectAllowed = 'move';
+        });
+
+        groupElement.addEventListener('dragend', () => {
+          groupElement.classList.remove('dragging-group');
+          markConfigDirty(true);
+        });
+
+        screensContainer.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          const afterElement = getDragAfterElement(screensContainer, event.clientY);
+          const dragging = configList.querySelector('.dragging');
+          if (!dragging) {
+            return;
+          }
+          if (afterElement == null) {
+            screensContainer.appendChild(dragging);
+          } else {
+            screensContainer.insertBefore(dragging, afterElement);
+          }
+        });
+
+        return groupElement;
+      }
+
+      function renderConfigGroups(groups) {
+        configList.innerHTML = '';
+        groupCounter = 0;
+        const safeGroups = groups && groups.length ? groups : [{ name: 'Playlist', screens: [] }];
+        safeGroups.forEach((group) => {
+          groupCounter += 1;
+          const groupElement = buildGroup(
+            { ...group, name: group.name || `Group ${groupCounter}` },
+            groupCounter
+          );
+          configList.appendChild(groupElement);
+        });
+        applyHideZero();
+        refreshAddScreenOptions();
+      }
+
       configList.addEventListener('dragover', (event) => {
         event.preventDefault();
-        const afterElement = getDragAfterElement(configList, event.clientY);
-        const dragging = configList.querySelector('.dragging');
-        if (!dragging) {
+        const draggingGroup = configList.querySelector('.dragging-group');
+        if (!draggingGroup) {
           return;
         }
+        const afterElement = getGroupAfterElement(configList, event.clientY);
         if (afterElement == null) {
-          configList.appendChild(dragging);
+          configList.appendChild(draggingGroup);
         } else {
-          configList.insertBefore(dragging, afterElement);
+          configList.insertBefore(draggingGroup, afterElement);
         }
       });
 
       function buildConfigPayload() {
-        const rows = Array.from(configList.querySelectorAll('.config-row'));
         return {
-          screens: rows.map((row) => ({
-            id: row.dataset.screenId,
-            frequency: row.querySelector('.freq-input').value,
-            alt_screen: row.querySelector('.alt-screen-input').value,
-            alt_frequency: row.querySelector('.alt-frequency-input').value,
-            background: row.querySelector('.background-input').value,
+          groups: Array.from(configList.querySelectorAll('.config-group')).map((group) => ({
+            name: group.querySelector('.group-name-input').value.trim() || 'Playlist',
+            screens: Array.from(group.querySelectorAll('.config-row')).map((row) => ({
+              id: row.dataset.screenId,
+              frequency: row.querySelector('.freq-input').value,
+              alt_screen: row.querySelector('.alt-screen-input').value,
+              alt_frequency: row.querySelector('.alt-frequency-input').value,
+              background: row.querySelector('.background-input').value,
+            })),
           })),
         };
       }
@@ -484,7 +678,7 @@
           throw new Error(payload.message || 'Unable to load configuration');
         }
         availableScreenIds = payload.screen_ids || [];
-        renderConfigRows(payload.screens || []);
+        renderConfigGroups(payload.groups || []);
         markConfigDirty(false);
         setConfigStatus('Configuration loaded.', 'success');
       }
@@ -517,6 +711,15 @@
           } finally {
             button.disabled = !configDirty;
           }
+        });
+      });
+
+      configAddGroupButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const groupElement = buildGroup({ name: nextGroupName(), screens: [] }, groupCounter);
+          configList.appendChild(groupElement);
+          markConfigDirty(true);
+          refreshAddScreenOptions();
         });
       });
 
