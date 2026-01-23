@@ -295,6 +295,7 @@ To enable it, set `metadata.ui.playlist_admin_enabled` to `true` in `screens_con
 - `./scripts/install_admin_service.sh`
 - `./scripts/update_admin_service.sh`
 - `./scripts/uninstall_admin_service.sh`
+- `./scripts/uninstall.sh` (main display service)
 
 Override defaults with environment variables such as `INSTALL_USER`, `INSTALL_DIR`, `VENV_PATH`, `SERVICE_NAME`, `ADMIN_HOST`, and `ADMIN_PORT`.
 
@@ -344,6 +345,14 @@ python -m venv /home/pi/desk_display_hyperpixel4/venv
 /home/pi/desk_display_hyperpixel4/venv/bin/pip install -r /home/pi/desk_display_hyperpixel4/requirements.txt
 chmod +x /home/pi/desk_display_hyperpixel4/tools/maintenance/cleanup.sh
 ```
+
+To uninstall the main display service, run:
+
+```bash
+./scripts/uninstall.sh
+```
+
+Add `REMOVE_INSTALL_DIR=1` to also remove the install directory (including the venv).
 
 **Sensor selection:**
 
