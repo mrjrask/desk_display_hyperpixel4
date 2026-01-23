@@ -97,8 +97,8 @@ OVERVIEW_MAX_LOGO_HEIGHT = 184
 OVERVIEW_LOGO_PADDING = 6
 OVERVIEW_LOGO_OVERLAP = 12
 OVERVIEW_LEADER_LOGO_SCALE = 1.1
-OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.2
-WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE = OVERVIEW_LEADER_LOGO_SQUARE_SCALE * 1.25
+OVERVIEW_LEADER_LOGO_SQUARE_SCALE = 1.25
+WILDCARD_OVERVIEW_LEADER_LOGO_SQUARE_SCALE = OVERVIEW_LEADER_LOGO_SQUARE_SCALE
 OVERVIEW_HORIZONTAL_LARGE_ROWS = 3
 BACKGROUND_COLOR = SCOREBOARD_BACKGROUND_COLOR
 OVERVIEW_DROP_STEPS = 30
@@ -1421,8 +1421,9 @@ def _build_overview_rows_horizontal(
     base_centers = _centered_positions(max_cols, OVERVIEW_MARGIN_X, available_width)
     col_width = available_width / max(1, max_cols)
 
-    for row_idx, (_, teams) in enumerate(sections):
+    for row_idx, (label, teams) in enumerate(sections):
         limited = teams[:max_cols]
+        wildcard_leaders_row = label.endswith("Wild Card")
         if len(limited) == 2 and max_cols == 3 and len(base_centers) == 3:
             col_centers = [
                 (base_centers[0] + base_centers[1]) / 2,
@@ -1450,7 +1451,9 @@ def _build_overview_rows_horizontal(
             abbr = (team.get("abbr") or "").upper()
             if not abbr:
                 continue
-            is_leader = col_idx == 0
+            is_leader = col_idx == 0 or (
+                IS_SQUARE_DISPLAY and wildcard_leaders_row and col_idx < 2
+            )
             target_height = _overview_logo_height(
                 row_logo_height,
                 is_leader=is_leader,
