@@ -98,7 +98,11 @@ sync_repository() {
 }
 
 create_virtualenv() {
-  run_as_user "${PYTHON_BIN}" -m venv "${VENV_PATH}"
+  if [[ -d "${VENV_PATH}" && -x "${VENV_PATH}/bin/python" ]]; then
+    echo "Virtual environment already exists at ${VENV_PATH}; reusing it."
+  else
+    run_as_user "${PYTHON_BIN}" -m venv "${VENV_PATH}"
+  fi
   run_as_user "${VENV_PATH}/bin/pip" install --upgrade pip wheel
   # Ensure editable requirements resolve relative to the repository root.
   run_as_user bash -lc "cd '${INSTALL_DIR}' && '${VENV_PATH}/bin/pip' install -r requirements.txt"
