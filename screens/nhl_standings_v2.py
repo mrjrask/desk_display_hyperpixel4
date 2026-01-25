@@ -120,6 +120,7 @@ _MEASURE_IMG = Image.new("RGB", (1, 1))
 _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
 _SQUARE_DISPLAY_PROFILE = "square" in DISPLAY_PROFILE.lower()
+_HYPERPIXEL4_SQUARE_PROFILE = DISPLAY_PROFILE.lower() == "hyperpixel4_square"
 
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
@@ -1292,7 +1293,7 @@ def _overview_layout(
 def _overview_layout_horizontal(
     sections: Sequence[tuple[str, List[dict]]],
     title: str,
-) -> tuple[Image.Image, List[float], float, int, int, float]:
+) -> tuple[Image.Image, List[float], float, int, int, List[float]]:
     base = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)
     draw = ImageDraw.Draw(base)
 
@@ -1311,13 +1312,26 @@ def _overview_layout_horizontal(
     available_width = max(1.0, WIDTH - 2 * OVERVIEW_MARGIN_X)
 
     row_height = available_height / row_count if row_count else available_height
-    row_centers = [logos_top + row_height * (idx + 0.5) for idx in range(row_count)]
 
     col_width = available_width / max_cols
     logo_box_size = int(min(row_height, col_width) - OVERVIEW_LOGO_PADDING)
     logo_target_height = max(6, logo_box_size)
+    row_heights = [row_height] * row_count
 
-    return base, row_centers, available_width, logo_target_height, max_cols, row_height
+    if _HYPERPIXEL4_SQUARE_PROFILE and row_count > 1:
+        bottom_row_height = max(1.0, float(logo_target_height))
+        remaining_height = max(1.0, available_height - bottom_row_height)
+        top_rows = row_count - 1
+        top_row_height = remaining_height / top_rows
+        row_heights = [top_row_height] * top_rows + [bottom_row_height]
+
+    row_centers: List[float] = []
+    offset = logos_top
+    for height in row_heights:
+        row_centers.append(offset + height / 2)
+        offset += height
+
+    return base, row_centers, available_width, logo_target_height, max_cols, row_heights
 
 
 def _overview_logo_position_center(
@@ -1415,7 +1429,7 @@ def _build_overview_rows_horizontal(
     available_width: float,
     logo_height: int,
     max_cols: int,
-    row_height: float,
+    row_heights: Sequence[float],
 ) -> List[List[Placement]]:
     rows: List[List[Placement]] = [[] for _ in range(len(sections))]
     base_centers = _centered_positions(max_cols, OVERVIEW_MARGIN_X, available_width)
@@ -1435,6 +1449,7 @@ def _build_overview_rows_horizontal(
                 OVERVIEW_MARGIN_X,
                 available_width,
             )
+        row_height = row_heights[row_idx] if row_idx < len(row_heights) else 0.0
         row_padding = 0 if row_idx < OVERVIEW_HORIZONTAL_LARGE_ROWS else OVERVIEW_LOGO_PADDING
         row_logo_height = max(6, int(min(row_height, col_width) - row_padding))
         if row_idx >= OVERVIEW_HORIZONTAL_LARGE_ROWS:
@@ -1604,13 +1619,13 @@ def _prepare_overview_horizontal(
         available_width,
         logo_height,
         max_cols,
-        row_height,
+        row_heights,
     ) = _overview_layout_horizontal(
         sections,
         title,
     )
     row_positions = _build_overview_rows_horizontal(
-        sections, row_centers, available_width, logo_height, max_cols, row_height
+        sections, row_centers, available_width, logo_height, max_cols, row_heights
     )
     return base, row_positions
 
