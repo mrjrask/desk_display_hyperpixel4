@@ -1454,6 +1454,8 @@ def _build_overview_rows_horizontal(
         row_logo_height = max(6, int(min(row_height, col_width) - row_padding))
         if row_idx >= OVERVIEW_HORIZONTAL_LARGE_ROWS:
             row_logo_height = logo_height
+        elif _HYPERPIXEL4_SQUARE_PROFILE:
+            row_logo_height = max(6, int(round(row_logo_height * 1.3)))
         logo_width_limit = max(6, int(col_width - row_padding))
         max_logo_height = min(row_logo_height, logo_width_limit)
         min_logo_height = min(OVERVIEW_MIN_LOGO_HEIGHT, max_logo_height)
