@@ -5,7 +5,13 @@ EXPECTED_CODENAME="${EXPECTED_CODENAME:-}"
 
 INSTALL_USER="${INSTALL_USER:-pi}"
 INSTALL_DIR="${INSTALL_DIR:-/home/${INSTALL_USER}/desk_display_hyperpixel4}"
-VENV_PATH="${VENV_PATH:-${INSTALL_DIR}/venv}"
+VENV_PATH_DEFAULT="${INSTALL_DIR}/venv"
+if [[ -z "${VENV_PATH:-}" ]]; then
+  VENV_PATH="${VENV_PATH_DEFAULT}"
+  VENV_PATH_FROM_ENV=0
+else
+  VENV_PATH_FROM_ENV=1
+fi
 SERVICE_NAME="desk_display.service"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
@@ -16,11 +22,7 @@ if [[ -z "${EXPECTED_CODENAME}" ]]; then
   exit 1
 fi
 
-if [[ $(id -u) -eq 0 ]]; then
-  SUDO=""
-else
-  SUDO="sudo"
-fi
+SUDO="sudo"
 
 require_user() {
   if ! id -u "${INSTALL_USER}" >/dev/null 2>&1; then
@@ -98,6 +100,14 @@ sync_repository() {
 }
 
 create_virtualenv() {
+  if [[ "${VENV_PATH_FROM_ENV}" == "0" ]]; then
+    for candidate in "${INSTALL_DIR}/venv" "${REPO_DIR}/venv"; do
+      if [[ -x "${candidate}/bin/python" ]]; then
+        VENV_PATH="${candidate}"
+        break
+      fi
+    done
+  fi
   if [[ -d "${VENV_PATH}" && -x "${VENV_PATH}/bin/python" ]]; then
     echo "Virtual environment already exists at ${VENV_PATH}; reusing it."
   else
